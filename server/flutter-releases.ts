@@ -13,7 +13,12 @@ export function flutterReleases(directory: string) {
     try { files = await readdir(directory); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return c.json([]); throw error; }
     const manifests = files.filter(file => /^preview-[a-z0-9][a-z0-9-]{0,62}\.json$/.test(file)).sort();
-    return c.json(await Promise.all(manifests.map(async file => JSON.parse(await readFile(join(directory, file), 'utf8')))));
+    const previews = [];
+    for (const file of manifests) {
+      try { previews.push(JSON.parse(await readFile(join(directory, file), 'utf8'))); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    }
+    return c.json(previews);
   });
   app.use(`${route}:file`, async (c, next) => {
     const file = c.req.param('file') || '';

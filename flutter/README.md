@@ -135,6 +135,12 @@ In **Workspace → Updates**, choose a test build, then **Install and restart**.
 From a preview, **Stable** switches back even at the same or a lower version. Background checks
 follow the installed build's feed. Drafts and tabs go through the usual restart flow.
 
+From another Relay checkout, run `tools/remove-worktree <path>` to retire a
+feature worktree. After Git removes it, its branch’s listed previews disappear
+from Updates and their unshared ZIPs are deleted. Older unlisted ZIPs stay on
+disk. Merging alone keeps previews available. If a build started with the
+older publisher, let it finish before removing its worktree.
+
 The preview builder also needs an SSH wrapper. Configure it once in WSL:
 
 ```sh

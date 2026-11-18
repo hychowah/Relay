@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build this worktree's Flutter client on the Mac and publish a named preview."""
+import fcntl
 import hashlib
 import io
 import json
@@ -101,10 +102,15 @@ ditto -c -k --sequesterRsrc --keepParent "$bundle" {remote}/release.zip"""
             manifest = dict(name=name, branch=branch, commit=commit, dirty=dirty,
                             version=info["CFBundleShortVersionString"], build=build,
                             file=filename, sha256=digest, size=archive.stat().st_size)
-            archive.replace(releases / filename)
             metadata = stage / "preview.json"
             metadata.write_text(json.dumps(manifest) + "\n")
-            metadata.replace(releases / f"preview-{name}.json")
+            with (releases / ".preview.lock").open("a") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                # The worktree may have been retired during the Mac build.
+                if not Path(".git").exists():
+                    sys.exit("The source worktree was removed during the build.")
+                archive.replace(releases / filename)
+                metadata.replace(releases / f"preview-{name}.json")
             print(f"Published {name} ({branch} {commit[:8]}, {digest[:8]})")
     finally:
         subprocess.run([ssh, f"rm -rf {remote}"], check=False)

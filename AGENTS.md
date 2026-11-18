@@ -37,7 +37,8 @@ status, assumptions, and the next step. Update its Next section at handoff.
 - Work in your own worktree and branch. Use the main checkout only to merge,
   and bring your branch up to date with `main` before you merge. Never edit in
   the checkout that runs the services, and never point a test backend at the
-  live records.
+  live records. Retire feature worktrees with `tools/remove-worktree <path>`
+  so their published Flutter previews are cleaned up.
 - Keep machine paths, addresses and personal details out of tracked files.
   Local machine notes, when present, are in `~/.config/relay/machine.md`,
   outside the repository.
