@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relay app view</title>
+<style>html,body,iframe{margin:0;width:100%;height:100%;border:0;overflow:hidden}iframe{display:block}</style>
+<script>
+  // Only this trusted host exposes the native channel. The app stays in its iframe.
+  const view = JSON.parse(decodeURIComponent(location.hash.slice(1)));
+  const frame = document.createElement('iframe');
+  frame.title = 'Connected app';
+  if (view.sandbox !== undefined) frame.setAttribute('sandbox', view.sandbox);
+  const token = new URL(view.url, location.origin).searchParams.get('token');
+  const version = view.protocolVersion || 2;
+  window.addEventListener('message', event => {
+    if (event.source !== frame.contentWindow || event.origin !== view.origin || event.data?.token !== token || (version === 2 && event.data?.version !== 2)) return;
+    if (['relay.ready', 'relay.context', 'relay.presented', 'relay.navigation'].includes(event.data.type))
+      window.RelayHost.postMessage(JSON.stringify(event.data));
+  });
+  window.relayPresent = data => frame.contentWindow.postMessage({...data,version,token}, view.origin === 'null' ? '*' : view.origin);
+  frame.src = view.url;
+  window.addEventListener('DOMContentLoaded', () => document.body.append(frame));
+</script>
+<body></body>
+</html>

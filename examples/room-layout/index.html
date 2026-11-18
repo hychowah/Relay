@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Room layout</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: clamp(20px, 5vw, 60px); background: #f5f3ed; color: #263d36; font: 16px system-ui, sans-serif; }
+  main { max-width: 940px; margin: auto; }
+  .eyebrow { color: #66796f; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; }
+  h1 { margin: 8px 0; font-size: clamp(28px, 5vw, 42px); font-weight: 550; }
+  p { color: #66796f; line-height: 1.5; }
+  nav { display: flex; gap: 8px; margin: 24px 0; }
+  button { border: 1px solid #bbc7bc; background: transparent; color: inherit; border-radius: 30px; padding: 10px 18px; cursor: pointer; font: inherit; }
+  button[aria-pressed="true"] { background: #263d36; border-color: #263d36; color: white; }
+  svg { display: block; width: 100%; max-height: 55vh; background: #fffdf7; border-radius: 18px; }
+  .furniture { cursor: pointer; outline: none; }
+  .furniture rect, .furniture circle { fill: #c9d7cd; stroke: #60796b; stroke-width: 2; }
+  .furniture text { fill: #263d36; font-size: 16px; pointer-events: none; }
+  .furniture.dimmed { opacity: .22; }
+  .furniture.highlight rect, .furniture.highlight circle, .furniture:focus rect, .furniture:focus circle { stroke: #a36a13; stroke-width: 5; fill: #f7dea6; }
+  #selection { min-height: 48px; }
+  @media (max-width: 460px) { button { padding: 9px 13px; } body { padding: 20px 16px 100px; } }
+</style>
+<main>
+  <div class="eyebrow">Interactive example · synthetic data</div>
+  <h1>A room to work and rest</h1>
+  <p>Inspect a zone or select a piece of furniture. This app works on its own and inside Relay.</p>
+  <nav aria-label="Room zone">
+    <button data-zone="all" aria-pressed="true">Whole room</button>
+    <button data-zone="work" aria-pressed="false">Work</button>
+    <button data-zone="rest" aria-pressed="false">Rest</button>
+  </nav>
+  <svg viewBox="0 0 680 420" role="group" aria-label="Studio floor plan">
+    <path d="M35 35H645V385H35Z" fill="none" stroke="#b5c0b7" stroke-width="4"/>
+    <text x="70" y="72" fill="#7d8b80" font-size="13">WORK</text>
+    <text x="390" y="72" fill="#7d8b80" font-size="13">REST</text>
+    <g class="furniture" id="desk" data-zone="work" tabindex="0" role="button" aria-label="Desk, 140 by 70 centimetres"><rect x="70" y="100" width="200" height="100" rx="10"/><text x="145" y="155">Desk</text></g>
+    <g class="furniture" id="lamp" data-zone="work" tabindex="0" role="button" aria-label="Floor lamp, 35 by 35 centimetres"><circle cx="110" cy="290" r="30"/><text x="155" y="297">Floor lamp</text></g>
+    <g class="furniture" id="sofa" data-zone="rest" tabindex="0" role="button" aria-label="Sofa, 190 by 85 centimetres"><rect x="365" y="120" width="230" height="110" rx="24"/><text x="462" y="181">Sofa</text></g>
+    <g class="furniture" id="plant" data-zone="rest" tabindex="0" role="button" aria-label="Plant, 45 by 45 centimetres"><circle cx="565" cy="310" r="33"/><text x="451" y="317">Plant</text></g>
+  </svg>
+  <p id="selection" role="status">Four pieces of furniture · dimensions in centimetres</p>
+</main>
+<script>
+  let zone = 'all', selection, bridge;
+  const furniture = [...document.querySelectorAll('.furniture')];
+  const context = () => ({viewId: 'room', state: {zone}, ...(selection ? {selection} : {})});
+  function render(next, targets = []) {
+    zone = next;
+    for (const button of document.querySelectorAll('button[data-zone]')) button.setAttribute('aria-pressed', String(button.dataset.zone === zone));
+    for (const item of furniture) {
+      item.classList.toggle('dimmed', zone !== 'all' && item.dataset.zone !== zone);
+      item.classList.toggle('highlight', targets.includes(item.id));
+    }
+    document.querySelector('#selection').textContent = selection || `${zone === 'all' ? 'Whole room' : zone === 'work' ? 'Work zone' : 'Rest zone'} · ${furniture.filter(item => zone === 'all' || item.dataset.zone === zone).length} pieces`;
+  }
+  for (const button of document.querySelectorAll('button[data-zone]')) button.onclick = () => {
+    selection = undefined; render(button.dataset.zone); bridge?.updateContext(context());
+  };
+  for (const item of furniture) {
+    const select = () => { selection = item.getAttribute('aria-label'); render(zone, [item.id]); bridge?.updateContext(context()); };
+    item.onclick = select;
+    item.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); select(); } };
+  }
+  const params = new URLSearchParams(location.search);
+  if (location.pathname === '/_relay/view' && parent !== window) {
+    const parentOrigin = params.get('parentOrigin');
+    const script = document.createElement('script');
+    script.src = parentOrigin + '/app-bridge.js';
+    script.onload = () => {
+      bridge = RelayApp.connect({
+        token: params.get('token'), parentOrigin, getContext: context,
+        getExplanationTarget: intent => intent.targetIds?.length ? furniture.find(item => item.id === intent.targetIds[0]) : document.querySelector('svg'),
+        async present(intent, {signal}) {
+          const nextZone = intent.state?.zone ?? 'all', targets = intent.targetIds || [];
+          if (intent.viewId !== 'room' || !['all', 'work', 'rest'].includes(nextZone) || targets.some(id => !furniture.some(item => item.id === id))) throw new Error('Unknown room, zone or furniture target.');
+          signal.throwIfAborted();
+          selection = undefined;
+          render(nextZone, targets);
+          const animations = matchMedia('(prefers-reduced-motion: reduce)').matches ? [] : furniture.filter(item => targets.includes(item.id)).map(item => item.animate([{opacity: .35}, {opacity: 1}], {duration: 220}));
+          const cancel = () => animations.forEach(animation => animation.cancel());
+          signal.addEventListener('abort', cancel, {once: true});
+          try {
+            await Promise.all(animations.map(animation => animation.finished));
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            signal.throwIfAborted();
+            return context();
+          } finally { signal.removeEventListener('abort', cancel); }
+        },
+      });
+    };
+    document.head.append(script);
+  }
+</script>
+</html>

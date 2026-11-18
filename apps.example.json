@@ -1,0 +1,13 @@
+[
+  {
+    "id": "room-layout",
+    "name": "Room layout",
+    "serverUrl": "http://127.0.0.1:3220"
+  },
+  {
+    "id": "my-app",
+    "name": "My app",
+    "serverUrl": "http://127.0.0.1:4000",
+    "browserUrl": "http://device-reachable-host:4000"
+  }
+]

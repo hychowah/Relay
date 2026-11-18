@@ -1,0 +1,197 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:crypto/crypto.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:relay_flutter/app_updates.dart';
+import 'package:relay_flutter/relay_api.dart';
+
+void main() {
+  test('background download verifies bytes, reuses cache and never installs itself', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'relay-update-test',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final bytes = utf8.encode('synthetic package');
+    var downloads = 0;
+    var offline = false;
+    final updates = AppUpdates(
+      origin: Uri.parse('http://localhost'),
+      version: '0.0.2',
+      directory: directory,
+      client: MockClient((request) async {
+        if (offline) throw const SocketException('Connection refused');
+        if (request.url.path.endsWith('latest.json')) {
+          return http.Response(
+            jsonEncode({
+              'version': '0.0.3',
+              'file': 'Relay-Flutter-0.0.3-macOS-arm64.zip',
+              'size': bytes.length,
+              'sha256': sha256.convert(bytes).toString(),
+            }),
+            200,
+          );
+        }
+        downloads++;
+        return http.Response.bytes(bytes, 200);
+      }),
+    );
+    addTearDown(updates.dispose);
+    await updates.check();
+    expect(updates.ready, isTrue);
+    expect(updates.progress, 1);
+    expect(updates.installing, isFalse);
+    await updates.check();
+    expect(downloads, 1);
+    offline = true;
+    await updates.check();
+    expect(updates.ready, isTrue);
+    expect(await updates.archive!.readAsBytes(), bytes);
+    offline = false;
+    await updates.archive!.writeAsString('corrupt');
+    await updates.check();
+    expect(downloads, 2);
+    expect(updates.ready, isTrue);
+  });
+  test(
+    'two same-version previews stay selectable and can return to Stable',
+    () async {
+      final root = await Directory.systemTemp.createTemp('relay-previews');
+      addTearDown(() => root.delete(recursive: true));
+      final files = <String, List<int>>{};
+      Map<String, dynamic> artifact(String? name, String build) {
+        final bytes = utf8.encode('fixture $name $build');
+        final hash = sha256.convert(bytes).toString();
+        final file = name == null
+            ? 'Relay-Flutter-0.0.6-macOS-arm64.zip'
+            : 'Relay-Flutter-preview-$hash.zip';
+        files[file] = bytes;
+        return {
+          'version': '0.0.6',
+          'file': file,
+          'size': bytes.length,
+          'sha256': hash,
+          if (name != null) ...{
+            'name': name,
+            'commit': 'abcdef0123456789',
+            'branch': name,
+            'dirty': false,
+            'build': build,
+          },
+        };
+      }
+
+      final one = artifact('search', '101'),
+          two = artifact('tabs', '102'),
+          stable = artifact(null, '6');
+      var catalog = [one, two];
+      AppUpdates app(String name, String build, {String version = '0.0.6'}) =>
+          AppUpdates(
+            origin: Uri.parse('http://feed.test'),
+            version: version,
+            directory: root,
+            previewName: name,
+            buildNumber: build,
+            client: MockClient((req) async {
+              final file = req.url.pathSegments.last;
+              if (file == 'previews.json') {
+                return http.Response(jsonEncode(catalog), 200);
+              }
+              if (file == 'latest.json') {
+                return http.Response(jsonEncode(stable), 200);
+              }
+              return http.Response.bytes(files[file]!, 200);
+            }),
+          );
+      final current = app('', '6');
+      addTearDown(current.dispose);
+      await current.loadPreviews();
+      final selected = current.previews.first;
+      catalog = [artifact('search', '103'), two];
+      await current.selectPreview(selected);
+      await current.check();
+      expect(current.release, one);
+      expect(await current.archive!.readAsBytes(), files[one['file']]);
+      final preview = app('search', '101');
+      addTearDown(preview.dispose);
+      await preview.check();
+      expect(preview.release!['build'], '103');
+      await preview.selectPreview(two);
+      expect(preview.release, two);
+      await preview.selectStable();
+      expect(preview.returningToStable, isTrue);
+      expect(await preview.archive!.readAsBytes(), files[stable['file']]);
+      final newerPreview = app('tabs', '102', version: '0.0.7');
+      addTearDown(newerPreview.dispose);
+      await newerPreview.selectStable();
+      expect(newerPreview.ready, isTrue);
+      final newerStable = app('', '7', version: '0.0.7');
+      addTearDown(newerStable.dispose);
+      await newerStable.selectStable();
+      expect(newerStable.ready, isFalse);
+    },
+  );
+  test(
+    'returning from an offline preview still respects backend restart checks',
+    () async {
+      http.Response? response;
+      final api = RelayApi(
+        Uri.parse('http://preview.test'),
+        client: MockClient((_) async {
+          return response ??
+              (throw const SocketException('Connection refused'));
+        }),
+      );
+      addTearDown(api.close);
+      Future<void> check(bool allowOffline) => api.checkIdleBeforeRestart(
+        'device',
+        'window',
+        allowOffline: allowOffline,
+      );
+      await check(true);
+      await expectLater(check(false), throwsA(isA<SocketException>()));
+      response = http.Response('unavailable', 503);
+      await expectLater(check(true), throwsA(isA<RelayApiException>()));
+      response = http.Response('{"busy":true}', 200);
+      await expectLater(check(true), throwsStateError);
+    },
+  );
+  test(
+    'wrong hash and other client packages cannot become installable',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'relay-update-test',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      var file = 'Relay-Flutter-0.0.3-macOS-arm64.zip';
+      final updates = AppUpdates(
+        origin: Uri.parse('http://localhost'),
+        version: '0.0.2',
+        directory: directory,
+        client: MockClient(
+          (request) async => request.url.path.endsWith('latest.json')
+              ? http.Response(
+                  jsonEncode({
+                    'version': '0.0.3',
+                    'file': file,
+                    'size': 3,
+                    'sha256': '0' * 64,
+                  }),
+                  200,
+                )
+              : http.Response('bad', 200),
+        ),
+      );
+      addTearDown(updates.dispose);
+      await updates.check();
+      expect(updates.ready, isFalse);
+      expect(updates.status, contains('verification failed'));
+      file = 'Relay-Desktop-0.0.3-macOS-arm64.zip';
+      await updates.check();
+      expect(updates.ready, isFalse);
+      expect(updates.status, contains('incomplete'));
+    },
+  );
+}

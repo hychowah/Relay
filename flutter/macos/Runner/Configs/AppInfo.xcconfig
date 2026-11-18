@@ -1,0 +1,3 @@
+PRODUCT_NAME = Relay Flutter
+PRODUCT_BUNDLE_IDENTIFIER = app.relay.flutterExperiment
+PRODUCT_COPYRIGHT = Copyright © 2026 Relay.

@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""Build this worktree's Flutter client on the Mac and publish a named preview."""
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+import plistlib
+import re
+import shlex
+import subprocess
+import sys
+import tarfile
+import tempfile
+import uuid
+import zipfile
+
+
+def git(*args):
+    return subprocess.check_output(["git", *args], text=True).strip()
+
+
+def main():
+    if len(sys.argv) != 2 or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", sys.argv[1]):
+        sys.exit("Usage: tools/publish-preview <lowercase-name>")
+    name = sys.argv[1]
+    os.chdir(git("rev-parse", "--show-toplevel"))
+    # Local git config is shared by all linked worktrees.
+    try:
+        ssh = git("config", "--get", "relay.macSSH")
+        releases = Path(git("config", "--get", "relay.flutterReleases"))
+    except subprocess.CalledProcessError:
+        sys.exit("Set relay.macSSH and relay.flutterReleases in local git config (see flutter/README.md).")
+    if not releases.is_absolute():
+        sys.exit("Use an absolute relay.flutterReleases path shared by all worktrees.")
+    releases.mkdir(parents=True, exist_ok=True)
+    branch = git("rev-parse", "--abbrev-ref", "HEAD")
+    commit = git("rev-parse", "HEAD")
+    dirty = bool(git("status", "--porcelain"))
+    build = str(uuid.uuid4().int % 10**15)
+    remote = subprocess.check_output([ssh, "mktemp -d /tmp/relay-preview.XXXXXXXX"], text=True).strip()
+    if not re.fullmatch(r"/tmp/relay-preview\.[A-Za-z0-9]+", remote):
+        sys.exit("Mac did not return a build directory")
+    try:
+        with tempfile.TemporaryDirectory(dir=releases) as stage:
+            stage = Path(stage)
+            # Snapshot only repository source, including uncommitted Flutter edits.
+            paths = subprocess.check_output(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "flutter"])
+            with tempfile.TemporaryFile() as snapshot:
+                with tarfile.open(fileobj=snapshot, mode="w:gz") as tar:
+                    for path in filter(None, map(os.fsdecode, paths.split(b"\0"))):
+                        if not os.path.lexists(path):
+                            continue
+                        if path == "flutter/macos/Runner/Info.plist":
+                            info = plistlib.loads(Path(path).read_bytes())
+                            if info.get("RelayUpdateFormat") != "1":
+                                sys.exit("Bring the preview-capable updater into this worktree before publishing.")
+                            info["RelayPreview"] = name
+                            data = plistlib.dumps(info)
+                            entry = tarfile.TarInfo(path)
+                            entry.size = len(data)
+                            tar.addfile(entry, io.BytesIO(data))
+                        else:
+                            tar.add(path, recursive=False)
+                snapshot.seek(0)
+                subprocess.run([ssh, f"tar -xzf - -C {remote}"], stdin=snapshot, check=True)
+            flags = [f"--build-number={build}", f"--dart-define=RELAY_PREVIEW={name}"]
+            # The app has no built-in server address: the environment or local git config supplies it.
+            addresses = {"RELAY_URL": "relay.appUrl", "BROWSER_URL": "relay.browserUrl", "RELAY_UPDATE_URL": None}
+            for key, setting in addresses.items():
+                value = os.environ.get(key)
+                if not value and setting:
+                    try:
+                        value = git("config", "--get", setting)
+                    except subprocess.CalledProcessError:
+                        sys.exit(f"Set {key} or `git config --local {setting}` to the address the app must use.")
+                if value:
+                    flags.append(f"--dart-define={key}={value}")
+            cmd = f"""set -eu
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+export PATH="$HOME/Developer/relay-flutter-experiment/sdk/bin:$PATH"
+cd {remote}/flutter
+flutter build macos --release {shlex.join(flags)}
+bundle="build/macos/Build/Products/Release/Relay Flutter.app"
+codesign --verify --strict --deep "$bundle"
+ditto -c -k --sequesterRsrc --keepParent "$bundle" {remote}/release.zip"""
+            subprocess.run([ssh, cmd], check=True)
+            archive = stage / "release.zip"
+            with archive.open("wb") as output:
+                subprocess.run([ssh, f"cat {remote}/release.zip"], stdout=output, check=True)
+            with zipfile.ZipFile(archive) as package:
+                info = plistlib.loads(package.read("Relay Flutter.app/Contents/Info.plist"))
+            if (info.get("CFBundleIdentifier"), info.get("RelayPreview"), info.get("CFBundleVersion")) != ("app.relay.flutterExperiment", name, build):
+                sys.exit("The archive does not identify the requested preview build")
+            with archive.open("rb") as source:
+                digest = hashlib.file_digest(source, "sha256").hexdigest()
+            mac_digest = subprocess.check_output([ssh, f"shasum -a 256 {remote}/release.zip"], text=True).split()[0]
+            if mac_digest != digest:
+                sys.exit("The transferred archive differs from the signed Mac build.")
+            filename = f"Relay-Flutter-preview-{digest}.zip"
+            manifest = dict(name=name, branch=branch, commit=commit, dirty=dirty,
+                            version=info["CFBundleShortVersionString"], build=build,
+                            file=filename, sha256=digest, size=archive.stat().st_size)
+            archive.replace(releases / filename)
+            metadata = stage / "preview.json"
+            metadata.write_text(json.dumps(manifest) + "\n")
+            metadata.replace(releases / f"preview-{name}.json")
+            print(f"Published {name} ({branch} {commit[:8]}, {digest[:8]})")
+    finally:
+        subprocess.run([ssh, f"rm -rf {remote}"], check=False)
+
+
+if __name__ == "__main__":
+    main()

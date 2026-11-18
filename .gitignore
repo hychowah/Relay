@@ -1,0 +1,29 @@
+# Agent scratch and local runtime state
+/tmp/
+/.playwright-mcp/
+/runtime/
+/.state/
+/secrets/
+.env
+.env.*
+!.env.example
+*.log
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Dependencies and generated artifacts
+node_modules/
+.venv/
+__pycache__/
+*.py[cod]
+dist/
+dist-desktop/
+coverage/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
