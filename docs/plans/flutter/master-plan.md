@@ -242,10 +242,9 @@ not been installed or reviewed on the Mac.
    dark: tabs, chat, Markdown replies, dialogs, menus and the empty Browser
    page. Also check that System follows a live macOS switch. Only widget tests
    and WSL screenshots cover it.
-   After 0.0.12 the transcript is an inset bordered card with muted
-   timestamps, and messages fade out under it. On the Mac, in both modes,
-   check that the card and the conversation read as two separate areas and
-   the playing paragraph is visible.
+   After 0.0.12 the transcript is an inset card with an accent border and
+   muted timestamps. On the Mac, in both modes, check that it reads apart
+   from the conversation and the playing paragraph is visible.
 13. Check on the Mac that Analysis Web's **Start analysis** shows its confirm
    dialog, titled with the page's host, and that OK starts the analysis and
    Cancel does not. Page alert and confirm dialogs are tested only with a faked
