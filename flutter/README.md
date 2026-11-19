@@ -171,10 +171,23 @@ Downloads run at startup and hourly. Workspace menu → Updates shows progress;
 **Install and restart** remains manual and waits for this window's agent work.
 The package is checked against the release hash, bundle signature, identity and
 version before replacement. The previous app is kept only until the new version
-starts; that version then removes it, with older downloads and launch receipts
-on the Mac. Every published Stable package stays in the served release directory
-on WSL for recovery. The app uses ad-hoc signing outside the App Store. It is not
+starts; that version then removes it, with older launch receipts on the Mac.
+Downloads are removed once a check finds the installed build current. Every
+published Stable package stays in the served release directory on WSL for
+recovery. The app uses ad-hoc signing outside the App Store. It is not
 sandboxed so it can replace its own bundle; WebKit still owns web-content processes.
+
+Updates download only changed files. Publishing stores each file of the app once
+in the release directory's `files/` folder, compressed and named by the SHA-256
+of its content, with a list of the build's files, symlinks and executable flags
+that the manifest's `fileList` names. The app reuses its own unchanged files and
+downloads the rest, usually the compiled Dart code and the app binary: about
+7 MB instead of the 20 MB ZIP. Finished files are kept if the connection drops.
+Install builds the app beside the current one from these files, checking each
+against the list, then runs the same signature and identity checks. A release
+without a list, or an app with an older updater, uses the ZIP. Publishing and
+worktree removal delete stored files that neither `latest.json` nor a listed
+test build uses; ZIPs are not touched.
 
 Set the served release directory once in WSL. Linked worktrees share this Git setting.
 

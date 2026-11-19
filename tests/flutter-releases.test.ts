@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { flutterReleases } from '../server/flutter-releases.ts';
 import { createWorkspace } from '../server/app.ts';
 import { Store } from '../server/store.ts';
 
-test('Flutter release delivery serves the fresh manifest and completed Mac archives only', async () => {
+test('Flutter release delivery serves the fresh manifest, completed Mac archives and stored files only', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'relay-flutter-releases-'));
   const service = flutterReleases(directory);
   const file = 'Relay-Flutter-0.0.3-macOS-arm64.zip';
@@ -29,10 +29,17 @@ test('Flutter release delivery serves the fresh manifest and completed Mac archi
     await writeFile(join(directory, pinned), 'pinned fixture');
     assert.equal(await (await service.request('/flutter-updates/' + pinned)).text(), 'pinned fixture');
 
-    for (const name of ['provider.json', '.upload-pending']) {
+    await mkdir(join(directory, 'files'));
+    const stored = 'b'.repeat(64) + '.gz';
+    await writeFile(join(directory, 'files', stored), 'stored fixture');
+    assert.equal(await (await service.request('/flutter-updates/files/' + stored)).text(), 'stored fixture');
+
+    for (const name of ['provider.json', '.upload-pending', 'files/' + 'b'.repeat(63) + '.gz', 'files/notes.gz']) {
       await writeFile(join(directory, name), 'private fixture');
       assert.equal((await service.request('/flutter-updates/' + name)).status, 404);
     }
+    assert.equal((await service.request('/flutter-updates/files')).status, 404);
+    assert.equal((await service.request('/flutter-updates/files/%2e%2e%2f' + file)).status, 404);
     assert.equal((await service.request('/flutter-updates/%2e%2e%2fprovider.json')).status, 404);
   } finally {await rm(directory, {recursive: true, force: true});}
 });
