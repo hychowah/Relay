@@ -691,6 +691,32 @@ void main() {
     await settle(find.byTooltip('Remove screenshot'));
     expect(find.byType(RegionCapture), findsNothing);
     expect(find.text('Screenshot · room-layout'), findsOneWidget);
+    f.w.provider = {'supportsImageInput': true};
+    await tester.enterText(find.byType(EditableText).first, 'What is this?');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect((f.sent!['capture'] as Json)['appId'], 'room-layout');
+
+    // The reopened conversation loads the screenshot the server kept.
+    f.messages = [
+      {
+        'id': 'sent',
+        'role': 'user',
+        'text': 'What is this?',
+        'hasCapture': true,
+      },
+    ];
+    await f.w.refresh();
+    await tester.pump();
+    final shown = tester.widget<Image>(
+      find.byWidgetPredicate((w) => w is Image && w.image is NetworkImage),
+    );
+    expect(
+      (shown.image as NetworkImage).url,
+      'http://localhost:3250/api/conversations/conversation/messages/sent/capture',
+    );
+    await settle(find.text('Screenshot attached'));
+    expect(find.text('Screenshot attached'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 }

@@ -85,7 +85,9 @@ On macOS, select page or PDF text and ask a question with page context enabled.
 Use **Capture an area** beside the model picker, then drag over the active tab
 itself; chat stays open on desktop. Releasing the drag attaches the area to the
 composer for the next question, and Escape or **Cancel** leaves the tab unchanged.
-Image input currently uses Claude.
+Image input currently uses Claude. The service keeps a sent screenshot with its
+message, so reopening the chat shows it again; Trash hides it and the 24-hour
+Trash cleanup deletes it with the conversation.
 
 ## Mac updates
 

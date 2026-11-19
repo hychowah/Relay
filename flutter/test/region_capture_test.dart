@@ -5,10 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:relay_flutter/region_capture.dart';
 
-Future<void> show(
-  WidgetTester tester,
-  ValueChanged<Uint8List?> onDone,
-) async {
+Future<void> show(WidgetTester tester, ValueChanged<Uint8List?> onDone) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
   canvas.drawColor(Colors.red, BlendMode.src);

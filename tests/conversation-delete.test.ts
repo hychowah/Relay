@@ -30,8 +30,11 @@ test("Trash hides normal and bot chat history; restore keeps the session, settin
     const bot = store.saveBot({ name: "Helper", objective: "Help", scope: "", appIds: [] });
     const target = store.createConversation("Keep me", "target-session", bot.id);
     store.setReasoningEffort(source.id, "max");
-    const run = store.startRun(source.id, "Unique trash content", "device", "tab");
+    const png = Uint8Array.of(137, 80, 78, 71);
+    const run = store.startRun(source.id, "Unique trash content", "device", "tab", undefined, undefined, png);
     const route = `/api/conversations/${source.id}`;
+    const capture = `${route}/messages/${store.snapshot(source.id)!.messages[0].id}/capture`;
+    assert.equal((await workspace.app.request(capture)).status, 200);
     assert.equal((await workspace.app.request(route, { method: "DELETE" })).status, 409);
     store.finishRun(run.id, "completed");
     store.addForward(source.id, target.id, "Handoff");
@@ -44,6 +47,7 @@ test("Trash hides normal and bot chat history; restore keeps the session, settin
     assert.equal(store.trash()[0].trashedAt, trashedAt, "Repeated trash does not extend retention");
     assert.equal((await workspace.app.request("/api/trash")).status, 200);
     assert.equal((await workspace.app.request(route)).status, 404);
+    assert.equal((await workspace.app.request(capture)).status, 404, "Trash hides screenshots");
     assert.equal((await post(route + "/messages", { text: "No reply", deviceId: "device", tabId: "tab" })).status, 404);
     assert.equal((await post(route + "/forward", { botId: bot.id })).status, 404);
     assert.deepEqual(store.conversations("Unique trash content"), []);
@@ -56,6 +60,7 @@ test("Trash hides normal and bot chat history; restore keeps the session, settin
     assert.equal(store.sessionId(source.id), "source-session");
     assert.equal(store.snapshot(source.id)!.conversation.reasoningEffort, "max");
     assert.equal(store.snapshot(source.id)!.messages[0].text, "Unique trash content");
+    assert.deepEqual(new Uint8Array(await (await workspace.app.request(capture)).arrayBuffer()), png);
     assert.equal(store.forwards(target.id).length, 1);
     assert.equal(store.searchHistory(target.id, "Unique trash content").length, 1);
     await workspace.app.request(`/api/conversations/${target.id}`, { method: "DELETE" });
@@ -77,7 +82,8 @@ test("24-hour cleanup removes the agent session and dependent records, retries f
   try {
     const source = store.createConversation("Expired", "expired-session");
     const keep = store.createConversation("Keep", "keep-session");
-    const run = store.startRun(source.id, "Expired history", "device", "tab");
+    const run = store.startRun(source.id, "Expired history", "device", "tab", undefined, undefined, Uint8Array.of(1));
+    const messageId = store.snapshot(source.id)!.messages[0].id;
     const tool = store.startTool(run.id, "app_search", {});
     const command = store.createPresentation(run, "fixture", { viewId: "main" });
     store.finishRun(run.id, "completed");
@@ -103,6 +109,7 @@ test("24-hour cleanup removes the agent session and dependent records, retries f
     assert.equal(store.finishTool(tool.id, {}), undefined);
     assert.equal(store.command(command.id), undefined);
     assert.equal(store.checkpoint(source.id), undefined);
+    assert.equal(store.capture(source.id, messageId), undefined);
     assert.deepEqual(store.forwards(keep.id), []);
     assert.ok(store.snapshot(keep.id));
     const saved = store.memories().find(item => item.id === memory.id)!;

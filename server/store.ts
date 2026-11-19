@@ -55,6 +55,9 @@ export class Store {
       CREATE TABLE IF NOT EXISTS messages (
         id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id), data TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS captures (
+        message_id TEXT PRIMARY KEY REFERENCES messages(id), png BLOB NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS runs (
         id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id), status TEXT NOT NULL, data TEXT NOT NULL
       );
@@ -201,6 +204,7 @@ export class Store {
       this.db.prepare("DELETE FROM tools WHERE run_id IN (SELECT id FROM runs WHERE conversation_id = ?)").run(id);
       this.db.prepare("DELETE FROM commands WHERE run_id IN (SELECT id FROM runs WHERE conversation_id = ?)").run(id);
       this.db.prepare("DELETE FROM runs WHERE conversation_id = ?").run(id);
+      this.db.prepare("DELETE FROM captures WHERE message_id IN (SELECT id FROM messages WHERE conversation_id = ?)").run(id);
       this.db.prepare("DELETE FROM messages WHERE conversation_id = ?").run(id);
       this.db.prepare("DELETE FROM checkpoints WHERE conversation_id = ?").run(id);
       this.db.prepare("DELETE FROM forwards WHERE source_id = ? OR target_id = ?").run(id, id);
@@ -416,7 +420,7 @@ export class Store {
     tabId: string,
     context?: ViewContext,
     appContext?: AppContext,
-    hasCapture = false,
+    capture?: Uint8Array,
   ): SavedRun {
     const run: SavedRun = {
       id: randomUUID(),
@@ -430,15 +434,17 @@ export class Store {
     };
     this.db.exec("BEGIN");
     try {
+      const messageId = randomUUID();
       this.message(conversationId, {
-        id: randomUUID(),
+        id: messageId,
         role: "user",
-        ...(hasCapture ? {hasCapture} : {}),
+        ...(capture ? {hasCapture: true} : {}),
         text,
         context,
         appContext,
         createdAt: run.startedAt,
       });
+      if (capture) this.db.prepare("INSERT INTO captures VALUES (?, ?)").run(messageId, capture);
       this.db
         .prepare("INSERT INTO runs VALUES (?, ?, ?, ?)")
         .run(run.id, conversationId, run.status, JSON.stringify(run));
@@ -448,6 +454,14 @@ export class Store {
       throw error;
     }
     return run;
+  }
+
+  capture(conversationId: string, messageId: string): Uint8Array<ArrayBuffer> | undefined {
+    return this.db.prepare(`SELECT png FROM captures
+      JOIN messages ON messages.id = captures.message_id
+      JOIN conversations ON conversations.id = messages.conversation_id
+      WHERE captures.message_id = ? AND conversations.id = ? AND conversations.trashed_at IS NULL`)
+      .get(messageId, conversationId)?.png as Uint8Array<ArrayBuffer> | undefined;
   }
 
   run(id: string): SavedRun | undefined {

@@ -150,6 +150,10 @@ class RelayApi {
   Future<String> sendMessage(String id, Json body) async =>
       (await _request<Json>('/api/conversations/$id/messages', body))['id']
           as String;
+  Uri captureUrl(String conversationId, String messageId) => origin.resolve(
+    '/api/conversations/${Uri.encodeComponent(conversationId)}'
+    '/messages/${Uri.encodeComponent(messageId)}/capture',
+  );
   Future<void> cancelRun(String id) => _request('/api/runs/$id/cancel', {});
   Future<void> acknowledge(String id, Json body) =>
       _request('/api/commands/$id/ack', body);
