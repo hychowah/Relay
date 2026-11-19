@@ -90,18 +90,26 @@ draft and the chat panel as it was left; the Mac window keeps its size and posit
 The last active tab shows first, and the other tabs load together in the background.
 A tab that cannot be restored is reported; **Reconnect** retries it during that run.
 All pages share WebKit's persistent website data, which keeps cookies between starts.
-On desktop only, drag a tab onto the left or right half of the page to show two
-tabs side by side; click a pane to select it. Drag the divider between them to
-resize the panes, or double-click it to return to half and half. Click the
-button in the middle of the divider, drag a split tab back onto the tab strip,
-or close one, to end the split. Narrow windows show only the selected tab.
+On desktop only, drag a tab onto a page to split it. A new split tab opens in
+the tab strip. The page's edge nearest the pointer (left, right, top or bottom)
+is where the tab goes, and the highlighted half shows it. Drop more tabs onto
+any pane to split it again, side by side or stacked; dropping a tab that is
+already in the split moves it. Click a pane to select it. Drag a divider to
+resize its two sides, or double-click it to return to half and half. Click an
+app's own tab to show it full screen, and the split tab to return to the split.
+Closing the split tab ends the split and keeps every app open. Drag a tab from
+the split back onto the tab strip to take it out; closing an app's tab takes it
+out of every split. Narrow windows show only the selected tab.
 
-On macOS only, a page in a Browser tab that opens a new window on a user action,
-such as **Continue with Google**, gets its own popup window titled with the
-site's host, beside its tab. The page and its popup can talk to each other and
-share sign-in. The popup closes when its page closes it, when the user closes
-it, or when its tab or the main window closes. Popup pages follow the Browser's
-address rule, and windows that pages open without a user action stay blocked.
+On macOS only, a page in a Browser tab that opens a sized window on a user
+action (`window.open` with a width or height), as **Continue with Google**
+does, gets its own popup window titled with the site's host, beside its tab.
+The page and its popup can talk to each other and share sign-in. The popup
+closes when its page closes it, when the user closes it, or when its tab or the
+main window closes. Popup pages follow the Browser's address rule, and windows
+that pages open without a user action stay blocked. Any other new window, such
+as a link that opens a new tab, loads in the same tab as before, so a sign-in
+that opens an unsized window loses its opener.
 App views keep sending a new window's address to the default browser. A page
 dialog raised inside a popup window is not shown.
 

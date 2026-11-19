@@ -100,11 +100,17 @@ void main() {
     );
 
     // The opener is a local document, so the tab accepts it; the address
-    // rule still decides every page a popup loads.
-    await controller.loadHtmlString('''<!doctype html><title>Opener</title>
-      <body>Opener page<script>
+    // rule still decides every page a popup loads. The unsized new windows go
+    // to a public documentation address (TEST-NET-1) that the tab's rule
+    // accepts; its load only starts, which is enough to see where it went.
+    const elsewhere = 'http://192.0.2.1';
+    var loads = 0;
+    Future<void> loadOpener() async {
+      loads++;
+      await controller.loadHtmlString('''<!doctype html><title>Opener</title>
+      <body>Opener page <a id="tab-link" href="$elsewhere/tab-link" target="_blank">New tab</a><script>
         const auto = window.open('$fixture/auto');
-        document.title = auto ? 'auto opened' : 'auto blocked';
+        document.title = (auto ? 'auto opened' : 'auto blocked') + ' $loads';
         let popup, privatePopup;
         addEventListener('message', (e) => { document.title = 'message ' + e.data; });
         function openPopup() {
@@ -112,14 +118,17 @@ void main() {
           if (!popup) document.title = 'not opened';
         }
         function openPrivate() {
-          privatePopup = window.open('http://localhost:${server.port}/private');
+          privatePopup = window.open('http://localhost:${server.port}/private', '', 'width=400');
           document.title = privatePopup ? 'private opened' : 'private not opened';
         }
       </script>''');
-    await title(
-      'auto blocked',
-      'A popup opened without a user action must stay blocked',
-    );
+      await title(
+        'auto blocked $loads',
+        'A popup opened without a user action must stay blocked',
+      );
+    }
+
+    await loadOpener();
 
     // Scripts run by the app count as a user action in WebKit; if not, the
     // title reads 'not opened'.
@@ -162,6 +171,22 @@ void main() {
     );
     await Future<void>.delayed(const Duration(seconds: 1));
     expect(requests, ['/popup'], reason: 'Only the allowed popup may load');
+
+    // A new window without a size is a new-tab request: it loads in the
+    // opener's own tab through the tab's address rule, as before popups.
+    for (final (script, path) in [
+      ("document.getElementById('tab-link').click()", 'tab-link'),
+      ("window.open('$elsewhere/unsized')", 'unsized'),
+    ]) {
+      await controller.runJavaScript(script);
+      expect(await openPopups(), 0, reason: '$path must not open a popup');
+      await until(
+        () async => page.url == '$elsewhere/$path',
+        '$path must load in the same tab (address: ${page.url})',
+      );
+      expect(await openPopups(), 0, reason: '$path must not open a popup');
+      await loadOpener();
+    }
 
     // Closing the tab closes its popups.
     await controller.runJavaScript('openPopup()');
