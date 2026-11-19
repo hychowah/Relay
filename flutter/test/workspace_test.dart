@@ -1430,8 +1430,14 @@ void main() {
       expect(shade(7), tint);
       expect(shown(7), isTrue);
       expect(follow, findsNothing);
-      // A seek back moves it; an unknown time, as during an ad, keeps it.
+      // A seek back moves it, rebuilding only the two paragraphs that change;
+      // an unknown time, as during an ad, keeps it.
+      final rebuilt = <Widget>[];
+      debugOnRebuildDirtyWidget = (element, _) => rebuilt.add(element.widget);
       await play(5);
+      debugOnRebuildDirtyWidget = null;
+      expect(rebuilt.whereType<TranscriptPane>(), isEmpty);
+      expect(rebuilt.whereType<ValueListenableBuilder<bool>>(), hasLength(2));
       expect([shade(0), shade(7)], [tint, null]);
       expect(shown(0), isTrue);
       await play(null);
