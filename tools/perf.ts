@@ -10,6 +10,7 @@ import { gzipSync } from "node:zlib";
 import { randomUUID } from "node:crypto";
 import { Store } from "../server/store.ts";
 import type { Run, Snapshot } from "../shared/types.ts";
+import { latestResult, percentChange, printRows } from "./perf-table.ts";
 
 const SEED = {
   conversations: 200,
@@ -185,13 +186,9 @@ const describeLoad = (load: Load) =>
   `1-min load ${load.start[0].toFixed(1)} at start, ${load.end[0].toFixed(1)} at end, ${load.cpus} CPUs`;
 
 function previousRun(): { file: string; metrics: Metrics; load?: Load } | undefined {
-  let files: string[] = [];
-  try { files = readdirSync(resultsDir).filter((name) => name.endsWith(".json")).sort(); }
-  catch { return undefined; }
-  const file = files.at(-1);
-  if (!file) return undefined;
-  const { metrics, load } = JSON.parse(readFileSync(join(resultsDir, file), "utf8"));
-  return { file, metrics, load };
+  // Server runs are named by their timestamp; UI runs (`ui-...`) sit beside them.
+  const previous = latestResult<{ metrics: Metrics; load?: Load }>(resultsDir, (name) => /^\d/.test(name));
+  return previous && { file: previous.file, ...previous.data };
 }
 
 function format({ value, unit }: Metric) {
@@ -206,12 +203,10 @@ function printTable(previous: Metrics | undefined) {
     const change = before.value ? (metric.value - before.value) / before.value : 0;
     // Timings vary by tens of percent between quiet runs of the same commit, so only sizes are marked.
     const flag = metric.unit !== "ms" && change > LARGER ? "  << worse" : "";
-    return [name, format(metric), format(before), `${change >= 0 ? "+" : ""}${(change * 100).toFixed(0)}%${flag}`];
+    return [name, format(metric), format(before), `${percentChange(metric.value, before.value)}${flag}`];
   });
   const header = previous ? ["Metric", "This run", "Previous", "Change"] : ["Metric", "This run"];
-  const table = [header, ...rows.map((row) => row.slice(0, header.length))];
-  const widths = header.map((_, i) => Math.max(...table.map((row) => row[i].length)));
-  for (const row of table) console.log(row.map((cell, i) => i === 0 ? cell.padEnd(widths[i]) : cell.padStart(widths[i])).join("  ").trimEnd());
+  printRows([header, ...rows.map((row) => row.slice(0, header.length))]);
 }
 
 async function main() {

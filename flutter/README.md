@@ -112,24 +112,36 @@ Image input currently uses Claude. The service keeps a sent screenshot with its
 message, so reopening the chat shows it again; Trash hides it and the 24-hour
 Trash cleanup deletes it with the conversation.
 
-### Measure the conversation panel animation
+### Measure UI smoothness
 
-From `flutter/` on the Mac, keep the test window visible on the display being
-measured, with Reduce Motion off. The benchmark starts a loopback fixture with
-a 24-message conversation and a responsive HTML page. It needs no Relay server.
+From the repository root on WSL, run `npm run perf:ui` now and then. It is not a
+test and has no pass or fail. It runs `integration_test/ui_performance_test.dart`
+in profile mode from a temporary copy of this checkout's `flutter/` folder on
+the Mac, then removes the copy and the test app's data. A test window shows for
+about three minutes: leave the Mac unused, with the window visible and Reduce
+Motion off. The test app has its own bundle id, `app.relay.flutterPerf`, so it
+never touches the installed app's settings, tabs, website data, window position
+or updates. It uses a loopback fixture with synthetic text, not a Relay server.
 
-```sh
-flutter drive --profile -d macos --driver=test_driver/integration_test.dart \
-  --target=integration_test/chat_panel_performance_test.dart
-```
+The scenarios are: the chat panel opening and closing over an empty tab and over
+a web page; typing in the composer, one character per frame; switching between
+five tabs, four of them loaded WKWebViews; opening and scrolling the transcript
+pane of an hour-long video; scrolling 40,000 pixels up a 2,000-message
+conversation of mixed Markdown and back, while it is polled every second; and a
+12-second reply streaming in. Sizes and repeat counts are constants at the top
+of the test.
 
-The driver writes `build/integration_response_data.json`. For the empty tab and
-the loaded WKWebView, it records six opens and six closes after a warm-up cycle.
-Each result includes frame build and raster times in microseconds, the count
-where either stage exceeded one display refresh, and the longest interval
-between Flutter frames within a slide. Intervals above 25 ms flag uneven pacing
-on a 60 Hz display. These timings cover Flutter's part of the animation.
-WebKit compositing and final screen presentation need a separate trace.
+For each scenario the table shows: frames measured; frames per second while
+something moves (the display rate when smooth); slow %, the share of frames
+whose build (Dart) or raster (GPU) work took longer than one display refresh;
+median and 90th-percentile build and raster times in ms; how many times the
+screen waited more than 25 ms for a new frame (a visible hitch at 60 Hz); and
+the longest such wait. These cover Flutter's part of each frame, not WebKit's.
+
+Each run is saved as `tmp/perf/ui-<timestamp>.json` with its commit and dirty
+flag, and the table shows the change from the previous UI run. Times change by
+tens of percent between runs, so only falls in frames per second and rises in
+slow frames beyond run-to-run noise are marked `<<`.
 
 ## Mac updates
 

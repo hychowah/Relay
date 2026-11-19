@@ -101,5 +101,5 @@ previous run. Sizes and memory more than 20% larger are marked; timings are
 not, because they vary by tens of percent between runs. The numbers depend on
 the machine, so compare runs from the same machine. Each run also records the
 machine load and warns when it was busy; repeat such a run on a quiet machine.
-The Flutter client is measured only by the [Mac animation
-benchmark](flutter/README.md#measure-the-conversation-panel-animation).
+`npm run perf:ui` measures the Flutter client's smoothness on the Mac in
+everyday actions; see [Measure UI smoothness](flutter/README.md#measure-ui-smoothness).
