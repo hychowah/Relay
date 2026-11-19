@@ -167,6 +167,27 @@ html[data-relay-fullscreen-root]{overflow:hidden!important}`;
   define(Document.prototype, ["fullscreenElement", "webkitFullscreenElement", "webkitCurrentFullScreenElement"], { get: () => current });
   define(Document.prototype, ["fullscreenEnabled", "webkitFullscreenEnabled"], { get: () => true });
   define(Document.prototype, ["fullscreen", "webkitIsFullScreen"], { get: () => current !== null });
+  // With fullscreen off, WebKit also leaves out the handler properties such as
+  // document.onfullscreenchange, which YouTube uses to switch its layout.
+  const handlers = new WeakMap();
+  for (const prototype of [Document.prototype, Element.prototype]) {
+    for (const name of ["onfullscreenchange", "onwebkitfullscreenchange"]) {
+      if (name in prototype) continue;
+      define(prototype, [name], {
+        get() { return handlers.get(this)?.[name] ?? null; },
+        set(handler) {
+          let own = handlers.get(this);
+          if (!own) handlers.set(this, own = {});
+          if (!(name in own)) {
+            this.addEventListener(name.slice(2), (event) => {
+              if (typeof own[name] === "function") apply(own[name], this, [event]);
+            });
+          }
+          own[name] = typeof handler === "function" ? handler : null;
+        },
+      });
+    }
+  }
   // Safari's video-only calls, which some players use instead.
   define(HTMLVideoElement.prototype, ["webkitEnterFullscreen", "webkitEnterFullScreen"], { writable: true, value: request });
   define(HTMLVideoElement.prototype, ["webkitExitFullscreen", "webkitExitFullScreen"], {

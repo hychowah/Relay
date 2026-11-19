@@ -249,8 +249,8 @@ real WKWebViews.
    must return. A video in a sign-in popup must fill only the popup; a popup
    opened with `noopener` has no opener, so it would still reach the tab's
    fullscreen. Restarting an embedded player within 5 s of leaving needs a
-   click on the page, which cannot see the frame's clicks. Only a fixture
-   page ran on the Mac.
+   page click. Stable 0.0.15 fills the page, not YouTube's video (user
+   report); a Mac probe of the fix in `main` filled the pane.
 19. Browser history (desktop only) is in `main`, not in Stable or on the live
    backend. Deploy the backend, then check on the Mac: one titled entry per
    redirect or reload; instant, clickable suggestions. A restored tab still

@@ -25,6 +25,10 @@ const pages: Record<string, string> = {
     <button id="pop" onclick="window.open('https://player.test/popup', 'pop', 'width=400,height=300')">Popup</button>
     <script>
       window.changes = [];
+      // YouTube switches its layout from a handler property.
+      window.handled = [];
+      document.onfullscreenchange = () => handled.push("document");
+      document.getElementById("player").onwebkitfullscreenchange = () => handled.push("player");
       document.addEventListener("fullscreenchange", () => changes.push(document.fullscreenElement?.id ?? null));
       // Without a click or key press, a page cannot take the screen, and it
       // cannot catch the script's messages to Relay.
@@ -50,6 +54,10 @@ async function open(browser: Browser, url: string) {
   const context = await browser.newContext({ viewport: { width: 800, height: 500 } });
   // A string, because tsx adds helpers to functions that the page lacks.
   await context.addInitScript("window.relayMessages = []; window.RelayBrowser = { postMessage: (m) => relayMessages.push(m) };");
+  // WKWebView with fullscreen off has no fullscreen handler properties;
+  // removing Chromium's makes the tests use the script's own.
+  await context.addInitScript(`for (const p of [Document.prototype, Element.prototype])
+    for (const n of ["onfullscreenchange", "onwebkitfullscreenchange"]) delete p[n];`);
   await context.addInitScript({ content: script });
   await context.route("https://**/*", (route) =>
     route.fulfill({ contentType: "text/html", body: pages[new URL(route.request().url()).host] }));
@@ -84,6 +92,7 @@ test("a page's fullscreen element fills the tab's view and the user can always l
   // Above the page's own fixed header, despite the transformed ancestor.
   assert.equal(await top.evaluate(() => document.elementFromPoint(400, 20)?.closest("#player")?.id), "player");
   assert.deepEqual(await state(), { element: "player", messages: ["fullscreen:enter:key"], changes: ["player"] });
+  assert.deepEqual(await top.evaluate(() => (window as any).handled), ["document", "player"]);
 
   // A page that breaks the event calls cannot keep Escape from ending it.
   await top.evaluate(`
