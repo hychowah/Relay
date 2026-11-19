@@ -12,5 +12,5 @@
     "verbatimModuleSyntax": true,
     "types": ["node"]
   },
-  "include": ["server", "shared", "web", "tests", "tools/perf.ts", "tools/perf-table.ts", "tools/perf-ui.ts", "vite.config.ts"]
+  "include": ["server", "shared", "web", "tests", "tools/perf.ts", "tools/perf-table.ts", "tools/perf-ui.ts", "tools/perf-mem.ts", "vite.config.ts"]
 }

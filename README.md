@@ -104,5 +104,7 @@ previous run. Sizes and memory more than 20% larger are marked; timings are
 not, because they vary by tens of percent between runs. The numbers depend on
 the machine, so compare runs from the same machine. Each run also records the
 machine load and warns when it was busy; repeat such a run on a quiet machine.
-`npm run perf:ui` measures the Flutter client's smoothness on the Mac in
-everyday actions; see [Measure UI smoothness](flutter/README.md#measure-ui-smoothness).
+On the Mac, `npm run perf:ui` measures the Flutter client's smoothness in
+everyday actions, `npm run perf:stress` its memory over repeated actions and
+under heavy load, and `npm run perf:mem` the installed app's memory during real
+use; see [Measure performance](flutter/README.md#measure-performance).

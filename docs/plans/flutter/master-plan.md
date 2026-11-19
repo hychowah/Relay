@@ -171,12 +171,17 @@ release with its commit, the download matches its hash, and publishing retired
 the one listed test build that Stable contains. The native Mac workflow was not
 rerun for 0.0.9, and it has not been installed or reviewed on the Mac.
 
-On 2026-11-19 four runs of the [UI smoothness suite](../../../flutter/README.md#measure-ui-smoothness)
-on the MacBook Neo (Mac17,5, 60 Hz) held 57–60 fps in every scenario, with at
-most 2.3% slow frames. The longest waits for a frame were on tab switches
-(83–117 ms in two of four runs), the streaming reply (83 ms), the transcript
-pane (67 ms) and the long-conversation scroll (50 ms). WebKit and final screen
-presentation are unmeasured.
+On 2026-11-19 four runs of the [UI smoothness suite](../../../flutter/README.md#measure-performance)
+on the MacBook Neo (Mac17,5, 60 Hz) held 57–60 fps, with at most 2.3% slow
+frames; the longest waits were on tab switches (83–117 ms), the streaming reply
+(83 ms) and the transcript pane (67 ms). WebKit presentation is unmeasured.
+Four stress runs the same day found no leak: closed tabs released their
+WebContent processes, per-cycle slopes changed sign between runs, and polling a
+2,000-message conversation grew 2–5 MB/min over 3–5 minutes but stayed level in
+a one-off 12-minute poll. With 15 tabs and a reply streaming into 10,000
+messages the test app peaked at 676–730 MB and held 53–59 fps, with a wait of up
+to 167 ms at about every poll, while `perf:mem` found the installed app at
+2.0–3.3 GB in its first hour, including one 1.5 GB web page.
 
 Restoring tabs adds every saved tab and shows the last active one at once, then
 loads all pages together without selecting them. A tab the user picks meanwhile
@@ -207,7 +212,7 @@ and none of these builds has been reviewed on the Mac.
    update folders beside the app and the older downloads.
 2. Republishing a test build's name leaves its earlier ZIP in the release
    folder on WSL. Remove it at publish time if that folder grows.
-3. Review Stable 0.0.13 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`; native presentation timing over web content is unmeasured. The suite's longest waits, on tab switches, polls of a long conversation and the transcript pane, are candidates for a smoothness fix. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
+3. Review Stable 0.0.13 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`. The longest waits, on tab switches, polls of a long conversation and the transcript pane, are candidates for a smoothness fix; each poll decodes and rebuilds the whole conversation on the UI thread. No leak is confirmed; run `npm run perf:mem` during a day of use to see whether the installed app keeps growing. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
 4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable since 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified. The capture animation is not in Stable yet: on the Mac, check that the flash and the flight to the composer run smoothly over a real page, and that the thumbnail takes over without a jump.
 5. Try the toolbar record button and **Bug reports**, both in Stable since 0.0.9, on the Mac. Source tests cover recording,
    saving, viewing, marking solved and deleting; native screenshots and the live service's report folder are unverified. Marking solved and deleting are in Stable 0.0.13 and served by the live backend; try them on the Mac.

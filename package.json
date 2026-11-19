@@ -14,7 +14,9 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "check:records": "python3 tools/check_records.py",
     "perf": "node --import tsx tools/perf.ts",
-    "perf:ui": "node --import tsx tools/perf-ui.ts"
+    "perf:ui": "node --import tsx tools/perf-ui.ts",
+    "perf:stress": "node --import tsx tools/perf-ui.ts stress",
+    "perf:mem": "node --import tsx tools/perf-mem.ts"
   },
   "dependencies": {
     "@hono/node-server": "2.1.8",

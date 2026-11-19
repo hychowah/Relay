@@ -112,16 +112,32 @@ Image input currently uses Claude. The service keeps a sent screenshot with its
 message, so reopening the chat shows it again; Trash hides it and the 24-hour
 Trash cleanup deletes it with the conversation.
 
-### Measure UI smoothness
+### Measure performance
 
-Run `npm run perf:ui` from the repository root on WSL now and then; it has no pass
-or fail. For about three minutes a test window shows on the Mac: leave the Mac
-unused, with the window visible and Reduce Motion off. The test app has its own
-bundle id, `app.relay.flutterPerf`, and the run removes its data afterwards.
-Scenarios: the chat panel, typing, tab switching, the transcript pane, scrolling a
-2,000-message conversation and a streaming reply. Results go to
-`tmp/perf/ui-*.json` and are compared with the last run. They cover only
-Flutter's part of each frame.
+Run these from the repository root on WSL now and then; they have no pass or
+fail. `npm run perf:ui` measures smoothness. For about three minutes a test
+window shows on the Mac: leave the Mac unused, with the window visible and
+Reduce Motion off. The test app has its own bundle id, `app.relay.flutterPerf`,
+and the run removes its data afterwards. Scenarios: the chat panel, typing, tab
+switching, the transcript pane, scrolling a 2,000-message conversation and a
+streaming reply. Results go to `tmp/perf/ui-*.json` and are compared with the
+last run. They cover only Flutter's part of each frame.
+
+`npm run perf:stress` uses the same test app for about ten minutes. It repeats
+opening and closing ten web tabs, switching through 20 conversations, opening
+the transcript pane and polling a 2,000-message conversation, and reports
+memory growth per cycle after warm-up. Growth repeated across runs means a
+leak; a few MB per cycle or minute either way is garbage-collector noise. It then
+streams a long reply into a 10,000-message conversation with 15 tabs open while
+scrolling and switching tabs, and reports smoothness and memory. Results go to
+`tmp/perf/stress-*.json`.
+
+`npm run perf:mem` reads the memory of the installed app and its WebKit
+processes, adds it to `tmp/perf/mem.jsonl` and shows recent readings; run it
+during a day of use to see growth. It only reads the process list and memory
+figures. Memory is the physical footprint that Activity Monitor shows. WebKit
+processes count for the app whose launchd domain started them, so other apps'
+pages are excluded; WebKit's shared GPU and networking processes count in full.
 
 ## Mac updates
 
