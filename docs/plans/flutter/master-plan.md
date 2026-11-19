@@ -188,44 +188,35 @@ unready. Reading the code shows that each WKWebView starts loading when its page
 is created, before it is shown; no Mac run has yet confirmed that hidden tabs
 load on the real WebViews.
 
-Stable 0.0.10 (build 10) is published from `main`. Beyond 0.0.9 it carries the
-Browser address fix for in-page navigation, the app list refresh, tab restore,
-the transcript pane and transcript reading. Analysis, 46 Flutter tests and 85
-backend tests passed on its commit. The feed serves the release with its commit,
-the download matches its hash, and publishing retired the one test build that
-Stable contains. The backend at `main` was deployed the same day: it lists the
-registered apps, offers `browser.transcript`, and applied an edit to the live
-apps file without a restart. The native Mac workflow was not rerun, and 0.0.10
-has not been installed or reviewed on the Mac.
-
-Stable 0.0.11 (build 11) is published from `main`. Beyond 0.0.10 it carries the
-two-tab split view and the transcript pane following the playing video.
-Analysis, 53 Flutter tests and 85 backend tests passed on its commit. The feed
-serves the release with its commit and the download matches its hash. The
-backend did not change. It has not been installed or reviewed on the Mac.
-
-Stable 0.0.12 (build 12) is published from `main`. Beyond 0.0.11 it carries
-night mode, page alert and confirm dialogs, the split view's divider and exit
-button, the transcript pane's own background, and the capture animation.
-Analysis, 56 Flutter tests and 85 backend tests passed on its commit. The feed
-serves the release with its commit and the download matches its hash. It has
-not been installed or reviewed on the Mac.
+Stable 0.0.10 to 0.0.13 were published from `main` on 2026-11-19. 0.0.10
+carries the Browser address fix for in-page navigation, the app list refresh,
+tab restore, the transcript pane and transcript reading. 0.0.11 adds the two-tab
+split view and the transcript following the playing video. 0.0.12 adds night
+mode, page alert and confirm dialogs, the split divider and exit button, and
+the capture animation. 0.0.13 (build 13) fixes the split view taking no clicks,
+shows the transcript as a bordered card, and lets bug reports be marked solved
+or deleted. Analysis, 57 Flutter tests and 85 backend tests passed on its
+commit; the feed serves it with its commit and the download matches its hash.
+The backend at `main` was deployed with 0.0.10 and again with 0.0.13: it offers
+`browser.transcript`, applies an edit to the live apps file without a restart,
+and serves the bug report status routes. The native Mac workflow was not rerun,
+and none of these builds has been reviewed on the Mac.
 
 ## Next
 
-1. Install Stable 0.0.12 on the Mac. Check that tabs, the chat panel and the
+1. Install Stable 0.0.13 on the Mac. Check that tabs, the chat panel and the
    window come back after a restart, and that its first start removes the
    update folders beside the app and the older downloads.
 2. Republishing a test build's name leaves its earlier ZIP in the release
    folder on WSL. Remove it at publish time if that folder grows.
-3. Review Stable 0.0.12 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported panel hitch with a fresh run of the fixture benchmark, whose recorded numbers predate 0.0.9, including native presentation timing if it appears only over web content. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
+3. Review Stable 0.0.13 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported panel hitch with a fresh run of the fixture benchmark, whose recorded numbers predate 0.0.9, including native presentation timing if it appears only over web content. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
 4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable since 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified. The capture animation is not in Stable yet: on the Mac, check that the flash and the flight to the composer run smoothly over a real page, and that the thumbnail takes over without a jump.
 5. Try the toolbar record button and **Bug reports**, both in Stable since 0.0.9, on the Mac. Source tests cover recording,
    saving, viewing, marking solved and deleting; native screenshots and the live service's report folder are unverified. Marking solved and deleting are not in Stable yet, and the live backend needs a redeploy to serve them.
 6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 7. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
 8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.
-9. Restart Stable 0.0.12 on the Mac with a Browser tab and two or more app tabs open. Check that the last active tab shows first, the hidden tabs finish loading (none closed by the 20 s limit), and the chat history appears without waiting for them.
+9. Restart Stable 0.0.13 on the Mac with a Browser tab and two or more app tabs open. Check that the last active tab shows first, the hidden tabs finish loading (none closed by the 20 s limit), and the chat history appears without waiting for them.
 10. Check `browser.transcript` in WKWebView on the Mac with a short and an hour-long YouTube video, note how long each page takes against the 7-second limit, then ask about one through the real agent. Its page script passed against live YouTube only in headless Chromium with a Safari user agent. In the transcript pane, check on the Mac: opening it loads the hour-long transcript and scrolls smoothly; a drag selection survives clicking into the composer and reaches the question; moving to another video reloads it; a newer selection on the page replaces the transcript's; it stays hidden for other pages and narrow windows, and still loads in chat-only mode. For following, check that the highlight moves while the video plays, moves within a second of a seek, stays still while paused and during an ad, and still follows after moving to another video in the same tab; that scrolling the pane by hand or selecting there stops the scrolling while the highlight keeps moving; and that **Follow video** resumes it without losing the kept selection. An earlier draft of the play-time script, with an extra in-page navigation check, passed live in headless Chromium (play, seek, pause, in-page navigation; no ad appeared); the committed shorter script was not run live, and only a fake page tests the pane.
 11. Try the split view on the Mac with real WKWebViews: dragging a tab over a
    page, the drop highlight, clicking the dimmed pane to select it, pages
@@ -235,14 +226,14 @@ not been installed or reviewed on the Mac.
    or content. Only widget tests with fake pages cover it. A bug report on
    0.0.12 showed neither page took clicks or scrolling after a split: the
    selected pane's border took the whole pane's input on macOS. Its outline
-   is now a 2-pixel frame around the page, with nothing drawn over it, not
-   yet in Stable; check that the selected page
+   is now a 2-pixel frame around the page, with nothing drawn over it, in
+   Stable 0.0.13; check that the selected page
    clicks and scrolls, and that one click on the dimmed pane selects it.
 12. Check night mode on the Mac in Dark and Light, with macOS both light and
    dark: tabs, chat, Markdown replies, dialogs, menus and the empty Browser
    page. Also check that System follows a live macOS switch. Only widget tests
    and WSL screenshots cover it.
-   After 0.0.12 the transcript is an inset card with an accent border and
+   Since 0.0.13 the transcript is an inset card with an accent border and
    muted timestamps. On the Mac, in both modes, check that it reads apart
    from the conversation and the playing paragraph is visible.
 13. Check on the Mac that Analysis Web's **Start analysis** shows its confirm
