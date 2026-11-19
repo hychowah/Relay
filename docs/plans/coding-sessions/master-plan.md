@@ -86,6 +86,14 @@ only its id as the view context, so a restored tab reopens it. Nine tests and a
 headless browser run against stand-ins passed, and the live app listed the
 user's real sessions. The Relay repository is now a target as well.
 
+The list is grouped by project and sorted by last use, and since 2026-11-19 it
+also shows Claude Code and Codex conversations started outside the session
+tool. Opening one attaches to it if it runs in the background, or shows a
+Claude Code conversation's saved history read-only; a Codex conversation opens
+only while Codex has it loaded and is otherwise listed with that reason. Ten
+tests pass, and the live app listed 30 conversations in 6 projects. Opening an
+outside conversation through the real session tool is unverified.
+
 ### Phase 2 — Check-back
 
 Reading a session's state and result for the Relay agent, and follow-up drafts

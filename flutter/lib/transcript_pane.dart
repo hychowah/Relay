@@ -21,13 +21,16 @@ class TranscriptBar extends StatelessWidget {
     return InkWell(
       onTap: onToggle,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(18, 7, 14, 7),
+        padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
         decoration: BoxDecoration(
-          color: colors.surfaceContainerHigh,
-          border: Border(bottom: BorderSide(color: colors.outline)),
+          border: open
+              ? Border(bottom: BorderSide(color: colors.outline))
+              : null,
         ),
         child: Row(
           children: [
+            Icon(Icons.subtitles_outlined, size: 15, color: colors.primary),
+            const SizedBox(width: 7),
             const Expanded(
               child: Text(
                 'Transcript',
@@ -144,6 +147,28 @@ class _TranscriptPaneState extends State<TranscriptPane> {
     );
   }
 
+  // A muted timestamp marks transcript text apart from the conversation's
+  // replies; selecting the paragraph still copies it with its timestamp.
+  Widget _paragraph(String text) {
+    final time = RegExp(r'^\[[\d:]+\] ?').stringMatch(text) ?? '';
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: time,
+            style: TextStyle(
+              fontSize: 11,
+              color: colors.onSurfaceVariant,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          TextSpan(text: text.substring(time.length)),
+        ],
+      ),
+      style: const TextStyle(fontSize: 13, height: 1.45),
+    );
+  }
+
   @override
   void dispose() {
     _clock?.cancel();
@@ -236,13 +261,7 @@ class _TranscriptPaneState extends State<TranscriptPane> {
                               horizontal: 6,
                               vertical: 2,
                             ),
-                            child: Text(
-                              paragraphs[i],
-                              style: const TextStyle(
-                                fontSize: 13,
-                                height: 1.45,
-                              ),
-                            ),
+                            child: _paragraph(paragraphs[i]),
                           ),
                         ),
                       ),

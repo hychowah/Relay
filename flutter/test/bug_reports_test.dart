@@ -84,4 +84,50 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Bug reports'), findsOneWidget);
   });
+
+  testWidgets('marks a bug report solved and deletes another', (tester) async {
+    final saved = {
+      for (final id in ['a', 'b'])
+        id: <String, Object?>{
+          'id': id,
+          'savedAt': '2026-11-19T01:00:00.000Z',
+          'description': 'Bug $id',
+          'status': 'open',
+          'events': 0,
+          'screenshot': false,
+        },
+    };
+    final api = RelayApi(
+      Uri.parse('http://localhost:3250'),
+      client: MockClient((request) async {
+        if (request.url.path == '/api/bug-reports') {
+          return http.Response(jsonEncode(saved.values.toList()), 200);
+        }
+        final id = request.url.pathSegments.last;
+        if (request.method == 'PATCH') {
+          saved[id]!['status'] = (jsonDecode(request.body) as Map)['status'];
+          return http.Response(jsonEncode(saved[id]), 200);
+        }
+        saved.remove(id);
+        return http.Response('', 204);
+      }),
+    );
+    await tester.pumpWidget(MaterialApp(home: BugReportsDialog(api: api)));
+    await tester.pumpAndSettle();
+    expect(find.text('2 open · 0 solved'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Mark solved').first);
+    await tester.pumpAndSettle();
+    expect(saved['a']!['status'], 'solved');
+    expect(find.text('1 open · 1 solved'), findsOneWidget);
+    expect(find.byTooltip('Mark open'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Delete bug report').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(saved.keys, ['a']);
+    expect(find.text('Bug b'), findsNothing);
+    expect(find.text('0 open · 1 solved'), findsOneWidget);
+  });
 }

@@ -80,7 +80,10 @@ current page. The service saves it as `bug-reports/<time>-<id>.json` (with a
 API keys and other secret fields with `[redacted]`. Reports contain conversation
 text, so they stay with the runtime data, outside the repository. Choose **Bug
 reports** in the workspace menu to read them: each shows its description, screenshot
-and a timeline of events that expand to their full details.
+and a timeline of events that expand to their full details. Mark a report solved
+with the circle beside it (click again to reopen it); the header counts open and
+solved reports. The bin button deletes the report and its screenshot. The status
+is saved as `status` (`open` or `solved`) in the report file.
 
 ### Measure performance
 
