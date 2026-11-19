@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 // Relay's own colours. Widgets read them from the theme's ColorScheme so they
@@ -305,3 +308,91 @@ Duration workspaceMotion(BuildContext context) =>
     MediaQuery.disableAnimationsOf(context)
     ? Duration.zero
     : const Duration(milliseconds: 220);
+
+/// A trash button that asks for a second click instead of opening a dialog.
+/// The first click turns it into a red button that grows to the left, so the
+/// pointer is still on it for the second click. A click soon after arming is
+/// ignored, so a double-click does not delete. A tap elsewhere or Escape
+/// cancels.
+class ConfirmDeleteButton extends StatefulWidget {
+  const ConfirmDeleteButton({
+    super.key,
+    required this.tooltip,
+    required this.label,
+    required this.onConfirmed,
+  });
+  final String tooltip, label;
+  final VoidCallback? onConfirmed;
+  @override
+  State<ConfirmDeleteButton> createState() => _ConfirmDeleteButtonState();
+}
+
+class _ConfirmDeleteButtonState extends State<ConfirmDeleteButton> {
+  final focus = FocusNode();
+  bool armed = false;
+  Timer? settling;
+
+  @override
+  void dispose() {
+    settling?.cancel();
+    focus.dispose();
+    super.dispose();
+  }
+
+  void disarm() {
+    if (armed) setState(() => armed = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final onConfirmed = widget.onConfirmed;
+    final showConfirm = armed && onConfirmed != null;
+    return TapRegion(
+      onTapOutside: (_) => disarm(),
+      child: CallbackShortcuts(
+        bindings: {
+          if (showConfirm)
+            const SingleActivator(LogicalKeyboardKey.escape): disarm,
+        },
+        child: AnimatedSize(
+          duration: workspaceMotion(context),
+          curve: Curves.easeOut,
+          alignment: Alignment.centerRight,
+          child: showConfirm
+              ? FilledButton.icon(
+                  focusNode: focus,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: colors.error,
+                    foregroundColor: colors.onError,
+                    minimumSize: const Size(40, 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                  onPressed: () {
+                    if (settling?.isActive ?? false) return;
+                    setState(() => armed = false);
+                    onConfirmed();
+                  },
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: Text(widget.label),
+                )
+              : IconButton(
+                  tooltip: widget.tooltip,
+                  onPressed: onConfirmed == null
+                      ? null
+                      : () {
+                          setState(() => armed = true);
+                          settling?.cancel();
+                          settling = Timer(
+                            const Duration(milliseconds: 400),
+                            () {},
+                          );
+                          focus.requestFocus();
+                        },
+                  icon: const Icon(Icons.delete_outline),
+                ),
+        ),
+      ),
+    );
+  }
+}

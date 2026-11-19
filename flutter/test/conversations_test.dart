@@ -148,6 +148,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Move conversation to Trash'));
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text('Move to Trash'));
     await tester.pumpAndSettle();
     expect(w.conversationId, isNull);
