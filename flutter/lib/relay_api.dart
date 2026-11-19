@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import 'bug_recorder.dart';
+import 'page_surface.dart';
 import 'relay_records.dart';
 
 export 'bug_recorder.dart';
@@ -242,12 +243,13 @@ class RelayApi {
   void close() => _client.close();
 }
 
-/// Matches the existing Browser broker: only scoped page reads travel this socket.
+/// Matches the existing Browser broker: only scoped page reads and video
+/// transcripts (desktop only) travel this socket.
 class BrowserConnection {
-  BrowserConnection(this.origin, this.sessionId, this.read, this.changed);
+  BrowserConnection(this.origin, this.sessionId, this.browser, this.changed);
   final Uri origin;
   final String sessionId;
-  final Future<Json> Function(String) read;
+  final BrowserSurface Function(String tabId) browser;
   final void Function(bool) changed;
   WebSocket? _socket;
   Timer? _retry;
@@ -273,19 +275,27 @@ class BrowserConnection {
           Json? request;
           try {
             request = jsonDecode(raw as String) as Json;
-            if (request['type'] != 'read' ||
+            if (!['read', 'transcript'].contains(request['type']) ||
                 request['id'] is! String ||
                 request['tabId'] is! String) {
               return;
             }
-            final data = await read(request['tabId'] as String);
+            final tab = browser(request['tabId'] as String);
+            final data = request['type'] == 'read'
+                ? await tab.read()
+                : await tab.transcript(
+                    (request['offset'] as num?)?.toInt() ?? 0,
+                  );
             if (socket.readyState == WebSocket.open) {
               socket.add(jsonEncode({'id': request['id'], 'data': data}));
             }
           } catch (error) {
             if (socket.readyState == WebSocket.open) {
               socket.add(
-                jsonEncode({'id': request?['id'], 'error': error.toString()}),
+                jsonEncode({
+                  'id': request?['id'],
+                  'error': error is StateError ? error.message : '$error',
+                }),
               );
             }
           }

@@ -6,7 +6,7 @@ import { serve } from "@hono/node-server";
 import { WebSocket } from "ws";
 import { createBrowser } from "../server/browser.ts";
 
-test("the built-in Browser relays a page read to the connected client and refuses web-page sockets", async () => {
+test("the built-in Browser relays page reads and transcripts to the connected client and refuses web-page sockets", async () => {
   const browser = createBrowser();
   const server = serve({ fetch: browser.app.fetch, hostname: "127.0.0.1", port: 0 });
   browser.attach(server);
@@ -27,10 +27,18 @@ test("the built-in Browser relays a page read to the connected client and refuse
     await once(client, "open");
     client.on("message", (raw) => {
       const request = JSON.parse(raw.toString());
-      client.send(JSON.stringify({ id: request.id, data: { tabId: request.tabId, text: "Page text" } }));
+      if (request.type === "read")
+        client.send(JSON.stringify({ id: request.id, data: { tabId: request.tabId, text: "Page text" } }));
+      else if (request.offset === 0)
+        client.send(JSON.stringify({ id: request.id, data: { text: "[0:01] Hello", nextOffset: 13 } }));
+      else client.send(JSON.stringify({ id: request.id, error: "This video has no captions, so it has no transcript." }));
     });
     assert.deepEqual(await call("browser.read", { sessionId: session, tabId: "tab" }),
       { type: "result", result: { data: { tabId: "tab", text: "Page text" } } });
+    assert.deepEqual((await call("browser.transcript", { sessionId: session, tabId: "tab" })).result.data,
+      { text: "[0:01] Hello", nextOffset: 13 });
+    assert.deepEqual(await call("browser.transcript", { sessionId: session, tabId: "tab", offset: 13 }),
+      { type: "error", message: "This video has no captions, so it has no transcript." });
     assert.deepEqual((await call("browser.open", { url: "https://example.com/a" })).result.data,
       { presentation: { viewId: "browser", state: { url: "https://example.com/a" } } });
     client.close();

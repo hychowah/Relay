@@ -394,7 +394,7 @@ class Workspace extends ChangeNotifier {
     changed();
   }
 
-  Future<Json> readBrowser(String tabId) async {
+  BrowserSurface browserTab(String tabId) {
     final browser = tabs
         .where((tab) => tab.id == tabId)
         .firstOrNull
@@ -403,7 +403,7 @@ class Workspace extends ChangeNotifier {
     if (browser == null) {
       throw StateError('The requested browser tab is closed.');
     }
-    return browser.read();
+    return browser;
   }
 
   Future<void> send(

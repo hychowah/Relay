@@ -9,6 +9,7 @@ import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'browser_comment.dart';
+import 'browser_transcript.dart';
 import 'page_surface.dart';
 import 'relay_api.dart';
 
@@ -174,6 +175,8 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   String _title = '', _url = 'about:blank';
   int _generation = 0;
   String? _comment, _presentationId;
+  int _transcriptRequests = 0;
+  final _transcriptReplies = <String, Completer<Json>>{};
 
   @override
   Widget get widget => Stack(
@@ -270,6 +273,16 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       'RelayBrowser',
       onMessageReceived: (message) {
         if (_disposed) return;
+        if (message.message.startsWith('transcript:')) {
+          final reply = jsonDecode(message.message.substring(11)) as Map;
+          final pending = _transcriptReplies.remove(reply['id']);
+          if (reply['error'] != null) {
+            pending?.completeError(StateError('${reply['error']}'));
+          } else {
+            pending?.complete(Map<String, dynamic>.from(reply['data'] as Map));
+          }
+          return;
+        }
         if (message.message.startsWith('title:')) {
           _title = message.message.substring('title:'.length);
           (_context?['state'] as Map?)?['title'] = _title;
@@ -334,6 +347,25 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       'selection': result['selection'],
     };
     return result;
+  }
+
+  // Desktop only. Every page asks YouTube again for the video the tab shows.
+  @override
+  Future<Json> transcript(int offset) async {
+    final id = '${++_transcriptRequests}';
+    final reply = _transcriptReplies[id] = Completer<Json>();
+    try {
+      await controller.runJavaScript(
+        youtubeTranscriptScript.replaceFirst('REQUEST_ID', jsonEncode(id)),
+      );
+      final data = await reply.future.timeout(
+        const Duration(seconds: 7),
+        onTimeout: () => throw StateError('YouTube did not answer in time.'),
+      );
+      return transcriptPage(transcriptFromSegments(data), offset);
+    } finally {
+      _transcriptReplies.remove(id);
+    }
   }
 
   @override

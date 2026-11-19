@@ -61,6 +61,8 @@ class FakePage extends PageSurface with BrowserSurface {
   @override
   Future<Json> read() async => {'text': 'Desk: 150 by 80 cm', 'url': url};
   @override
+  Future<Json> transcript(int offset) async => {};
+  @override
   Future<void> navigate(String text) async {
     changed(true);
   }

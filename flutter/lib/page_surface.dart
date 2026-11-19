@@ -67,6 +67,7 @@ abstract class PageSurface {
 
 mixin BrowserSurface {
   Future<Json> read();
+  Future<Json> transcript(int offset);
   Future<void> navigate(String text);
   bool get canGoBack => false;
   bool get canGoForward => false;

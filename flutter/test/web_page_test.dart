@@ -25,6 +25,7 @@ class TestController extends PlatformWebViewController {
   late TestNavigationDelegate delegate;
   var location = 'https://youtube.test/', history = false;
   final loaded = Completer<void>();
+  final scripts = <String>[];
   @override
   Future<void> setJavaScriptMode(JavaScriptMode mode) async {}
   @override
@@ -44,7 +45,8 @@ class TestController extends PlatformWebViewController {
   @override
   Future<void> loadHtmlString(String html, {String? baseUrl}) async {}
   @override
-  Future<void> runJavaScript(String javaScript) async {}
+  Future<void> runJavaScript(String javaScript) async =>
+      scripts.add(javaScript);
   @override
   Future<Object> runJavaScriptReturningResult(String javaScript) async =>
       jsonEncode({'url': location, 'title': 'YouTube', 'selection': ''});
@@ -185,4 +187,62 @@ void main() {
       expect(page.context!['generation'], generation);
     },
   );
+
+  test('a Browser transcript page arrives through the page channel', () async {
+    final platform = TestWebPlatform();
+    WebViewPlatform.instance = platform;
+    final page = createWebPage(
+      PageSpec(
+        id: 'tab',
+        appId: 'browser',
+        name: 'Browser',
+        sessionId: 'session',
+        relayOrigin: Uri.parse('http://relay.test'),
+      ),
+      (_) {},
+    );
+    addTearDown(page.dispose);
+    final controller = platform.controller;
+    await pumpEventQueue();
+    controller.delegate.finished(controller.location);
+    await page.ready;
+
+    Future<Json> answer(int offset, Json reply) async {
+      final result = page.browser!.transcript(offset);
+      await pumpEventQueue();
+      final id = RegExp(r'id:"(\d+)"').firstMatch(controller.scripts.last)![1];
+      controller.channel.onMessageReceived(
+        JavaScriptMessage(
+          message: 'transcript:${jsonEncode({'id': id, ...reply})}',
+        ),
+      );
+      return result;
+    }
+
+    final video = {
+      'data': {
+        'url': 'u',
+        'title': 'Video',
+        'language': 'English',
+        'segments': [
+          for (var i = 0; i < 1000; i++) {'time': '$i:00', 'text': 'x' * 100},
+        ],
+      },
+    };
+    final first = await answer(0, video);
+    expect(first['title'], 'Video');
+    final second = await answer(first['nextOffset'] as int, video);
+    expect(second['offset'], first['nextOffset']);
+
+    await expectLater(
+      answer(0, {'error': 'This video has no captions.'}),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'This video has no captions.',
+        ),
+      ),
+    );
+  });
 }

@@ -61,7 +61,7 @@ Future<void> main() async {
       ),
     ),
     workspace.browserSessionId,
-    workspace.readBrowser,
+    workspace.browserTab,
     (_) => workspace.changed(),
   );
   unawaited(connection.connect());

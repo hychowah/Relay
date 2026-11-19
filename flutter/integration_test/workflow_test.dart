@@ -34,7 +34,7 @@ void main() {
         ),
       ),
       workspace.browserSessionId,
-      workspace.readBrowser,
+      workspace.browserTab,
       (_) {},
     );
     // SSH-launched tests can be occluded; still render the native test surfaces.
