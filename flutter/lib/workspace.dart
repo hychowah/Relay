@@ -233,8 +233,7 @@ class Workspace extends ChangeNotifier {
   }
 
   /// [opened] marks a tab the user or agent opened, which moves to the left
-  /// end with [newestTabFirst]. Clicking a tab, restoring, closing and split
-  /// changes keep the order, so tabs do not move under the mouse.
+  /// end with [newestTabFirst]; restoring, closing and split changes do not.
   void select(WorkspaceTab tab, {bool manual = true, bool opened = false}) {
     if (opened && newestTabFirst && tabs.remove(tab)) tabs.insert(0, tab);
     if (manual) _manual();
