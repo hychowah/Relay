@@ -4,7 +4,7 @@ import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { availableParallelism, loadavg, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 import { randomUUID } from "node:crypto";
@@ -235,12 +235,19 @@ function measureBuild(outDir: string) {
   }
 }
 
-function previousRun(): { file: string; metrics: Metrics } | undefined {
+type Load = { start: number[]; end: number[]; cpus: number };
+const busy = (load: Load) => Math.max(load.start[0], load.end[0]) > load.cpus / 2;
+const describeLoad = (load: Load) =>
+  `1-min load ${load.start[0].toFixed(1)} at start, ${load.end[0].toFixed(1)} at end, ${load.cpus} CPUs`;
+
+function previousRun(): { file: string; metrics: Metrics; load?: Load } | undefined {
   let files: string[] = [];
   try { files = readdirSync(resultsDir).filter((name) => name.endsWith(".json")).sort(); }
   catch { return undefined; }
   const file = files.at(-1);
-  return file ? { file, metrics: JSON.parse(readFileSync(join(resultsDir, file), "utf8")).metrics } : undefined;
+  if (!file) return undefined;
+  const { metrics, load } = JSON.parse(readFileSync(join(resultsDir, file), "utf8"));
+  return { file, metrics, load };
 }
 
 function format({ value, unit }: Metric) {
@@ -265,6 +272,7 @@ function printTable(previous: Metrics | undefined) {
 
 async function main() {
   const started = performance.now();
+  const startLoad = loadavg();
   const work = mkdtempSync(join(tmpdir(), "relay-perf-"));
   let child: ChildProcess | undefined;
   let app: Server | undefined;
@@ -311,18 +319,20 @@ async function main() {
     }
 
     const git = (...args: string[]) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+    const load: Load = { start: startLoad, end: loadavg(), cpus: availableParallelism() };
     const previous = previousRun();
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const result = {
       timestamp, commit: git("rev-parse", "--short", "HEAD"), dirty: git("status", "--porcelain") !== "",
-      node: process.version, platform: `${process.platform}-${process.arch}`, seed: SEED,
+      node: process.version, platform: `${process.platform}-${process.arch}`, load, seed: SEED,
       readRepeats: READ_REPEATS, roundTrips: ROUND_TRIPS, skipBuild, metrics,
     };
     mkdirSync(resultsDir, { recursive: true });
     const file = join(resultsDir, `${timestamp}.json`);
     writeFileSync(file, JSON.stringify(result, null, 2) + "\n");
     console.log();
-    if (previous) console.log(`Compared with ${previous.file}`);
+    if (busy(load)) console.log(`Warning: the machine was busy (${describeLoad(load)}); timings are unreliable, repeat on a quiet machine.`);
+    if (previous) console.log(`Compared with ${previous.file}${previous.load ? ` (${describeLoad(previous.load)})` : ""}`);
     printTable(previous?.metrics);
     console.log(`\nSaved ${file.slice(root.length + 1)} (${((performance.now() - started) / 1000).toFixed(0)} s)`);
   } finally {
