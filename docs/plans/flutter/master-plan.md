@@ -251,9 +251,8 @@ real WKWebViews.
    running `npm run perf:mem`. If it is an app page, the fix belongs in that
    app's repository. If it is an outside site, whether Relay unloads hidden tabs
    under memory pressure is a product decision for the user.
-18. Try Browser history on the Mac: a redirect (`example.com`), a YouTube
-   video changed in place and a reload each leave one titled entry; the list
-   stays shut when a page changes the address, and its rows take clicks over
-   the page. Only tests with a faked page cover it.
+18. On the Mac, check Browser history: a redirect, an in-place YouTube video
+   change and a reload each leave one titled entry, and the list takes clicks
+   over the page.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.
