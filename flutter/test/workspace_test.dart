@@ -766,6 +766,45 @@ void main() {
       ], reason: 'a tab that failed leaves the split');
     },
   );
+  test('reconnect fills a split saved before a pane it retries', () async {
+    // Newest tab first saves a new split tab ahead of its panes.
+    final f = Fixture(
+      session: {
+        'active': 0,
+        'tabs': [
+          {
+            'split': {
+              'axis': 'horizontal',
+              'fraction': .5,
+              'panes': [1, 2],
+            },
+            'focus': 2,
+          },
+          {
+            'appId': 'room-layout',
+            'context': {
+              'viewId': 'room',
+              'state': {'zone': 'work'},
+            },
+          },
+          {'appId': 'browser', 'url': 'https://example.com/desk'},
+        ],
+      },
+    )..configApps = [apps[1]];
+    addTearDown(f.w.dispose);
+    await f.w.start();
+    expect(f.w.tabs.map((tab) => tab.appId), ['room-layout']);
+    expect(f.w.pendingSession, isNotNull, reason: 'the Browser is retried');
+
+    f.configApps = [...apps];
+    await f.w.start();
+    expect(f.w.error, isNull);
+    expect(f.w.pendingSession, isNull);
+    final tabs = f.w.tabs;
+    expect(tabs.map((tab) => tab.appId), ['room-layout', null, 'browser']);
+    expect((tabs[1] as SplitTab).layout.tabs, [tabs[0], tabs[2]]);
+    expect(f.stored.last['tabs'][1]['split']['panes'], [0, 2]);
+  });
   test('reconnect does not bring back a split tab the user closed', () async {
     final f = Fixture(
       session: {
@@ -940,6 +979,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('View Room layout'), findsNothing);
     expect(find.byIcon(Icons.vertical_split), findsNothing);
+    expect(
+      tester.widget<WorkspaceTabs>(find.byType(WorkspaceTabs)).selected,
+      browser,
+      reason: 'the strip marks the tab on screen, not the hidden split',
+    );
     tester.view.physicalSize = const Size(1400, 800);
     await tester.pumpAndSettle();
 

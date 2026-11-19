@@ -1012,20 +1012,24 @@ class _RelayShellState extends State<RelayShell> {
             onWillAcceptWithDetails: (details) =>
                 w.shownSplit?.layout.contains(details.data) ?? false,
             onAcceptWithDetails: (details) => w.leaveSplit(details.data),
-            builder: (context, _, _) => WorkspaceTabs(
-              tabs: List.of(w.tabs),
-              selected: chatOnly ? null : w.shownSplit ?? w.active,
-              split: MediaQuery.sizeOf(context).width >= 900
-                  ? w.shownSplit?.layout.tabs
-                  : null,
-              draggable: MediaQuery.sizeOf(context).width >= 900,
-              onSelect: (tab) {
-                w.recorder.action('select tab', {'tab': tab.title});
-                setState(() => chatOnly = false);
-                w.select(tab, alone: true, opened: true);
-              },
-              onClose: w.closeTab,
-            ),
+            builder: (context, _, _) {
+              // Narrow windows show only the selected tab, never the split.
+              final split = MediaQuery.sizeOf(context).width >= 900
+                  ? w.shownSplit
+                  : null;
+              return WorkspaceTabs(
+                tabs: List.of(w.tabs),
+                selected: chatOnly ? null : split ?? w.active,
+                split: split?.layout.tabs,
+                draggable: MediaQuery.sizeOf(context).width >= 900,
+                onSelect: (tab) {
+                  w.recorder.action('select tab', {'tab': tab.title});
+                  setState(() => chatOnly = false);
+                  w.select(tab, alone: true, opened: true);
+                },
+                onClose: w.closeTab,
+              );
+            },
           ),
         ),
         IconButton(

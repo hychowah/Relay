@@ -884,7 +884,9 @@ class Workspace extends ChangeNotifier {
   /// keeps whatever tab they choose meanwhile.
   Future<bool> restoreSession(Json saved) async {
     final items = (saved['tabs'] as List).cast<Json>();
-    final loads = <Future<bool>>[];
+    // Pages load only once every split has its panes: loading saves the
+    // session, which reads each split's layout.
+    final loads = <(int, Json, WorkspaceTab)>[];
     var complete = true;
     final splits = <(int, SplitTab, Json)>[];
     for (var index = 0; index < items.length; index++) {
@@ -925,7 +927,7 @@ class Workspace extends ChangeNotifier {
         isBrowser: app.isBrowser,
       );
       tabs.add(_restoredTabs[index] = tab);
-      loads.add(_restoreTab(index, item, tab));
+      loads.add((index, item, tab));
     }
     // An unavailable tab leaves no pane, and a split left with fewer than two
     // is retried on reconnect. A tab that fails to load later is closed,
@@ -955,7 +957,9 @@ class Workspace extends ChangeNotifier {
       select(selected);
     }
     changed();
-    final restored = await Future.wait(loads);
+    final restored = await Future.wait([
+      for (final (index, item, tab) in loads) _restoreTab(index, item, tab),
+    ]);
     return complete && !restored.contains(false);
   }
 
