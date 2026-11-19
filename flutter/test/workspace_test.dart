@@ -15,6 +15,7 @@ import 'package:relay_flutter/transcript_pane.dart';
 import 'package:relay_flutter/workspace.dart';
 import 'package:relay_flutter/workspace_style.dart';
 import 'package:relay_flutter/region_capture.dart';
+import 'package:relay_flutter/workspace_tabs.dart';
 
 const apps = [
   {'id': 'browser', 'name': 'Browser', 'description': 'Web pages'},
@@ -572,6 +573,211 @@ void main() {
     expect((f.w.tabs.first.page as FakePage).lastCommand!['intent']['state'], {
       'zone': 'work',
     });
+  });
+  test(
+    'a split pair replaces, swaps, hides behind other tabs and ends',
+    () async {
+      final f = Fixture();
+      addTearDown(f.w.dispose);
+      await f.w.start();
+      f.w.recorder.start();
+      final room = await f.w.openApp(f.w.apps[1]);
+      final browser = await f.w.openApp(f.w.apps[0]);
+      f.w.newTab();
+      final blank = f.w.active!;
+      f.w.select(browser);
+      expect(f.w.canSplitWith(browser), isFalse);
+      f.w.dropInSplit(room, left: true);
+      expect(f.w.split, [room, browser]);
+      expect(f.w.active, room);
+      f.w.dropInSplit(room, left: false);
+      expect(f.w.split, [browser, room]);
+      f.w.dropInSplit(blank, left: false);
+      expect(f.w.split, [browser, blank], reason: 'at most two panes');
+      f.w.select(room);
+      expect(f.w.splitShown, isFalse);
+      f.w.select(browser);
+      expect(f.w.splitShown, isTrue);
+      f.w.leaveSplit(browser);
+      expect(f.w.split, isNull);
+      expect(f.w.active, blank);
+      expect(
+        f.w.recorder.events
+            .where((event) => event['type'] == 'action')
+            .map((event) => event['name'])
+            .where((name) => name.toString().contains('split')),
+        ['split tabs', 'split tabs', 'split tabs', 'end split'],
+      );
+
+      f.w.dropInSplit(room, left: true);
+      f.w.select(blank);
+      final opened = await f.w.openApp(f.w.apps[0]);
+      expect(opened.id, blank.id);
+      expect(f.w.split, [room, opened], reason: 'the pane keeps its new app');
+      f.w.closeTab(opened);
+      expect(f.w.split, isNull);
+      expect(f.w.active, room, reason: 'the partner stays shown');
+    },
+  );
+  test(
+    'the split pair is saved with the tabs and reopens on the next start',
+    () async {
+      final first = Fixture();
+      addTearDown(first.w.dispose);
+      await first.w.start();
+      final room = await first.w.openApp(first.w.apps[1]);
+      await first.w.openApp(first.w.apps[0]);
+      first.w.dropInSplit(room, left: false);
+      final saved = jsonDecode(jsonEncode(first.stored.last)) as Json;
+      expect(saved['split'], [1, 0]);
+
+      final next = Fixture(session: saved);
+      addTearDown(next.w.dispose);
+      await next.w.start();
+      final tabs = next.w.tabs;
+      expect(next.w.split, [tabs[1], tabs[0]]);
+      expect(next.w.active, tabs[0]);
+      expect(next.w.splitShown, isTrue);
+
+      final failed = Fixture(session: saved)..failRoomRestore = true;
+      addTearDown(failed.w.dispose);
+      await failed.w.start();
+      expect(failed.w.tabs.map((tab) => tab.appId), ['browser']);
+      expect(
+        failed.w.split,
+        isNull,
+        reason: 'a tab that failed ends the split',
+      );
+      expect(failed.stored.last.containsKey('split'), isFalse);
+    },
+  );
+  test('reconnect does not bring back a split the user ended', () async {
+    final f = Fixture(
+      session: {
+        'active': 0,
+        'split': [0, 1],
+        'tabs': [
+          {'appId': 'browser', 'url': 'about:blank'},
+          {'appId': 'research', 'source': deskReport},
+          {
+            'appId': 'room-layout',
+            'context': {
+              'viewId': 'room',
+              'state': {'zone': 'work'},
+            },
+          },
+        ],
+      },
+    )..failRoomRestore = true;
+    addTearDown(f.w.dispose);
+    await f.w.start();
+    expect(f.w.tabs.map((tab) => tab.appId), ['browser', 'research']);
+    expect(f.w.split, f.w.tabs);
+    f.w.leaveSplit(f.w.active!);
+    f.failRoomRestore = false;
+    await f.w.start();
+    expect(f.w.tabs.length, 3);
+    expect(f.w.split, isNull);
+  });
+  testWidgets('dragging tabs splits the page without recreating either view', (
+    tester,
+  ) async {
+    final f = Fixture();
+    await f.w.start();
+    final room = await f.w.openApp(f.w.apps[1]);
+    final browser = await f.w.openApp(f.w.apps[0]);
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    final roomView = find.text('View Room layout', skipOffstage: false);
+    final browserView = find.text('View Browser', skipOffstage: false);
+    final roomElement = tester.element(roomView);
+    final browserElement = tester.element(browserView);
+    final page = tester.getRect(find.byKey(ValueKey('page-${browser.id}')));
+    Finder chip(String title) => find.descendant(
+      of: find.byType(WorkspaceTabs),
+      matching: find.text(title),
+    );
+
+    final drag = await tester.startGesture(
+      tester.getCenter(chip('Room layout')),
+      kind: PointerDeviceKind.mouse,
+    );
+    await drag.moveBy(const Offset(0, 40));
+    await drag.moveTo(Offset(page.left + 40, page.center.dy));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('drop-left')), findsOneWidget);
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(f.w.split, [room, browser]);
+    expect(f.w.active, room);
+    expect(tester.element(roomView), same(roomElement));
+    expect(tester.element(browserView), same(browserElement));
+    final left = tester.getRect(find.byKey(ValueKey('page-${room.id}')));
+    final right = tester.getRect(find.byKey(ValueKey('page-${browser.id}')));
+    expect(left.right, lessThan(right.left));
+    expect(left.width, closeTo(right.width, 1));
+    expect(find.byIcon(Icons.vertical_split), findsNWidgets(2));
+
+    await tester.tapAt(right.center);
+    await tester.pump();
+    expect(f.w.active, browser);
+
+    tester.view.physicalSize = const Size(700, 800);
+    await tester.pumpAndSettle();
+    expect(find.text('View Room layout'), findsNothing);
+    expect(find.text('View Browser'), findsOneWidget);
+    expect(find.byIcon(Icons.vertical_split), findsNothing);
+    tester.view.physicalSize = const Size(1400, 800);
+    await tester.pumpAndSettle();
+
+    final back = await tester.startGesture(
+      tester.getCenter(chip('Browser')),
+      kind: PointerDeviceKind.mouse,
+    );
+    await back.moveBy(const Offset(0, 120));
+    await back.moveTo(tester.getCenter(chip('Room layout')));
+    await tester.pump();
+    await back.up();
+    await tester.pumpAndSettle();
+    expect(f.w.split, isNull);
+    expect(f.w.active, room);
+    expect(find.text('View Browser'), findsNothing);
+    expect(tester.element(roomView), same(roomElement));
+    expect(tester.element(browserView), same(browserElement));
+    await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets('a click that moves a few pixels still selects the tab', (
+    tester,
+  ) async {
+    final f = Fixture();
+    await f.w.start();
+    final room = await f.w.openApp(f.w.apps[1]);
+    await f.w.openApp(f.w.apps[0]);
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    final click = await tester.startGesture(
+      tester.getCenter(
+        find.descendant(
+          of: find.byType(WorkspaceTabs),
+          matching: find.text('Room layout'),
+        ),
+      ),
+      kind: PointerDeviceKind.mouse,
+    );
+    await click.moveBy(const Offset(4, 3));
+    await click.up();
+    await tester.pumpAndSettle();
+    expect(f.w.active, room);
+    expect(f.w.split, isNull);
+    await tester.pumpWidget(const SizedBox());
   });
   testWidgets(
     'unready retained pages fail without blocking refresh and failed tabs reopen',

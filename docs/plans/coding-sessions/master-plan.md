@@ -23,6 +23,7 @@ session there adds the paper under that repository's own rules.
 | C05 | On request, the Relay agent reads the session and reports its state and result. |
 | C06 | The Relay agent can prepare a follow-up message; the user confirms each one before it is sent. |
 | C07 | Commits, merges and server restarts happen inside the coding session, with the user's approval there and under that repository's rules. |
+| C08 | The user can open any recent session of the session tool from the coding app's screen, not only one the app started. |
 
 Not included: the two agents talking without the user, the Relay agent acting
 when a session finishes, the Relay agent answering approval requests, and a
@@ -79,6 +80,12 @@ and requests addressed to a foreign host. Relay's app loader accepted the app
 and refused an unpublished start operation. The live part is open: no real
 session has been started through the app.
 
+Added at the user's request on 2026-11-19, covering C08: the home screen lists
+up to 30 recent sessions and opens one in the frame. An opened session reports
+only its id as the view context, so a restored tab reopens it. Nine tests and a
+headless browser run against stand-ins passed, and the live app listed the
+user's real sessions. The Relay repository is now a target as well.
+
 ### Phase 2 — Check-back
 
 Reading a session's state and result for the Relay agent, and follow-up drafts
@@ -97,9 +104,10 @@ Covers C07 in practice. Read those rules before this phase starts.
 1. Check the Mac client: one request to the scratch target, the review screen
    and Start, the session link, and the layout at the chat-side width. Since
    2026-11-19 the coding app runs as a local service, registered with the live
-   Flutter backend under the default frame restrictions, with a scratch target
-   and the Research Web target.
-2. The user decides whether to register the app as trusted. The framed session
-   page needs forms for sign-in and typing, which the default restrictions
-   block; until then the session opens through its link.
-3. Build phase 2 after that check.
+   Flutter backend, with a scratch target, the Research Web target and the
+   Relay target.
+2. The app is registered as trusted since 2026-11-19, at the user's request,
+   so the framed session page can submit its sign-in and message forms. Check
+   on the Mac that signing in, typing and approving work inside the tab.
+3. Build phase 2 after that check. Decide there what the agent may read about
+   a session; today operations and results carry no session data.

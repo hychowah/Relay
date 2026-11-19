@@ -85,6 +85,10 @@ draft and the chat panel as it was left; the Mac window keeps its size and posit
 The last active tab shows first, and the other tabs load together in the background.
 A tab that cannot be restored is reported; **Reconnect** retries it during that run.
 All pages share WebKit's persistent website data, which keeps cookies between starts.
+On desktop only, drag a tab onto the left or right half of the page to show two
+tabs side by side; click a pane to select it. Drag a split tab back onto the
+tab strip, or close one, to end the split. Narrow windows show only the
+selected tab.
 
 On macOS, select page or PDF text and ask a question with page context enabled.
 With a YouTube video open in a Browser tab, ask about the video: the agent reads
