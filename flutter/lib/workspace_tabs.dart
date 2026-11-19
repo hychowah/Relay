@@ -49,7 +49,10 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
       _Placed(tab, index * _tabWidth),
   ];
   static const _tabWidth = 196.0;
-  double get _t => Curves.easeOutCubic.transform(_motion.value);
+  // A tab moved to the left end travels slower than the others shift, and
+  // both slower than other workspace motion, so the eye can follow the move.
+  static const _travelTime = Duration(milliseconds: 600);
+  static const _shiftTime = Duration(milliseconds: 350);
 
   @override
   void dispose() {
@@ -73,9 +76,8 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
         placed[tab.id]!.tab = tab;
       }
     } else {
-      final t = _t;
       for (final chip in _chips) {
-        chip.settle(t);
+        chip.settle(_motion.value);
         if (!newIds.contains(chip.tab.id)) chip.closing = true;
       }
       for (final (index, tab) in widget.tabs.indexed) {
@@ -94,7 +96,26 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
         _motion.value = 1;
         _chips.removeWhere((chip) => chip.closing);
       } else {
-        _motion.duration = duration;
+        // The only reorder brings one tab to the left end past others.
+        final kept = [
+          for (final id in oldIds)
+            if (newIds.contains(id)) id,
+        ];
+        final mover = kept.isNotEmpty && kept.first != newIds.first
+            ? placed[newIds.first]
+            : null;
+        mover?.lifted = true;
+        final total = mover == null ? duration : _travelTime;
+        final shift = Interval(
+          0,
+          (mover == null ? duration : _shiftTime).inMicroseconds /
+              total.inMicroseconds,
+          curve: Curves.easeOutCubic,
+        );
+        for (final chip in _chips) {
+          chip.shift = shift;
+        }
+        _motion.duration = total;
         _motion.forward(from: 0);
       }
     }
@@ -130,12 +151,18 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
   @override
   Widget build(BuildContext context) {
     final selectedId = widget.selected?.id;
-    // Closing chips sit underneath and the selected chip on top, so a chip
-    // sliding past the others stays readable.
+    // Closing chips sit underneath and the selected and moving chips on top,
+    // so a chip sliding past the others stays readable.
+    int layer(_Placed chip) => chip.closing
+        ? 0
+        : chip.lifted
+        ? 3
+        : chip.tab.id == selectedId
+        ? 2
+        : 1;
     final ordered = [
-      ..._chips.where((chip) => chip.closing),
-      ..._chips.where((chip) => !chip.closing && chip.tab.id != selectedId),
-      ..._chips.where((chip) => !chip.closing && chip.tab.id == selectedId),
+      for (final level in [0, 1, 2, 3])
+        ..._chips.where((c) => layer(c) == level),
     ];
     final children = {
       for (final placed in ordered) placed: _placedChip(placed, selectedId),
@@ -146,7 +173,7 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
       child: AnimatedBuilder(
         animation: _motion,
         builder: (context, _) {
-          final t = _t;
+          final t = _motion.value;
           var width = 0.0;
           for (final chip in _chips) {
             width = math.max(width, chip.x(t) + chip.size(t) * _tabWidth);
@@ -163,7 +190,12 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
                     left: chip.x(t),
                     top: 0,
                     bottom: 0,
+                    // Only a growing or closing chip is clipped, so a lifted
+                    // chip's scale and shadow show.
                     child: ClipRect(
+                      clipBehavior: chip.size(t) < 1
+                          ? Clip.hardEdge
+                          : Clip.none,
                       child: Align(
                         alignment: Alignment.centerLeft,
                         widthFactor: chip.size(t),
@@ -188,13 +220,13 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
       return ExcludeSemantics(
         child: ExcludeFocus(
           child: IgnorePointer(
-            child: _chip(tab, selected: tab.id == selectedId),
+            child: _chip(placed, selected: tab.id == selectedId),
           ),
         ),
       );
     }
     final chip = _chip(
-      tab,
+      placed,
       selected: tab.id == selectedId,
       inSplit: widget.split?.contains(tab) ?? false,
       onSelect: () => widget.onSelect(tab),
@@ -224,91 +256,200 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
     );
   }
 
+  /// While a tab travels to the left end its chip is lifted: slightly larger,
+  /// with a shadow and an accent outline that fade as it lands.
+  Widget _lift(_Placed placed, Widget chip) => AnimatedBuilder(
+    animation: _motion,
+    child: chip,
+    builder: (context, chip) {
+      final lift = placed.lift(_motion.value);
+      final shape = BorderRadius.circular(8);
+      // The same widgets with empty decorations when at rest, so the chip
+      // keeps its state, such as a drag, as the lift starts and ends.
+      return Transform.scale(
+        scale: 1 + .05 * lift,
+        child: DecoratedBox(
+          decoration: lift == 0
+              ? const BoxDecoration()
+              : BoxDecoration(
+                  color: colors.surface.withValues(alpha: lift),
+                  borderRadius: shape,
+                  boxShadow: [
+                    BoxShadow(
+                      color: colors.shadow.withValues(alpha: .25 * lift),
+                      blurRadius: 10 * lift,
+                      offset: Offset(0, 3 * lift),
+                    ),
+                    BoxShadow(
+                      color: colors.primary.withValues(alpha: .3 * lift),
+                      blurRadius: 8 * lift,
+                    ),
+                  ],
+                ),
+          child: DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: lift == 0
+                ? const BoxDecoration()
+                : BoxDecoration(
+                    borderRadius: shape,
+                    border: Border.all(
+                      color: colors.primary.withValues(alpha: lift),
+                      width: 1.5,
+                    ),
+                  ),
+            child: chip,
+          ),
+        ),
+      );
+    },
+  );
+
   Widget _chip(
-    WorkspaceTab tab, {
+    _Placed placed, {
     required bool selected,
     bool inSplit = false,
     VoidCallback? onSelect,
     VoidCallback? onClose,
-  }) => Center(
-    child: SizedBox(
-      width: _tabWidth,
-      child: Padding(
-        padding: const EdgeInsets.only(right: 5),
-        child: Material(
-          color: selected
-              ? colors.surface
-              : inSplit
-              ? colors.primaryContainer
-              : Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: BorderSide(
-              color: selected ? colors.outline : Colors.transparent,
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: onSelect,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 9, 6, 9),
-                    child: Row(
-                      children: [
-                        Icon(
-                          tab is SplitTab
-                              ? Icons.space_dashboard_outlined
-                              : tab.isBrowser
-                              ? Icons.language
-                              : tab.appId == null
-                              ? Icons.add
-                              : Icons.grid_view_rounded,
-                          size: 15,
-                          color: selected
-                              ? colors.primary
-                              : colors.onSurfaceVariant,
+  }) {
+    final tab = placed.tab;
+    return Center(
+      child: SizedBox(
+        width: _tabWidth,
+        child: Padding(
+          padding: const EdgeInsets.only(right: 5),
+          child: _lift(
+            placed,
+            Material(
+              // A split tab keeps an accent outline and tint, so it never
+              // looks like an app tab.
+              color: selected
+                  ? colors.surface
+                  : tab is SplitTab
+                  ? colors.primary.withValues(alpha: .07)
+                  : inSplit
+                  ? colors.primaryContainer
+                  : Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: tab is SplitTab
+                    ? BorderSide(
+                        color: colors.primary.withValues(
+                          alpha: selected ? .9 : .45,
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            tab.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: selected
-                                  ? colors.onSurface
-                                  : colors.onSurfaceVariant,
+                        width: selected ? 1.5 : 1,
+                      )
+                    : BorderSide(
+                        color: selected ? colors.outline : Colors.transparent,
+                      ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: onSelect,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 9, 6, 9),
+                        child: Row(
+                          children: [
+                            if (tab is SplitTab)
+                              _SplitMap(tab, color: colors.primary)
+                            else
+                              Icon(
+                                tab.isBrowser
+                                    ? Icons.language
+                                    : tab.appId == null
+                                    ? Icons.add
+                                    : Icons.grid_view_rounded,
+                                size: 15,
+                                color: selected
+                                    ? colors.primary
+                                    : colors.onSurfaceVariant,
+                              ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                tab.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: tab is SplitTab
+                                      ? colors.primary
+                                      : selected
+                                      ? colors.onSurface
+                                      : colors.onSurfaceVariant,
+                                ),
+                              ),
                             ),
-                          ),
+                            if (inSplit)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 4),
+                                child: Icon(
+                                  Icons.vertical_split,
+                                  size: 13,
+                                  color: colors.primary,
+                                  semanticLabel: 'Split view',
+                                ),
+                              ),
+                          ],
                         ),
-                        if (inSplit)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 4),
-                            child: Icon(
-                              Icons.vertical_split,
-                              size: 13,
-                              color: colors.primary,
-                              semanticLabel: 'Split view',
-                            ),
-                          ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
+                  IconButton(
+                    tooltip: 'Close ${tab.title}',
+                    onPressed: onClose,
+                    icon: const Icon(Icons.close, size: 14),
+                  ),
+                ],
               ),
-              IconButton(
-                tooltip: 'Close ${tab.title}',
-                onPressed: onClose,
-                icon: const Icon(Icons.close, size: 14),
-              ),
-            ],
+            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A small drawing of a split tab's panes as they are arranged, with the pane
+/// selected last filled in.
+class _SplitMap extends StatelessWidget {
+  const _SplitMap(this.split, {required this.color});
+  final SplitTab split;
+  final Color color;
+
+  Widget _draw(SplitLayout layout) => switch (layout) {
+    SplitPane(:final tab) => DecoratedBox(
+      key: ValueKey('split-map-${tab.id}'),
+      decoration: BoxDecoration(
+        color: tab == split.focus ? color : null,
+        border: Border.all(color: color),
+        borderRadius: BorderRadius.circular(1.5),
+      ),
     ),
+    SplitBranch(:final axis, :final first, :final second, :final fraction) =>
+      Flex(
+        direction: axis,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: (fraction * 100).round().clamp(1, 99),
+            child: _draw(first),
+          ),
+          const SizedBox.square(dimension: 1.5),
+          Expanded(
+            flex: 100 - (fraction * 100).round().clamp(1, 99),
+            child: _draw(second),
+          ),
+        ],
+      ),
+  };
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Split of ${split.layout.tabs.length} tabs',
+    child: SizedBox(width: 20, height: 14, child: _draw(split.layout)),
   );
 }
 
@@ -318,16 +459,41 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
 class _Placed {
   _Placed(this.tab, this.toX, {double size = 1}) : fromX = toX, fromSize = size;
   WorkspaceTab tab;
-  double fromX, toX, fromSize;
+  double fromX, toX, fromSize, fromLift = 0;
   bool closing = false;
+
+  /// The tab moving to the left end, which travels lifted on its own timing.
+  bool lifted = false;
+
+  /// The timing of every other change in the current motion.
+  Curve shift = Curves.easeOutCubic;
   double get toSize => closing ? 0 : 1;
-  double x(double t) => lerpDouble(fromX, toX, t)!;
-  double size(double t) => lerpDouble(fromSize, toSize, t)!;
+
+  double x(double t) {
+    if (!lifted) return lerpDouble(fromX, toX, shift.transform(t))!;
+    // It reaches its place at three quarters of the motion, runs a few pixels
+    // past and settles back, which reads as landing.
+    final arrive = Curves.easeOutCubic.transform(math.min(1, t / .75));
+    final past = math.min(8, (toX - fromX).abs() * .05) * (toX - fromX).sign;
+    final bounce = math.sin(math.pi * ((t - .55) / .45).clamp(0, 1));
+    return lerpDouble(fromX, toX, arrive)! + past * bounce;
+  }
+
+  double size(double t) => lerpDouble(fromSize, toSize, shift.transform(t))!;
+
+  /// Rises quickly as the chip leaves and fades as it lands.
+  double lift(double t) {
+    if (!lifted) return fromLift * (1 - shift.transform(t));
+    if (t < .15) return Curves.easeOut.transform(t / .15);
+    return 1 - Curves.easeInOut.transform(((t - .45) / .45).clamp(0, 1));
+  }
 
   /// Starts the next motion from where the chip is shown now.
   void settle(double t) {
     fromSize = size(t);
+    fromLift = lift(t);
     fromX = toX = x(t);
+    lifted = false;
   }
 }
 

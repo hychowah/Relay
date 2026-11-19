@@ -94,7 +94,8 @@ On desktop only, drag a tab onto a page to split it. A new split tab opens in
 the tab strip. The page's edge nearest the pointer (left, right, top or bottom)
 is where the tab goes, and the highlighted half shows it. Drop more tabs onto
 any pane to split it again, side by side or stacked; dropping a tab that is
-already in the split moves it. Click a pane to select it. Drag a divider to
+already in the split moves it. The split tab has an accent outline and a small
+map of its panes, with the last selected pane filled. Click a pane to select it. Drag a divider to
 resize its two sides, or double-click it to return to half and half. Click an
 app's own tab to show it full screen, and the split tab to return to the split.
 Closing the split tab ends the split and keeps every app open. Drag a tab from
