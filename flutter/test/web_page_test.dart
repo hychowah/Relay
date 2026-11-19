@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:relay_flutter/browser_transcript.dart';
 import 'package:relay_flutter/page_surface.dart';
 import 'package:relay_flutter/relay_api.dart';
@@ -18,6 +19,16 @@ class TestWebPlatform extends WebViewPlatform {
   PlatformNavigationDelegate createPlatformNavigationDelegate(
     PlatformNavigationDelegateCreationParams params,
   ) => TestNavigationDelegate(params);
+  @override
+  PlatformWebViewWidget createPlatformWebViewWidget(
+    PlatformWebViewWidgetCreationParams params,
+  ) => TestWebViewWidget(params);
+}
+
+class TestWebViewWidget extends PlatformWebViewWidget {
+  TestWebViewWidget(super.params) : super.implementation();
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
 }
 
 class TestController extends PlatformWebViewController {
@@ -29,6 +40,16 @@ class TestController extends PlatformWebViewController {
   final scripts = <String>[];
   @override
   Future<void> setJavaScriptMode(JavaScriptMode mode) async {}
+  late Future<void> Function(JavaScriptAlertDialogRequest) alert;
+  late Future<bool> Function(JavaScriptConfirmDialogRequest) confirm;
+  @override
+  Future<void> setOnJavaScriptAlertDialog(
+    Future<void> Function(JavaScriptAlertDialogRequest) callback,
+  ) async => alert = callback;
+  @override
+  Future<void> setOnJavaScriptConfirmDialog(
+    Future<bool> Function(JavaScriptConfirmDialogRequest) callback,
+  ) async => confirm = callback;
   @override
   Future<void> setPlatformNavigationDelegate(
     PlatformNavigationDelegate delegate,
@@ -257,5 +278,46 @@ void main() {
     expect(await page.browser!.playbackTime(), 83.5);
     controller.playTime = -1;
     expect(await page.browser!.playbackTime(), isNull);
+  });
+
+  testWidgets('page dialogs name the site and answer with the choice', (
+    tester,
+  ) async {
+    final platform = TestWebPlatform();
+    WebViewPlatform.instance = platform;
+    final page = createWebPage(
+      PageSpec(
+        id: 'tab',
+        appId: 'browser',
+        name: 'Browser',
+        sessionId: 'session',
+        relayOrigin: Uri.parse('http://relay.test'),
+      ),
+      (_) {},
+    );
+    addTearDown(page.dispose);
+    await tester.pumpWidget(MaterialApp(home: page.widget));
+    final controller = platform.controller;
+    const url = 'https://site.test/analyze';
+
+    Future<T> answer<T>(Future<T> dialog, String button) async {
+      await tester.pumpAndSettle();
+      expect(find.text('site.test says'), findsOneWidget);
+      await tester.tap(find.text(button));
+      await tester.pumpAndSettle();
+      return dialog;
+    }
+
+    const start = JavaScriptConfirmDialogRequest(message: 'Start?', url: url);
+    expect(await answer(controller.confirm(start), 'OK'), isTrue);
+    expect(await answer(controller.confirm(start), 'Cancel'), isFalse);
+
+    await answer(
+      controller.alert(
+        const JavaScriptAlertDialogRequest(message: 'Done', url: url),
+      ),
+      'OK',
+    );
+    expect(find.byType(AlertDialog), findsNothing);
   });
 }
