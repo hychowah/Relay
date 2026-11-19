@@ -326,9 +326,13 @@ Defer read/write effects to the first write, access scopes and versioned migrati
 
 The [Flutter handoff](../flutter/master-plan.md#next) covers installing and reviewing Stable 0.0.9 on the Mac, deploying the backend at `main`, and region capture and bug-report testing. On the next preview teardown, use the [worktree removal command](../../../flutter/README.md#publish-a-worktree-test-build).
 
-1. Trial the external stock adapters project on the desktop clients
-   with approved live registrations. Verify a sourced two-app question on the
-   user's saved records. See the [Phase 02 evidence](phases/phase-02/README.md).
+The [coding sessions plan](../coding-sessions/master-plan.md) covers handing requests to Claude Code or Codex sessions through a coding app in its own project.
+
+1. Verify a sourced two-app question on the user's saved records from the Mac.
+   Both stock adapters have run as local services, registered with the live
+   Flutter backend, since 2026-11-19; search through Relay returns saved
+   records and the user opened both apps on the Mac. See the
+   [Phase 02 evidence](phases/phase-02/README.md).
 2. Evaluate sourced Research Web answers, memory correction and forgetting, and retrieval of old details after compaction with the configured real provider.
 3. Establish the Compose executor boundary before enabling any file or terminal tool.
 4. Serve the web page from the app backend so both clients share one set of records.
