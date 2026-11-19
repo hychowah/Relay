@@ -145,20 +145,22 @@ has run the removal yet.
 folder on the Mac, in place of the hand-run Stable build. A test with a stand-in
 for the Mac covers a test build, Stable's recorded commit, the refusals and
 Stable retiring the test builds it contains. A real Stable build through the
-tool has not been run, and the Mac build without the settings copy is unchecked.
+tool, into a throwaway release folder, compiled on the Mac without the settings
+copy, recorded its commit, refused a second run and left no folder on the Mac.
+No Stable release has been published with the tool, and retiring real test
+builds at that point is unverified.
 
 ## Next
 
 1. Everyday restoration and the updater's leftover removal are not in a Stable
-   release. Publish them as Stable when requested.
-2. Run `tools/publish-flutter --stable` once into a throwaway release folder.
-   That real Stable build, and the Mac build without the settings copy, are unchecked.
-3. Republishing a test build's name leaves its earlier ZIP in the release
+   release. Publish them as Stable when requested, and check that it retires
+   the test builds it contains.
+2. Republishing a test build's name leaves its earlier ZIP in the release
    folder on WSL. Remove it at publish time if that folder grows.
-4. Review Stable 0.0.8 on the Mac: the panel, tab and menu transitions and text selection. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
-5. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are unreleased in the Mac app. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified.
-6. Try the toolbar record button and **Bug reports** on the Mac. Source tests cover recording,
+3. Review Stable 0.0.8 on the Mac: the panel, tab and menu transitions and text selection. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
+4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are unreleased in the Mac app. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified.
+5. Try the toolbar record button and **Bug reports** on the Mac. Source tests cover recording,
    saving and viewing; native screenshots and the live service's report folder are unverified.
-7. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
+6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.
