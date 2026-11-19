@@ -69,7 +69,7 @@ export function addBugReports(app: Hono, dir: string, store: Store) {
     if (typeof screenshot === "string" && screenshot)
       writeFileSync(join(dir, `${id}.png`), Buffer.from(screenshot, "base64"), { mode: 0o600 });
     const report = {
-      id, savedAt, status: "open", ...(redact(body) as object),
+      id, savedAt, ...(redact(body) as object), status: "open",
       screenshot: typeof screenshot === "string" && screenshot ? `${id}.png` : null,
       // The server's own record of the conversation: messages, runs, tool calls and view commands.
       serverConversation: conversation ?? null,
