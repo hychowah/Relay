@@ -43,7 +43,8 @@ private runtime. Subsequent changes apply only to that deployment.
 The Mac updater uses an ad-hoc-signed, outside-App-Store bundle. The host is no
 longer App Sandbox restricted so it can replace its own bundle. First launch
 preserves preferences from the initial sandboxed prototype. Download verification
-and native replacement remain separate; replacement keeps the previous bundle.
+and native replacement remain separate; replacement keeps the previous bundle
+until the new version starts.
 
 The workspace uses compact tabs and grouped menus. Chat keeps model, thinking
 and page context controls in the composer, with history and new chat in the
@@ -135,14 +136,24 @@ reported one by one: a tab whose app is stopped and a website sign-in surviving
 a restart remain unconfirmed. The installed app's cookie file and WebKit website
 data exist on disk.
 
+The updater's leftover removal passed analysis and 37 Flutter tests on WSL,
+including one for replaced apps, old receipts and old downloads. On the Mac,
+bash 3.2 kept a copy of the helper's wait loop running after its folder was
+deleted, and it exited normally when the receipt appeared. No installed build
+has run the removal yet.
+
 ## Next
 
-1. Everyday restoration is on `main` and in the `restore-state` preview only.
-   Publish it as Stable when requested.
-2. Review Stable 0.0.8 on the Mac: the panel, tab and menu transitions and text selection. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
-3. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are unreleased in the Mac app. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified.
-4. Try **Record a bug** and **Bug reports** on the Mac. Source tests cover recording,
+1. Everyday restoration and the updater's leftover removal are not in a Stable
+   release. Publish them as Stable when requested.
+2. A 2026-11-19 review of leftovers on the Mac left four decisions with the user:
+   build Stable in the temporary folder that test builds use and record its
+   commit; retire test builds that Stable contains; a rule for throwaway Mac apps
+   made by agent sessions; and removing the sandbox settings copy.
+3. Review Stable 0.0.8 on the Mac: the panel, tab and menu transitions and text selection. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
+4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are unreleased in the Mac app. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified.
+5. Try **Record a bug** and **Bug reports** on the Mac. Source tests cover recording,
    saving and viewing; native screenshots and the live service's report folder are unverified.
-5. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
+6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.
