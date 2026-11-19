@@ -229,5 +229,9 @@ backend did not change. It has not been installed or reviewed on the Mac.
    dark: tabs, chat, Markdown replies, dialogs, menus and the empty Browser
    page. Also check that System follows a live macOS switch. Only widget tests
    and WSL screenshots cover it.
+13. Check on the Mac that Analysis Web's **Start analysis** shows its confirm
+   dialog, titled with the page's host, and that OK starts the analysis and
+   Cancel does not. Page alert and confirm dialogs are tested only with a faked
+   web view.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

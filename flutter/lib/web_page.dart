@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -106,6 +106,7 @@ abstract class _WebPage extends PageSurface {
   bool _disposed = false;
   Json? _context;
   String? _nativeSelection;
+  BuildContext? _dialogContext;
 
   @override
   Future<void> refreshSelection() async {
@@ -115,9 +116,14 @@ abstract class _WebPage extends PageSurface {
         .invokeMethod<String>('selection', webKit.webViewIdentifier);
   }
 
+  // The Builder keeps a context for the page's JavaScript dialogs.
   @override
-  Widget get widget =>
-      WebViewWidget(key: ObjectKey(controller), controller: controller);
+  Widget get widget => Builder(
+    builder: (context) {
+      _dialogContext = context;
+      return WebViewWidget(key: ObjectKey(controller), controller: controller);
+    },
+  );
   @override
   String get title => spec.name;
   @override
@@ -132,10 +138,51 @@ abstract class _WebPage extends PageSurface {
   Future<void> _initialize() async {
     try {
       await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+      await controller.setOnJavaScriptAlertDialog(
+        (request) => _pageDialog(request.url, request.message, cancel: false),
+      );
+      await controller.setOnJavaScriptConfirmDialog(
+        (request) => _pageDialog(request.url, request.message),
+      );
       await _load();
     } catch (error) {
       _fail(error);
     }
+  }
+
+  /// Shows a page's alert or confirm; true only when OK is chosen.
+  /// The title names the page's host so a website cannot pose as Relay.
+  Future<bool> _pageDialog(
+    String url,
+    String message, {
+    bool cancel = true,
+  }) async {
+    final context = _dialogContext;
+    if (_disposed || context == null || !context.mounted) return false;
+    final host = Uri.tryParse(url)?.host ?? '';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(host.isEmpty ? 'This page says' : '$host says'),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(child: Text(message)),
+        ),
+        actions: [
+          if (cancel)
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+          FilledButton(
+            autofocus: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
   }
 
   @override
