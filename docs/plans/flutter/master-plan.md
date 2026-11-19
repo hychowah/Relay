@@ -42,6 +42,8 @@ The implemented workflows include the following.
   and divider positions are restored with the tabs. The clicked pane is the
   selected tab for context and agent navigation. The Flutter README has the
   details.
+- Video fullscreen (desktop only): a page's fullscreen fills its split pane,
+  or the whole screen when its tab shows alone (see the Flutter README).
 - Night mode: Workspace menu → Appearance offers System, Light and Dark,
   saved per device. Relay's own screens follow it; app and website pages keep
   their own look, and the Mac title bar follows macOS.
@@ -105,14 +107,10 @@ relaunch and preserved draft. It did not replace the installed user app.
 The first sandboxed prototype's device, conversation and draft preferences were
 copied to the current app on the Mac; that one-time copy has since been removed.
 
-Stable 0.0.8 (build 8) is published on the private feed with the workspace
-transitions, text selection and region capture, and no built-in server address.
-Before publication the native Mac workflow passed on this source against the
-deployed backend, with one real DeepSeek request: Browser read through the
-built-in Browser service, Research reads, an applied Research presentation,
-retained tabs, the conversation lifecycle and a saved-source presentation. Its
-first run found that a message sent during a poll left the workspace idle for
-up to a second; `send` now waits for that poll, with a regression test.
+Before Stable 0.0.8 (no built-in server address), the native Mac workflow
+passed against the deployed backend with one real DeepSeek request: Browser
+read, Research reads and presentations, retained tabs and the conversation
+lifecycle. It found a send during a poll idling up to a second; fixed, with a test.
 In an isolated Mac install, two worktrees published separate 0.0.6 previews;
 installing the first and returning to equal-version Stable preserved a synthetic
 draft. Source tests also cover returning to a lower Stable version, keeping a
@@ -134,14 +132,10 @@ tabs and menus with a retained WKWebView, where the Browser comment stayed out o
 page reads; the window was occluded, so smoothness was not judged. Chromium
 verified Room comments at desktop and compact sizes, including reduced motion.
 
-Everyday restoration passed analysis and 32 Flutter tests on WSL. They cover
-saving tabs as they change, an offline start, a failed tab retried by Reconnect,
-an unused Browser tab and the chat panel state. The Mac release build compiles
-with the window frame change. The user installed the `restore-state` preview of
-this source on the Mac and confirmed that it works. The separate cases were not
-reported one by one: a tab whose app is stopped and a website sign-in surviving
-a restart remain unconfirmed. The installed app's cookie file and WebKit website
-data exist on disk.
+Everyday restoration has WSL tests (saving tabs as they change, an offline
+start, Reconnect, the chat panel), and the user confirmed the `restore-state`
+preview on the Mac. A tab whose app is stopped and a website sign-in surviving
+a restart remain unconfirmed.
 
 The updater's leftover removal has a WSL test for replaced apps, old receipts
 and old downloads. On the Mac, the helper's bash 3.2 wait loop survived its
@@ -200,6 +194,7 @@ page's new window into its opener, which broke sign-in popups. A forwarding UI
 delegate in the Mac runner now opens sized new windows as child popups; others
 load in the tab. `npm run test:mac -- popup_windows_test.dart` checks this with
 real WKWebViews.
+`video_fullscreen_test.dart` checks video fullscreen with a real WKWebView.
 
 ## Next
 
@@ -253,5 +248,8 @@ real WKWebViews.
    running `npm run perf:mem`. If it is an app page, the fix belongs in that
    app's repository. If it is an outside site, whether Relay unloads hidden tabs
    under memory pressure is a product decision for the user.
+18. On the Mac, try YouTube fullscreen alone, in a split pane and embedded in
+   another site, then leave macOS fullscreen by hand: the tab strip and chat
+   must return. Only a fixture page ran on the Mac.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

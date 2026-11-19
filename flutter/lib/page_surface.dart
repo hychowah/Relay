@@ -84,6 +84,15 @@ mixin BrowserSurface {
   bool get canGoBack => false;
   bool get canGoForward => false;
   Future<void> browserAction(String action) async {}
+
+  /// Desktop only. Whether the page shows an element fullscreen, such as a
+  /// video. The element fills the page's own view, so in a split pane it
+  /// fills that pane.
+  bool get fullScreen => false;
+
+  /// Desktop only. Shows the page on the whole screen, or stops; stopping
+  /// also ends the page's fullscreen.
+  Future<void> fillScreen(bool on) async {}
 }
 
 typedef PageFactory = PageSurface Function(

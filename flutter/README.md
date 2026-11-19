@@ -114,6 +114,13 @@ that opens an unsized window loses its opener.
 App views keep sending a new window's address to the default browser. A page
 dialog raised inside a popup window is not shown.
 
+On macOS only, a video's fullscreen button works in a Browser tab, also for a
+player embedded from another site that allows fullscreen. In split view the
+video fills its own pane. A tab shown alone takes the whole screen: the tab
+strip, address bar and chat hide and the window enters macOS fullscreen.
+Escape, the player's own button, or leaving macOS fullscreen ends it, and so
+does another tab opening. As in a browser, only a click or key press can start it.
+
 On macOS, select page or PDF text and ask a question with page context enabled.
 With a YouTube video open in a Browser tab, ask about the video: the agent reads
 its full transcript page by page through the page itself (`browser.transcript`,
@@ -133,9 +140,11 @@ Trash cleanup deletes it with the conversation.
 
 ### Mac checks
 
-`npm run test:mac -- popup_windows_test.dart`, from the repository root on WSL,
-runs that self-contained integration test on the Mac against real WKWebViews,
-with its own loopback fixture. Like the smoothness suite below, it builds a
+`npm run test:mac -- <name>_test.dart`, from the repository root on WSL, runs
+one self-contained integration test on the Mac against real WKWebViews:
+`popup_windows_test.dart` (with its own loopback fixture) or
+`video_fullscreen_test.dart`, which puts the test window into macOS fullscreen
+for a few seconds. Like the smoothness suite below, it builds a
 temporary copy under its own bundle id, `app.relay.flutterTest`, and removes
 the copy and the test app's data afterwards. It refuses `workflow_test.dart`,
 which uses the Flutter deployment's records.
