@@ -101,12 +101,15 @@ Closing the split tab ends the split and keeps every app open. Drag a tab from
 the split back onto the tab strip to take it out; closing an app's tab takes it
 out of every split. Narrow windows show only the selected tab.
 
-On macOS only, a page in a Browser tab that opens a new window on a user action,
-such as **Continue with Google**, gets its own popup window titled with the
-site's host, beside its tab. The page and its popup can talk to each other and
-share sign-in. The popup closes when its page closes it, when the user closes
-it, or when its tab or the main window closes. Popup pages follow the Browser's
-address rule, and windows that pages open without a user action stay blocked.
+On macOS only, a page in a Browser tab that opens a sized window on a user
+action (`window.open` with a width or height), as **Continue with Google**
+does, gets its own popup window titled with the site's host, beside its tab.
+The page and its popup can talk to each other and share sign-in. The popup
+closes when its page closes it, when the user closes it, or when its tab or the
+main window closes. Popup pages follow the Browser's address rule, and windows
+that pages open without a user action stay blocked. Any other new window, such
+as a link that opens a new tab, loads in the same tab as before, so a sign-in
+that opens an unsized window loses its opener.
 App views keep sending a new window's address to the default browser. A page
 dialog raised inside a popup window is not shown.
 
@@ -136,16 +139,30 @@ temporary copy under its own bundle id, `app.relay.flutterTest`, and removes
 the copy and the test app's data afterwards. It refuses `workflow_test.dart`,
 which uses the Flutter deployment's records.
 
-### Measure UI smoothness
+### Measure performance
 
-Run `npm run perf:ui` from the repository root on WSL now and then; it has no pass
-or fail. For about three minutes a test window shows on the Mac: leave the Mac
-unused, with the window visible and Reduce Motion off. The test app has its own
-bundle id, `app.relay.flutterPerf`, and the run removes its data afterwards.
-Scenarios: the chat panel, typing, tab switching, the transcript pane, scrolling a
-2,000-message conversation and a streaming reply. Results go to
-`tmp/perf/ui-*.json` and are compared with the last run. They cover only
-Flutter's part of each frame.
+Run these from the repository root on WSL now and then; they have no pass or
+fail. `npm run perf:ui` measures smoothness. For about three minutes a test
+window shows on the Mac: leave the Mac unused, with the window visible and
+Reduce Motion off. The test app has its own bundle id, `app.relay.flutterPerf`,
+and the run removes its data afterwards. Scenarios: the chat panel, typing, tab
+switching, the transcript pane, scrolling a 2,000-message conversation and a
+streaming reply. Results go to `tmp/perf/ui-*.json` and are compared with the
+last run. They cover only Flutter's part of each frame.
+
+`npm run perf:stress` uses the same test app for about five minutes. It repeats
+opening and closing ten web tabs, switching through 20 conversations and
+opening the transcript pane, and reports memory growth per cycle after warm-up.
+It then streams a long reply into a 10,000-message conversation with 15 tabs
+open while scrolling and switching tabs, and reports smoothness and memory.
+Results go to `tmp/perf/stress-*.json`.
+
+`npm run perf:mem` reads the memory of the installed app and its WebKit
+processes, adds it to `tmp/perf/mem.jsonl` and shows recent readings; run it
+during a day of use to see growth. It only reads the process list and memory
+figures. Memory is the physical footprint that Activity Monitor shows. WebKit
+processes count for the app whose launchd domain started them, so other apps'
+pages are excluded; WebKit's shared GPU and networking processes count in full.
 
 ## Mac updates
 

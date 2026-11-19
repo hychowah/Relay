@@ -91,17 +91,13 @@ The Mac replacement helper passed against an isolated signed fixture app,
 including relaunch, receipt, previous-bundle retention and a preserved draft.
 
 Native verification found and fixed nested URL decoding that corrupted Research
-`#/...` resource IDs in saved views. A focused regression test preserves the
-encoded document route and bridge token. The full native rerun passed with a real
-DeepSeek Browser→Research comparison, retained tabs, history/Trash and saved-source
-highlighting. The test explicitly renders frames when an SSH-launched window is
-occluded; this changes only the test harness.
+`#/...` resource IDs in saved views, with a regression test; the full native
+rerun then passed. The test renders frames itself when an SSH-launched window is
+occluded.
 
-The real-agent check also exposed failed-presentation retry state. Both clients
-now acknowledge the actual returned context on failure, allowing a corrected
-retry while retaining failed status. Backend/client regressions verify that stale
-manual actions do not advance this state and question context remains unchanged.
-The full 78-test backend suite passed after the fix.
+The real-agent check also fixed failed-presentation retry: both clients
+acknowledge the returned context on failure, so a corrected retry works while the
+failed status stays. Backend and client regressions cover it.
 
 The actual Dart installer passed on an isolated Mac bundle: verified background
 download, signature/identity/version checks, preparation, process exit, replacement,
@@ -133,13 +129,10 @@ Since 0.0.4, Reconnect retries unfinished tabs and clears the saved session
 only on success, and the first snapshot interaction is no longer mistaken for
 native initial context. Focused regressions cover both.
 
-The motion and comment changes passed analysis, 27 Flutter tests,
-nine bridge tests and five Browser tests. An isolated Mac test exercised chat
-toggling, tab creation/removal and menu opening with a retained WKWebView. The
-Browser comment rendered, dismissed and stayed out of page reads. The window
-was occluded, so this did not measure perceived smoothness. Chromium verified
-Room comment placement and dismissal at desktop and compact sizes, including
-reduced motion.
+The motion and comment changes passed an isolated Mac test of chat toggling,
+tabs and menus with a retained WKWebView, where the Browser comment stayed out of
+page reads; the window was occluded, so smoothness was not judged. Chromium
+verified Room comments at desktop and compact sizes, including reduced motion.
 
 Everyday restoration passed analysis and 32 Flutter tests on WSL. They cover
 saving tabs as they change, an offline start, a failed tab retried by Reconnect,
@@ -150,29 +143,29 @@ reported one by one: a tab whose app is stopped and a website sign-in surviving
 a restart remain unconfirmed. The installed app's cookie file and WebKit website
 data exist on disk.
 
-The updater's leftover removal passed analysis and 37 Flutter tests on WSL,
-including one for replaced apps, old receipts and old downloads. On the Mac,
-bash 3.2 kept a copy of the helper's wait loop running after its folder was
-deleted, and it exited normally when the receipt appeared. No installed build
-has run the removal yet.
+The updater's leftover removal has a WSL test for replaced apps, old receipts
+and old downloads. On the Mac, the helper's bash 3.2 wait loop survived its
+folder's deletion and exited when the receipt appeared. No installed build has
+run the removal yet.
 
-`tools/publish-flutter` now publishes test builds and Stable from a temporary
-folder on the Mac, in place of the hand-run Stable build. A test with a stand-in
-for the Mac covers a test build, Stable's recorded commit, the refusals and
-Stable retiring the test builds it contains. A real Stable build through the
-tool, into a throwaway release folder, compiled on the Mac without the settings
-copy, recorded its commit, refused a second run and left no folder on the Mac.
+`tools/publish-flutter` publishes test builds and Stable from a temporary Mac
+folder. A test with a stand-in Mac covers test builds, Stable's recorded commit,
+the refusals and retiring contained test builds. A real Stable build through it,
+into a throwaway release folder, recorded its commit and left nothing on the Mac.
 
 Stable 0.0.9 (build 9), published with that tool, added everyday restoration,
 the updater's leftover removal, inline region capture, saved screenshots, bug
 reports and draft conversations. The native Mac workflow was not rerun for it.
 
-On 2026-11-19 four runs of the [UI smoothness suite](../../../flutter/README.md#measure-ui-smoothness)
-on the MacBook Neo (Mac17,5, 60 Hz) held 57–60 fps in every scenario, with at
-most 2.3% slow frames. The longest waits for a frame were on tab switches
-(83–117 ms in two of four runs), the streaming reply (83 ms), the transcript
-pane (67 ms) and the long-conversation scroll (50 ms). WebKit and final screen
-presentation are unmeasured.
+On 2026-11-19 the [UI smoothness suite](../../../flutter/README.md#measure-performance)
+held 57–60 fps on the MacBook Neo (60 Hz), with waits up to 117 ms on tab
+switches; WebKit presentation is unmeasured. After the transcript pane fix, its
+median frame build fell from 3.15 to 0.88 ms (one run before and one after).
+Stress runs the same day found no Relay leak (closed tabs release their web
+processes; conversation and transcript cycles stay level), but with 10,000
+messages nearly every one-second poll causes a visible frame wait. The installed
+app reached about 3.3 GB after 1.2 h, about 90% in WebKit with one page at
+1.5 GB, on an 8 GB Mac already using 6–7 GB of swap.
 
 Restoring tabs adds every saved tab and shows the last active one at once, then
 loads all pages together without selecting them. A tab the user picks meanwhile
@@ -198,9 +191,9 @@ and none of these builds has been reviewed on the Mac.
 
 Browser popups (desktop only): webview_flutter_wkwebview 3.27.2 loaded a
 page's new window into its opener, which broke sign-in popups. A forwarding UI
-delegate in the Mac runner now opens a child popup window. `npm run test:mac --
-popup_windows_test.dart` passed on the Mac with real WKWebViews, and failed with
-the delegate, its dialog forwarding or the popup blocker removed.
+delegate in the Mac runner now opens sized new windows as child popups; others
+load in the tab. `npm run test:mac -- popup_windows_test.dart` checks this with
+real WKWebViews.
 
 ## Next
 
@@ -209,7 +202,7 @@ the delegate, its dialog forwarding or the popup blocker removed.
    update folders beside the app and the older downloads.
 2. Republishing a test build's name leaves its earlier ZIP in the release
    folder on WSL. Remove it at publish time if that folder grows.
-3. Review Stable 0.0.13 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`; native presentation timing over web content is unmeasured. The suite's longest waits, on tab switches, polls of a long conversation and the transcript pane, are candidates for a smoothness fix. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
+3. Review Stable 0.0.13 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`. The suite's longest waits, on tab switches, are candidates for a smoothness fix. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
 4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable since 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified. The capture animation is not in Stable yet: on the Mac, check that the flash and the flight to the composer run smoothly over a real page, and that the thumbnail takes over without a jump.
 5. Try the toolbar record button and **Bug reports**, both in Stable since 0.0.9, on the Mac. Source tests cover recording,
    saving, viewing, marking solved and deleting; native screenshots and the live service's report folder are unverified. Marking solved and deleting are in Stable 0.0.13 and served by the live backend; try them on the Mac.
@@ -243,6 +236,15 @@ the delegate, its dialog forwarding or the popup blocker removed.
    strip is scrolled. Only widget tests cover the order and the slide.
 15. In a build with popup windows, sign in to figma.com with **Continue with
    Google**: the popup shows its host, closes itself and leaves Figma signed in.
-   Also close a tab, and the main window, with a popup open.
+   Close a tab, and the main window, with a popup open. New-tab links stay in the tab.
+16. Next smoothness work: the one-second poll decodes and rebuilds the whole
+   conversation on the UI thread. In `Workspace._refresh`, skip the decode and
+   `changed()` when the snapshot body is unchanged, and decode large bodies off
+   the UI isolate. Check with `npm run perf:ui` and `npm run perf:stress`.
+17. One page of the installed app reached 1.5 GB and went away after a restart.
+   If a page grows like that again, find it by closing tabs one at a time while
+   running `npm run perf:mem`. If it is an app page, the fix belongs in that
+   app's repository. If it is an outside site, whether Relay unloads hidden tabs
+   under memory pressure is a product decision for the user.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.
