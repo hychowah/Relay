@@ -22,13 +22,15 @@ class TestWebPlatform extends WebViewPlatform {
 class TestController extends PlatformWebViewController {
   TestController(super.params) : super.implementation();
   late JavaScriptChannelParams channel;
+  late TestNavigationDelegate delegate;
+  var location = 'https://youtube.test/', history = false;
   final loaded = Completer<void>();
   @override
   Future<void> setJavaScriptMode(JavaScriptMode mode) async {}
   @override
   Future<void> setPlatformNavigationDelegate(
     PlatformNavigationDelegate delegate,
-  ) async {}
+  ) async => this.delegate = delegate as TestNavigationDelegate;
   @override
   Future<void> addJavaScriptChannel(JavaScriptChannelParams params) async {
     channel = params;
@@ -38,6 +40,18 @@ class TestController extends PlatformWebViewController {
   Future<void> loadRequest(LoadRequestParams params) async {
     loaded.complete();
   }
+
+  @override
+  Future<void> loadHtmlString(String html, {String? baseUrl}) async {}
+  @override
+  Future<void> runJavaScript(String javaScript) async {}
+  @override
+  Future<Object> runJavaScriptReturningResult(String javaScript) async =>
+      jsonEncode({'url': location, 'title': 'YouTube', 'selection': ''});
+  @override
+  Future<bool> canGoBack() async => history;
+  @override
+  Future<bool> canGoForward() async => false;
 
   void emit(Json data) =>
       channel.onMessageReceived(JavaScriptMessage(message: jsonEncode(data)));
@@ -49,10 +63,16 @@ class TestNavigationDelegate extends PlatformNavigationDelegate {
   Future<void> setOnNavigationRequest(
     NavigationRequestCallback callback,
   ) async {}
+  late PageEventCallback finished;
+  late UrlChangeCallback urlChange;
   @override
   Future<void> setOnPageStarted(PageEventCallback callback) async {}
   @override
-  Future<void> setOnPageFinished(PageEventCallback callback) async {}
+  Future<void> setOnPageFinished(PageEventCallback callback) async =>
+      finished = callback;
+  @override
+  Future<void> setOnUrlChange(UrlChangeCallback callback) async =>
+      urlChange = callback;
   @override
   Future<void> setOnWebResourceError(WebResourceErrorCallback callback) async {}
 }
@@ -116,6 +136,53 @@ void main() {
         platform.controller.emit(context);
         expect(changes.last, isTrue);
       }
+    },
+  );
+
+  test(
+    'a Browser address changed by the page is not a manual change',
+    () async {
+      final platform = TestWebPlatform();
+      WebViewPlatform.instance = platform;
+      final changes = <bool>[];
+      final page = createWebPage(
+        PageSpec(
+          id: 'tab',
+          appId: 'browser',
+          name: 'Browser',
+          sessionId: 'session',
+          relayOrigin: Uri.parse('http://relay.test'),
+        ),
+        changes.add,
+      );
+      addTearDown(page.dispose);
+      final controller = platform.controller;
+      await pumpEventQueue();
+      controller.delegate.finished(controller.location);
+      await page.ready;
+      final generation = page.context!['generation'];
+      changes.clear();
+
+      controller
+        ..location = 'https://youtube.test/watch?v=1'
+        ..history = true;
+      controller.delegate.urlChange(UrlChange(url: controller.location));
+      await pumpEventQueue();
+      expect(page.url, 'https://youtube.test/watch?v=1');
+      expect(page.browser!.canGoBack, isTrue);
+
+      controller.channel.onMessageReceived(
+        const JavaScriptMessage(message: 'title:A video'),
+      );
+      expect(page.title, 'A video');
+      expect(page.context!['state'], {
+        'sessionId': 'session',
+        'tabId': 'tab',
+        'url': 'https://youtube.test/watch?v=1',
+        'title': 'A video',
+      });
+      expect(changes, [false, false]);
+      expect(page.context!['generation'], generation);
     },
   );
 }

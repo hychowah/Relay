@@ -179,5 +179,6 @@ covers the Flutter shell. Final screen presentation and real pages remain unmeas
 6. Try the toolbar record button and **Bug reports**, both in Stable 0.0.9, on the Mac. Source tests cover recording,
    saving and viewing; native screenshots and the live service's report folder are unverified.
 7. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
+8. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

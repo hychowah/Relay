@@ -29,6 +29,9 @@ const _observePage =
  for(const type of ['pointerdown','keydown'])document.addEventListener(type,()=>{
    window.__relaySelection='';notify();
  },true);
+ let title=document.title;
+ new MutationObserver(()=>{if(document.title!==title){title=document.title;RelayBrowser.postMessage('title:'+title)}})
+   .observe(document.head||document.documentElement,{childList:true,subtree:true,characterData:true});
 })()''';
 
 // Some sites serve a basic interface to WKWebView unless it identifies the
@@ -246,6 +249,19 @@ class _BrowserPage extends _WebPage with BrowserSurface {
             _fail(error);
           }
         },
+        // An address a page changes in place only refreshes the address and
+        // Back/Forward state. It is not a manual change: the user's own input
+        // already reports through RelayBrowser, and sites also change their
+        // address by themselves.
+        onUrlChange: (change) async {
+          final url = change.url;
+          if (_disposed || url == null || url.isEmpty) return;
+          _url = url;
+          (_context?['state'] as Map?)?['url'] = url;
+          canGoBack = await controller.canGoBack();
+          canGoForward = await controller.canGoForward();
+          if (!_disposed) changed(false);
+        },
         onWebResourceError: _resourceError,
       ),
     );
@@ -254,6 +270,12 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       'RelayBrowser',
       onMessageReceived: (message) {
         if (_disposed) return;
+        if (message.message.startsWith('title:')) {
+          _title = message.message.substring('title:'.length);
+          (_context?['state'] as Map?)?['title'] = _title;
+          changed(false);
+          return;
+        }
         if (message.message != 'interaction') {
           if (!message.message.startsWith('selection:')) return;
           final selection = message.message.substring('selection:'.length);
