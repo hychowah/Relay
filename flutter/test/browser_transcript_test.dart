@@ -47,4 +47,16 @@ void main() {
     }
     expect(() => transcriptPage(transcript, text.length), throwsRangeError);
   });
+
+  test('paragraph starts come from their time markers', () {
+    expect(
+      paragraphStarts([
+        '[0:05] Hello',
+        '[12:34] Later',
+        '[] No time',
+        '[1:56:13] An hour on',
+      ]),
+      [5, 754, 754, 6973],
+    );
+  });
 }

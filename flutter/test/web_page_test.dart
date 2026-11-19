@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:relay_flutter/browser_transcript.dart';
 import 'package:relay_flutter/page_surface.dart';
 import 'package:relay_flutter/relay_api.dart';
 import 'package:relay_flutter/web_page.dart';
@@ -47,9 +48,12 @@ class TestController extends PlatformWebViewController {
   @override
   Future<void> runJavaScript(String javaScript) async =>
       scripts.add(javaScript);
+  Object playTime = -1;
   @override
   Future<Object> runJavaScriptReturningResult(String javaScript) async =>
-      jsonEncode({'url': location, 'title': 'YouTube', 'selection': ''});
+      javaScript == youtubePlaybackTimeScript
+      ? playTime
+      : jsonEncode({'url': location, 'title': 'YouTube', 'selection': ''});
   @override
   Future<bool> canGoBack() async => history;
   @override
@@ -247,5 +251,11 @@ void main() {
         ),
       ),
     );
+
+    // The pane's play time; the page script answers -1 during an ad.
+    controller.playTime = 83.5;
+    expect(await page.browser!.playbackTime(), 83.5);
+    controller.playTime = -1;
+    expect(await page.browser!.playbackTime(), isNull);
   });
 }

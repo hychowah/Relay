@@ -92,7 +92,9 @@ its full transcript page by page through the page itself (`browser.transcript`,
 desktop only). Videos without captions have no transcript. **Transcript** above
 the conversation opens the same transcript; text selected there is sent as the
 question's selection in place of the page's, until newer text is selected on
-the page or the pane is clicked or closed.
+the page or the pane is clicked or closed. While the video plays, the pane
+highlights the paragraph being spoken and scrolls to it, except during ads.
+Scrolling or selecting in the pane stops the scrolling until **Follow video**.
 Use **Capture an area** beside the model picker, then drag over the active tab
 itself; chat stays open on desktop. Releasing the drag attaches the area to the
 composer for the next question, and Escape or **Cancel** leaves the tab unchanged.

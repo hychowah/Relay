@@ -11,7 +11,9 @@ import 'package:http/testing.dart';
 import 'package:relay_flutter/main.dart';
 import 'package:relay_flutter/page_surface.dart';
 import 'package:relay_flutter/relay_api.dart';
+import 'package:relay_flutter/transcript_pane.dart';
 import 'package:relay_flutter/workspace.dart';
+import 'package:relay_flutter/workspace_style.dart';
 import 'package:relay_flutter/region_capture.dart';
 
 const apps = [
@@ -53,7 +55,8 @@ class FakePage extends PageSurface with BrowserSurface {
   String url = 'https://example.com/desk';
   Json? transcript;
   StateError? transcriptError;
-  int transcriptLoads = 0;
+  int transcriptLoads = 0, timeReads = 0;
+  double? time;
   String selection = 'selected passage';
   @override
   Json get context => {
@@ -77,6 +80,12 @@ class FakePage extends PageSurface with BrowserSurface {
     transcriptLoads++;
     if (transcriptError case final error?) throw error;
     return transcript!;
+  }
+
+  @override
+  Future<double?> playbackTime() async {
+    timeReads++;
+    return time;
   }
 
   @override
@@ -981,6 +990,121 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Transcript'), findsNothing);
       expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'the transcript follows the video until the user scrolls or selects',
+    (tester) async {
+      final f = Fixture();
+      await f.w.start();
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await f.w.openApp(f.w.apps[0]);
+      final page = f.pages.last
+        ..url = 'https://www.youtube.com/watch?v=video'
+        ..transcript = {
+          'language': 'English',
+          'text': [
+            for (var i = 0; i < 30; i++)
+              '[${i ~/ 3}:${(i % 3 * 20).toString().padLeft(2, '0')}] '
+                  'Part $i ${'words ' * 100}',
+          ].join('\n'),
+        };
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, initialDraft: '', saveDraft: (_) async {}),
+      );
+      await tester.tap(find.text('Transcript'));
+      await tester.pumpAndSettle();
+
+      Finder part(int i) => find.textContaining(RegExp('] Part $i '));
+      Color? shade(int i) =>
+          (tester
+                      .widget<DecoratedBox>(
+                        find
+                            .ancestor(
+                              of: part(i),
+                              matching: find.byType(DecoratedBox),
+                            )
+                            .first,
+                      )
+                      .decoration
+                  as BoxDecoration)
+              .color;
+      final pane = tester.getRect(find.byType(TranscriptPane));
+      bool shown(int i) => pane.contains(tester.getTopLeft(part(i)));
+      final scroll = tester
+          .state<ScrollableState>(
+            find.descendant(
+              of: find.byType(TranscriptPane),
+              matching: find.byType(Scrollable),
+            ),
+          )
+          .position;
+      Future<void> play(double? seconds) async {
+        page.time = seconds;
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+      }
+
+      final follow = find.text('Follow video');
+      expect(shade(0), isNull);
+      // 2:30 is within Part 7, which starts at 2:20.
+      await play(150);
+      expect(shade(7), tint);
+      expect(shown(7), isTrue);
+      expect(follow, findsNothing);
+      // A seek back moves it; an unknown time, as during an ad, keeps it.
+      await play(5);
+      expect([shade(0), shade(7)], [tint, null]);
+      expect(shown(0), isTrue);
+      await play(null);
+      expect(shade(0), tint);
+
+      // Scrolling by hand stops following; the highlight still moves.
+      final wheel = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(wheel.hover(pane.center));
+      await tester.sendEventToBinding(wheel.scroll(const Offset(0, 300)));
+      await tester.pumpAndSettle();
+      expect(follow, findsOneWidget);
+      final offset = scroll.pixels;
+      await play(570);
+      expect(shade(28), tint);
+      expect(scroll.pixels, offset);
+      await tester.tap(follow);
+      await tester.pumpAndSettle();
+      expect(shown(28), isTrue);
+      expect(follow, findsNothing);
+
+      // Selecting stops following, which never disturbs the selection.
+      final start = tester.getTopLeft(part(28)) + const Offset(1, 5);
+      final drag = await tester.startGesture(
+        start,
+        kind: PointerDeviceKind.mouse,
+      );
+      await drag.moveTo(start + const Offset(150, 0));
+      await drag.up();
+      await tester.pumpAndSettle();
+      final kept = find.textContaining('“[9:20] Part');
+      expect(kept, findsOneWidget);
+      expect(follow, findsOneWidget);
+      await play(20);
+      expect(shade(1), tint);
+      expect(shown(28), isTrue);
+      await tester.tap(follow);
+      await tester.pumpAndSettle();
+      expect(shown(1), isTrue);
+      expect(kept, findsOneWidget);
+
+      // Closing the pane stops reading the time.
+      await tester.tap(find.text('Transcript'));
+      await tester.pumpAndSettle();
+      final reads = page.timeReads;
+      await tester.pump(const Duration(seconds: 2));
+      expect(page.timeReads, reads);
       await tester.pumpWidget(const SizedBox());
     },
   );

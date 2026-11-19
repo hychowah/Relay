@@ -18,6 +18,8 @@ class FakeBrowser with BrowserSurface {
     'text': '[0:01] First\n[0:40] Second',
   };
   @override
+  Future<double?> playbackTime() async => null;
+  @override
   Future<void> navigate(String text) async {}
 }
 

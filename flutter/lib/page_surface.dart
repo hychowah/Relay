@@ -77,6 +77,9 @@ abstract class PageSurface {
 mixin BrowserSurface {
   Future<Json> read();
   Future<Json> loadTranscript();
+
+  /// The video's play time in seconds, or null when no video content plays.
+  Future<double?> playbackTime();
   Future<void> navigate(String text);
   bool get canGoBack => false;
   bool get canGoForward => false;

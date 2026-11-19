@@ -49,6 +49,15 @@ const youtubeTranscriptScript = r'''void (async()=>{
  }catch(error){send({error:String(error?.message||error)})}
 })()''';
 
+// The video's play time in seconds, for the transcript pane to follow. It is
+// -1 while an ad plays. The pane is rebuilt for each video, so a new video
+// needs no check here. WebKit returns only a script's immediate value, so this
+// reads the player synchronously.
+const youtubePlaybackTimeScript =
+    r'''(()=>{const p=document.getElementById('movie_player');
+ if(!p?.getCurrentTime||p.classList.contains('ad-showing'))return -1;
+ return p.getCurrentTime()})()''';
+
 /// Identifies a YouTube video page, where the chat panel offers its transcript.
 String? youtubeVideoId(String url) {
   final uri = Uri.tryParse(url);
@@ -82,6 +91,23 @@ Json transcriptFromSegments(Json data) {
     'language': data['language'],
     'text': paragraphs.join('\n'),
   };
+}
+
+/// The start in seconds of each paragraph, from its leading time marker. A
+/// paragraph without a marker keeps the previous start.
+List<int> paragraphStarts(List<String> paragraphs) {
+  final starts = <int>[];
+  for (final paragraph in paragraphs) {
+    final marker = RegExp(r'^\[(\d+(?::\d+)*)\]').firstMatch(paragraph);
+    starts.add(
+      marker == null
+          ? (starts.lastOrNull ?? 0)
+          : marker[1]!
+                .split(':')
+                .fold(0, (sum, part) => sum * 60 + int.parse(part)),
+    );
+  }
+  return starts;
 }
 
 // OpenCode truncates a tool result above 51,200 bytes, so a page stays well

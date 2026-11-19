@@ -368,6 +368,17 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     }
   }
 
+  // Desktop only. The transcript pane polls this while it is open.
+  @override
+  Future<double?> playbackTime() async {
+    if (_disposed) return null;
+    final result = await controller.runJavaScriptReturningResult(
+      youtubePlaybackTimeScript,
+    );
+    final seconds = double.tryParse('$result');
+    return seconds == null || seconds < 0 ? null : seconds;
+  }
+
   @override
   Future<void> navigate(String text) async {
     final target = await browserUrl(text);

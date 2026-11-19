@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/gestures.dart' show kPrimaryButton;
-import 'package:flutter/rendering.dart' show SelectedContent;
+import 'package:flutter/rendering.dart' show ScrollDirection, SelectedContent;
 import 'package:material_ui/material_ui.dart';
 
+import 'browser_transcript.dart';
 import 'page_surface.dart';
 import 'relay_api.dart';
 import 'workspace_style.dart';
@@ -43,7 +45,9 @@ class TranscriptBar extends StatelessWidget {
 }
 
 /// Desktop chat panel only: the transcript of the video in a Browser tab.
-/// Selected text becomes the next question's selection.
+/// Selected text becomes the next question's selection. While the pane is
+/// open it highlights the paragraph being played and scrolls to it, until the
+/// user scrolls or selects here; **Follow video** resumes the scrolling.
 class TranscriptPane extends StatefulWidget {
   const TranscriptPane({
     super.key,
@@ -61,6 +65,12 @@ class _TranscriptPaneState extends State<TranscriptPane> {
   final focus = FocusNode();
   Json? transcript;
   String? error;
+  List<String> paragraphs = const [];
+  List<int> starts = const [];
+  List<GlobalKey> keys = const [];
+  int playing = -1;
+  bool following = true, _reading = false;
+  Timer? _clock;
 
   @override
   void initState() {
@@ -71,10 +81,52 @@ class _TranscriptPaneState extends State<TranscriptPane> {
   Future<void> _load() async {
     try {
       final result = await widget.browser.loadTranscript();
-      if (mounted) setState(() => transcript = result);
+      if (!mounted) return;
+      setState(() {
+        transcript = result;
+        paragraphs = '${result['text']}'.split('\n');
+        starts = paragraphStarts(paragraphs);
+        keys = [for (final _ in paragraphs) GlobalKey()];
+      });
+      _clock = Timer.periodic(
+        const Duration(milliseconds: 500),
+        (_) => _play(),
+      );
+      _play();
     } catch (e) {
       if (mounted) setState(() => error = e is StateError ? e.message : '$e');
     }
+  }
+
+  // An unknown time, such as during an ad or a reload, keeps the highlight.
+  Future<void> _play() async {
+    if (_reading) return;
+    _reading = true;
+    final seconds = await widget.browser.playbackTime().catchError(
+      (Object _) => null,
+    );
+    _reading = false;
+    if (!mounted || seconds == null) return;
+    final index = starts.lastIndexWhere((start) => start <= seconds);
+    if (index == playing) return;
+    setState(() => playing = index);
+    if (following) _reveal();
+  }
+
+  void _reveal() => WidgetsBinding.instance.addPostFrameCallback((_) {
+    final paragraph = playing < 0 ? null : keys[playing].currentContext;
+    if (!mounted || !following || paragraph == null) return;
+    Scrollable.ensureVisible(
+      paragraph,
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  });
+
+  void _pause() {
+    if (following) setState(() => following = false);
   }
 
   void _selected(SelectedContent? content) {
@@ -82,6 +134,7 @@ class _TranscriptPaneState extends State<TranscriptPane> {
     // Moving focus to the composer clears the visible selection; the text
     // stays the question's selection until the user selects here again.
     if (text.isEmpty && !focus.hasFocus) return;
+    if (text.isNotEmpty) _pause();
     widget.onSelected(
       text.isEmpty ? null : text.substring(0, min(text.length, 4000)),
     );
@@ -89,6 +142,7 @@ class _TranscriptPaneState extends State<TranscriptPane> {
 
   @override
   void dispose() {
+    _clock?.cancel();
     focus.dispose();
     super.dispose();
   }
@@ -123,36 +177,92 @@ class _TranscriptPaneState extends State<TranscriptPane> {
         ),
       );
     }
-    // A press in the pane starts over, so clicking without dragging clears the
-    // selection kept for the question.
-    return Listener(
-      onPointerDown: (event) {
-        if (event.buttons == kPrimaryButton) widget.onSelected(null);
-      },
-      child: SelectionArea(
-        focusNode: focus,
-        onSelectionChanged: _selected,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(18, 10, 18, 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${loaded['language']}',
-                style: const TextStyle(fontSize: 11, color: muted),
-              ),
-              for (final paragraph in '${loaded['text']}'.split('\n'))
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    paragraph,
-                    style: const TextStyle(fontSize: 13, height: 1.45),
-                  ),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // A press in the pane starts over, so clicking without dragging clears
+        // the selection kept for the question.
+        Listener(
+          onPointerDown: (event) {
+            if (event.buttons == kPrimaryButton) widget.onSelected(null);
+          },
+          child: SelectionArea(
+            focusNode: focus,
+            onSelectionChanged: _selected,
+            // Only the user's own scrolling has a direction; following doesn't.
+            child: NotificationListener<UserScrollNotification>(
+              onNotification: (scroll) {
+                if (scroll.direction != ScrollDirection.idle) _pause();
+                return false;
+              },
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Text(
+                        '${loaded['language']}',
+                        style: const TextStyle(fontSize: 11, color: muted),
+                      ),
+                    ),
+                    for (var i = 0; i < paragraphs.length; i++)
+                      Padding(
+                        key: keys[i],
+                        padding: const EdgeInsets.only(top: 4),
+                        // The same widgets with only a changed colour keep a
+                        // selection inside the paragraph.
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: i == playing ? tint : null,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            child: Text(
+                              paragraphs[i],
+                              style: const TextStyle(
+                                fontSize: 13,
+                                height: 1.45,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-            ],
+              ),
+            ),
           ),
         ),
-      ),
+        // Outside the Listener, so pressing it keeps the question's selection.
+        if (!following)
+          Positioned(
+            right: 12,
+            bottom: 10,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                setState(() => following = true);
+                _reveal();
+              },
+              style: OutlinedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: accent,
+                side: const BorderSide(color: line),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(7),
+                ),
+              ),
+              icon: const Icon(Icons.subtitles_outlined, size: 14),
+              label: const Text('Follow video', style: TextStyle(fontSize: 11)),
+            ),
+          ),
+      ],
     );
   }
 }
