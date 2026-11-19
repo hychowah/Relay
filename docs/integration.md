@@ -83,8 +83,9 @@ data and source references.
 
 Relay checks the protocol envelope, configured identity, source origin and
 published operation name. The app validates arguments and business rules. Bot
-app access is enforced by Relay. Current implementations expose read-only
-operations; discovery is not a sandbox for arbitrary third-party writes.
+app access is enforced by Relay. Current implementations expose operations that
+read, and one that saves a draft inside its own app for the user to act on;
+discovery is not a sandbox for arbitrary third-party writes.
 Provider credentials never enter app requests or browser frames.
 
 Progress describes actual work. Stop aborts the HTTP request and cancels pending

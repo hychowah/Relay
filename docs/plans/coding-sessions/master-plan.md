@@ -77,7 +77,7 @@ The stand-in part passed on 2026-11-19 in the coding app's project: seven tests
 cover those three points, a start that happens once, the three start outcomes
 and requests addressed to a foreign host. Relay's app loader accepted the app
 and refused an unpublished start operation. The live part is open: no real
-session has been started through the app, and it is not registered.
+session has been started through the app.
 
 ### Phase 2 — Check-back
 
@@ -94,12 +94,12 @@ Covers C07 in practice. Read those rules before this phase starts.
 
 ## Next
 
-1. Ask the user to approve the live setup: the coding app as a local service
-   with the real targets, its registration as a trusted app (the framed session
-   page needs forms, which the default frame restrictions block), and a forward
-   for its port. At registration, update the integration contract's statement
-   that current apps expose read-only operations: preparing a draft saves one.
-2. Check the Mac client: one request to a scratch repository, the session
-   screen inside the app view, its sign-in after a restart, and its layout at
-   the chat-side width.
+1. Check the Mac client: one request to the scratch target, the review screen
+   and Start, the session link, and the layout at the chat-side width. Since
+   2026-11-19 the coding app runs as a local service, registered with the live
+   Flutter backend under the default frame restrictions, with a scratch target
+   and the Research Web target.
+2. The user decides whether to register the app as trusted. The framed session
+   page needs forms for sign-in and typing, which the default restrictions
+   block; until then the session opens through its link.
 3. Build phase 2 after that check.
