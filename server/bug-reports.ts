@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -9,6 +9,7 @@ const maxReportCharacters = 20_000_000;
 const secretName = /api.?key|secret|password|authorization/i;
 // Only names this module writes; the check keeps requests inside the report folder.
 const reportId = /^[0-9TZ-]+-[0-9a-f]{8}$/;
+const statuses = ["open", "solved"];
 
 // Recordings include request bodies, such as provider settings with an API key.
 function redact(value: unknown): unknown {
@@ -31,13 +32,28 @@ export function addBugReports(app: Hono, dir: string, store: Store) {
     return c.json(files.map((name) => {
       const report = JSON.parse(readFileSync(join(dir, name), "utf8"));
       return { id: report.id, savedAt: report.savedAt, description: report.description,
-        events: report.events.length, screenshot: Boolean(report.screenshot) };
+        status: report.status ?? "open", events: report.events.length, screenshot: Boolean(report.screenshot) };
     }).sort((a, b) => b.savedAt.localeCompare(a.savedAt)));
   });
   app.get("/api/bug-reports/:id", (c) =>
     c.body(readFileSync(reportFile(c.req.param("id"), "json"), "utf8"), 200, { "Content-Type": "application/json" }));
   app.get("/api/bug-reports/:id/screenshot", (c) =>
     c.body(readFileSync(reportFile(c.req.param("id"), "png")), 200, { "Content-Type": "image/png" }));
+  app.patch("/api/bug-reports/:id", async (c) => {
+    const path = reportFile(c.req.param("id"), "json");
+    const { status } = await c.req.json() as { status?: unknown };
+    if (typeof status !== "string" || !statuses.includes(status))
+      throw new HTTPException(400, { message: "Status must be open or solved." });
+    const report = JSON.parse(readFileSync(path, "utf8"));
+    writeFileSync(path, `${JSON.stringify({ ...report, status }, null, 2)}\n`, { mode: 0o600 });
+    return c.json({ id: report.id, status });
+  });
+  app.delete("/api/bug-reports/:id", (c) => {
+    const path = reportFile(c.req.param("id"), "json");
+    rmSync(path);
+    rmSync(join(dir, `${c.req.param("id")}.png`), { force: true });
+    return c.body(null, 204);
+  });
 
   app.post("/api/bug-reports", async (c) => {
     const text = await c.req.text();
@@ -53,7 +69,7 @@ export function addBugReports(app: Hono, dir: string, store: Store) {
     if (typeof screenshot === "string" && screenshot)
       writeFileSync(join(dir, `${id}.png`), Buffer.from(screenshot, "base64"), { mode: 0o600 });
     const report = {
-      id, savedAt, ...(redact(body) as object),
+      id, savedAt, status: "open", ...(redact(body) as object),
       screenshot: typeof screenshot === "string" && screenshot ? `${id}.png` : null,
       // The server's own record of the conversation: messages, runs, tool calls and view commands.
       serverConversation: conversation ?? null,

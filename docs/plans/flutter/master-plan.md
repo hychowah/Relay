@@ -49,7 +49,8 @@ The implemented workflows include the following.
   their own look, and the Mac title bar follows macOS.
 - Development bug recording: actions, server exchanges, errors, tabs and a page
   screenshot are saved on the service as a report and read in the Bug reports
-  viewer (see the root README).
+  viewer, where each report is marked open or solved, or deleted (see the root
+  README).
 
 `server/runtime.ts` shares the existing harness/provider lifecycle between the
 web and Flutter deployments. Provider settings are imported once into Flutter's
@@ -220,7 +221,7 @@ not been installed or reviewed on the Mac.
 3. Review Stable 0.0.12 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported panel hitch with a fresh run of the fixture benchmark, whose recorded numbers predate 0.0.9, including native presentation timing if it appears only over web content. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
 4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable since 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified. The capture animation is not in Stable yet: on the Mac, check that the flash and the flight to the composer run smoothly over a real page, and that the thumbnail takes over without a jump.
 5. Try the toolbar record button and **Bug reports**, both in Stable since 0.0.9, on the Mac. Source tests cover recording,
-   saving and viewing; native screenshots and the live service's report folder are unverified.
+   saving, viewing, marking solved and deleting; native screenshots and the live service's report folder are unverified. Marking solved and deleting are not in Stable yet, and the live backend needs a redeploy to serve them.
 6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 7. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
 8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.

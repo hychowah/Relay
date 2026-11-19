@@ -7,7 +7,8 @@ import 'package:material_ui/material_ui.dart';
 import 'relay_api.dart';
 
 /// Lists the bug reports saved on the service and shows one report's
-/// description, screenshot and recorded events.
+/// description, screenshot and recorded events. Each report can be marked
+/// solved or open again, or deleted.
 class BugReportsDialog extends StatefulWidget {
   const BugReportsDialog({super.key, required this.api});
   final RelayApi api;
@@ -60,6 +61,63 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
     report = opened;
     screenshot = picture;
   });
+
+  static bool solved(Json item) => item['status'] == 'solved';
+
+  Future<void> toggleSolved(Json item) => _run(() async {
+    final id = item['id'];
+    final status = solved(item) ? 'open' : 'solved';
+    await widget.api.setBugReportStatus(id as String, status);
+    for (final shown in [...reports, ?report]) {
+      if (shown['id'] == id) shown['status'] = status;
+    }
+  });
+
+  Future<void> delete(Json item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete bug report?'),
+        content: const Text(
+          'This removes the recording and its screenshot from the service.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _run(() async {
+      final id = item['id'];
+      await widget.api.deleteBugReport(id as String);
+      reports.removeWhere((shown) => shown['id'] == id);
+      if (report?['id'] == id) {
+        report = null;
+        screenshot = null;
+      }
+    });
+  }
+
+  Widget _solvedButton(Json item) => IconButton(
+    tooltip: solved(item) ? 'Mark open' : 'Mark solved',
+    onPressed: loading ? null : () => toggleSolved(item),
+    icon: solved(item)
+        ? const Icon(Icons.check_circle, color: Colors.green)
+        : Icon(Icons.radio_button_unchecked, color: colors.onSurfaceVariant),
+  );
+
+  Widget _deleteButton(Json item) => IconButton(
+    tooltip: 'Delete bug report',
+    onPressed: loading ? null : () => delete(item),
+    icon: const Icon(Icons.delete_outline),
+  );
 
   static String _time(Object? iso) {
     final time = DateTime.tryParse('${iso ?? ''}')?.toLocal();
@@ -148,6 +206,7 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
       ),
       const SizedBox(height: 6),
       SelectableText(
+        '${solved(report) ? 'Solved' : 'Open'} · '
         'File bug-reports/${report['id']}.json\n'
         'Recorded ${_time(report['startedAt'])} to ${_time(report['endedAt'])}'
         '${client['app'] == null ? '' : ' · ${client['app']}'}\n'
@@ -192,19 +251,20 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-              leading: Icon(
-                Icons.bug_report_outlined,
-                size: 17,
-                color: colors.onSurfaceVariant,
-              ),
+              leading: _solvedButton(item),
               title: Text(
                 description.isEmpty ? 'No description' : description,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
+                style: solved(item)
+                    ? TextStyle(color: colors.onSurfaceVariant)
+                    : null,
               ),
               subtitle: Text(
+                '${solved(item) ? 'Solved' : 'Open'} · '
                 '${_time(item['savedAt'])} · ${item['events']} events',
               ),
+              trailing: _deleteButton(item),
               onTap: loading ? null : () => open(item),
             );
           },
@@ -237,6 +297,16 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
+                if (report == null && reports.isNotEmpty)
+                  Text(
+                    '${reports.where((item) => !solved(item)).length} open · '
+                    '${reports.where(solved).length} solved',
+                    style: TextStyle(color: colors.onSurfaceVariant),
+                  ),
+                if (report != null) ...[
+                  _solvedButton(report!),
+                  _deleteButton(report!),
+                ],
                 if (report == null)
                   IconButton(
                     tooltip: 'Refresh',
