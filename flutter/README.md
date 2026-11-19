@@ -170,9 +170,10 @@ Downloads run at startup and hourly. Workspace menu → Updates shows progress;
 **Install and restart** remains manual and waits for this window's agent work.
 The package is checked against the release hash, bundle signature, identity and
 version before replacement. The previous app is kept only until the new version
-starts; that version then removes it, with older downloads and launch receipts
-on the Mac. Every published Stable package stays in the served release directory
-on WSL for recovery. The app uses ad-hoc signing outside the App Store. It is not
+starts; that version then removes it, with older launch receipts on the Mac.
+Downloads are removed once a check finds the installed build current. Every
+published Stable package stays in the served release directory on WSL for
+recovery. The app uses ad-hoc signing outside the App Store. It is not
 sandboxed so it can replace its own bundle; WebKit still owns web-content processes.
 
 Updates download only changed files. Publishing stores each file of the app once
