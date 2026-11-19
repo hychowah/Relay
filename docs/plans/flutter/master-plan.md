@@ -174,8 +174,7 @@ is created, before it is shown; no Mac run has yet confirmed that hidden tabs
 load on the real WebViews.
 
 Stable 0.0.10 to 0.0.14 were published from `main` on 2026-11-19 and 0.0.15
-on 2026-11-20. 0.0.13 fixes the split view taking no clicks and lets bug
-reports be marked solved or deleted. 0.0.14 adds Browser popup windows, the free-form
+on 2026-11-20. 0.0.14 adds Browser popup windows, the free-form
 split tab, inline delete confirmation and Newest tab first. 0.0.15 (build 15)
 adds video fullscreen and is the first Stable with a file list, so the update
 after it downloads only changed files. Analysis, 68 Flutter tests and 88
@@ -252,10 +251,9 @@ real WKWebViews.
    fullscreen. Restarting an embedded player within 5 s of leaving needs a
    click on the page, which cannot see the frame's clicks. Only a fixture
    page ran on the Mac.
-19. Browser history (desktop only; see the Flutter README) is in `main` but
-   not in Stable or on the live backend. Deploy the backend, then check it on
-   the Mac: one titled entry per redirect or reload; instant, clickable
-   suggestions over a live page. A tab restored at start-up still counts as a
-   visit.
+19. Browser history (desktop only) is in `main`, not in Stable or on the live
+   backend. Deploy the backend, then check on the Mac: one titled entry per
+   redirect or reload; instant, clickable suggestions. A restored tab still
+   counts as a visit.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.
