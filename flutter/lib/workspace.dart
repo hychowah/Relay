@@ -138,26 +138,35 @@ class Workspace extends ChangeNotifier {
     if (_starting) return;
     _starting = true;
     _poll?.cancel();
+    Future<bool>? restoring;
     try {
       error = null;
       await loadConfig();
-      if (pendingSession != null) {
-        if (await restoreSession(pendingSession!)) {
+      // The restore adds and selects the tabs before its first await, so the
+      // conversation loads while their pages do.
+      if (pendingSession != null) restoring = restoreSession(pendingSession!);
+      await refresh();
+      _poll = Timer.periodic(
+        const Duration(seconds: 1),
+        (_) => unawaited(refresh()),
+      );
+      if (restoring != null) {
+        if (await restoring) {
           pendingSession = null;
           _restoredTabs.clear();
         }
         _sessionLoaded = true;
         await saveSession();
       }
-      await refresh();
-      _poll = Timer.periodic(
-        const Duration(seconds: 1),
-        (_) => unawaited(refresh()),
-      );
     } catch (e) {
       error = e.toString();
       changed();
     } finally {
+      if (restoring != null) {
+        // After an error, saving still waits for the restore to end.
+        await restoring.catchError((_) => false);
+        _sessionLoaded = true;
+      }
       _starting = false;
     }
   }
@@ -273,21 +282,7 @@ class Workspace extends ChangeNotifier {
     }
     select(tab, manual: manual);
     try {
-      final view = app.isBrowser ? null : await api.appView(id, tab.id);
-      if (!tabs.contains(tab)) return tab;
-      tab.page = pages(
-        PageSpec(
-          id: tab.id,
-          appId: id,
-          name: tab.name,
-          sessionId: browserSessionId,
-          relayOrigin: api.origin,
-          appView: view,
-        ),
-        (manualChange) => _pageChanged(tab, manualChange),
-      );
-      changed();
-      await tab.page!.ready.timeout(const Duration(seconds: 20));
+      await _loadPage(tab);
     } catch (e) {
       tab.error = e.toString();
       changed();
@@ -332,25 +327,9 @@ class Workspace extends ChangeNotifier {
     if (manual) presentations++;
     select(tab, manual: false);
     try {
-      final view = await api.appView(appId, tab.id, source: report['source']);
-      if (revision != _manualRevision || !tabs.contains(tab)) {
+      if (!await _loadPage(tab, revision: revision)) {
         throw StateError('View changed while opening the source.');
       }
-      final opened = tab;
-      tab.page = pages(
-        PageSpec(
-          id: tab.id,
-          appId: appId,
-          name: tab.name,
-          sessionId: browserSessionId,
-          relayOrigin: api.origin,
-          appView: view,
-          report: report,
-        ),
-        (manualChange) => _pageChanged(opened, manualChange),
-      );
-      changed();
-      await tab.page!.ready.timeout(const Duration(seconds: 20));
       if (focus != null && revision == _manualRevision) {
         final result = await tab.page!.present({
           'id': _uuid.v4(),
@@ -369,6 +348,36 @@ class Workspace extends ChangeNotifier {
     }
     changed();
     return tab;
+  }
+
+  /// Creates [tab]'s page from its app view and report, and waits for it to
+  /// load. Returns false, without a page, when the tab was closed or the view
+  /// changed after [revision] while the app view was requested.
+  Future<bool> _loadPage(WorkspaceTab tab, {int? revision}) async {
+    final appId = tab.appId!;
+    final report = tab.report;
+    final view = tab.isBrowser
+        ? null
+        : await api.appView(appId, tab.id, source: report?['source']);
+    if (!tabs.contains(tab) ||
+        (revision != null && revision != _manualRevision)) {
+      return false;
+    }
+    tab.page = pages(
+      PageSpec(
+        id: tab.id,
+        appId: appId,
+        name: tab.name,
+        sessionId: browserSessionId,
+        relayOrigin: api.origin,
+        appView: view,
+        report: report,
+      ),
+      (manualChange) => _pageChanged(tab, manualChange),
+    );
+    changed();
+    await tab.page!.ready.timeout(const Duration(seconds: 20));
+    return true;
   }
 
   Future<void> browserAction(String action) async {
@@ -722,68 +731,87 @@ class Workspace extends ChangeNotifier {
             if (context[key] != null) key: context[key],
         };
 
+  /// Adds every saved tab and selects the saved active one before any page
+  /// loads, then loads all pages together without selecting them, so the user
+  /// keeps whatever tab they choose meanwhile.
   Future<bool> restoreSession(Json saved) async {
-    final previousActive = active;
     final items = (saved['tabs'] as List).cast<Json>();
+    final loads = <Future<bool>>[];
     var complete = true;
     for (var index = 0; index < items.length; index++) {
       // A reconnect retries only unfinished tabs, preserving later user changes.
       if (_restoredTabs.containsKey(index)) continue;
       final item = items[index];
-      String? restoringId;
-      try {
-        if (item['appId'] == null) {
-          newTab();
-          _restoredTabs[index] = active!;
-          continue;
-        }
-        final app = apps.where((app) => app.id == item['appId']).firstOrNull;
-        if (app == null) {
-          throw StateError('App ${item['appId']} is unavailable.');
-        }
-        final existing = tabs
-            .where((tab) => tab.appId == item['appId'])
-            .firstOrNull;
-        if (existing != null && !existing.isBrowser) {
-          _restoredTabs[index] = existing;
-          continue;
-        }
-        newTab();
-        restoringId = active!.id;
-        final tab = item['source'] != null
-            ? await openSource(item['source'] as Json)
-            : await openApp(app);
-        if (tab.error != null) throw StateError(tab.error!);
-        if (tab.isBrowser) {
-          // A Browser tab that never left its start page has nothing to reopen.
-          if (item['url'] != null && item['url'] != 'about:blank') {
-            await tab.page!.browser!.navigate(item['url'] as String);
-          }
-        } else if (tab.report == null && item['context'] != null) {
-          final result = await tab.page!.presentOnCurrentView({
-            'id': _uuid.v4(),
-            'kind': 'present',
-            'intent': _viewIntent(item['context'] as Json),
-          });
-          if (result['status'] != 'applied') {
-            throw StateError(
-              result['error'] as String? ?? 'View restoration failed.',
-            );
-          }
-        }
-        _restoredTabs[index] = tab;
-      } catch (e) {
-        complete = false;
-        for (final tab in tabs.where((tab) => tab.id == restoringId).toList()) {
-          closeTab(tab);
-        }
-        error = 'Could not restore a tab: $e';
+      final appId = item['appId'] as String?;
+      if (appId == null) {
+        tabs.add(_restoredTabs[index] = WorkspaceTab());
+        continue;
       }
+      final app = apps.where((app) => app.id == appId).firstOrNull;
+      if (app == null) {
+        complete = false;
+        error = 'Could not restore a tab: App $appId is unavailable.';
+        continue;
+      }
+      final existing = app.isBrowser
+          ? null
+          : tabs.where((tab) => tab.appId == appId).firstOrNull;
+      if (existing != null) {
+        _restoredTabs[index] = existing;
+        continue;
+      }
+      // A source tab takes its name from the saved source, so it can open
+      // before its report is read.
+      final source = item['source'] as Json?;
+      final tab = WorkspaceTab(
+        appId: appId,
+        name: source?['title'] as String? ?? app.name,
+        isBrowser: app.isBrowser,
+      );
+      tabs.add(_restoredTabs[index] = tab);
+      loads.add(_restoreTab(index, item, tab));
     }
-    final selected = previousActive ?? _restoredTabs[saved['active']];
-    if (selected != null && tabs.contains(selected)) select(selected);
+    final selected = _restoredTabs[saved['active']] ?? tabs.lastOrNull;
+    if (active == null && selected != null && tabs.contains(selected)) {
+      select(selected);
+    }
     changed();
-    return complete;
+    final restored = await Future.wait(loads);
+    return complete && !restored.contains(false);
+  }
+
+  Future<bool> _restoreTab(int index, Json item, WorkspaceTab tab) async {
+    try {
+      final source = item['source'] as Json?;
+      if (source != null) tab.report = await api.readSource(source);
+      if (!await _loadPage(tab)) return true;
+      if (tab.isBrowser) {
+        // A Browser tab that never left its start page has nothing to reopen.
+        if (item['url'] != null && item['url'] != 'about:blank') {
+          await tab.page!.browser!.navigate(item['url'] as String);
+        }
+      } else if (tab.report == null && item['context'] != null) {
+        final result = await tab.page!.presentOnCurrentView({
+          'id': _uuid.v4(),
+          'kind': 'present',
+          'intent': _viewIntent(item['context'] as Json),
+        });
+        if (result['status'] != 'applied') {
+          throw StateError(
+            result['error'] as String? ?? 'View restoration failed.',
+          );
+        }
+      }
+      changed();
+      return true;
+    } catch (e) {
+      // A tab the user closed while it loaded stays closed.
+      if (!tabs.contains(tab)) return true;
+      _restoredTabs.remove(index);
+      error = 'Could not restore a tab: $e';
+      closeTab(tab);
+      return false;
+    }
   }
 
   @override

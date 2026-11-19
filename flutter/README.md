@@ -80,6 +80,7 @@ Desktop chat width is saved; phones use an overlay with a compact progress/Stop 
 Browser and app tabs retain their views until closed. Every start, including an
 update restart, reopens the previous tabs and their views, the conversation, the
 draft and the chat panel as it was left; the Mac window keeps its size and position.
+The last active tab shows first, and the other tabs load together in the background.
 A tab that cannot be restored is reported; **Reconnect** retries it during that run.
 All pages share WebKit's persistent website data, which keeps cookies between starts.
 
