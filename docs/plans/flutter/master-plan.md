@@ -28,7 +28,9 @@ The implemented workflows include the following.
 - Markdown, citations, saved revisions/highlights, activity, checkpoints and app search.
 - Browser back/forward/reload, context inclusion, desktop width persistence,
   phone progress/Stop controls and chat-only mode. On desktop the agent can
-  read a YouTube video's transcript from a Browser tab (`browser.transcript`).
+  read a YouTube video's transcript from a Browser tab (`browser.transcript`),
+  and a collapsible pane above the conversation shows it; selected transcript
+  text becomes the question's selection.
 - Background update downloads with progress, verified caches and manual
   install/restart. Flutter has its own release channel.
 - Every start restores the previous tabs and views, the draft, the chat panel
@@ -181,6 +183,6 @@ covers the Flutter shell. Final screen presentation and real pages remain unmeas
    saving and viewing; native screenshots and the live service's report folder are unverified.
 7. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 8. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
-9. Check `browser.transcript` in WKWebView on the Mac with a short and an hour-long YouTube video, note how long each page takes against the 7-second limit, then ask about one through the real agent. Its page script passed against live YouTube only in headless Chromium with a Safari user agent.
+9. Check `browser.transcript` in WKWebView on the Mac with a short and an hour-long YouTube video, note how long each page takes against the 7-second limit, then ask about one through the real agent. Its page script passed against live YouTube only in headless Chromium with a Safari user agent. In the transcript pane, check on the Mac: opening it loads the hour-long transcript and scrolls smoothly; a drag selection survives clicking into the composer and reaches the question; moving to another video reloads it; a newer selection on the page replaces the transcript's; it stays hidden for other pages and narrow windows, and still loads in chat-only mode. Only a fake page tests the pane.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

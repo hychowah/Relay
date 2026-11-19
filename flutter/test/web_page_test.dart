@@ -188,7 +188,7 @@ void main() {
     },
   );
 
-  test('a Browser transcript page arrives through the page channel', () async {
+  test('a Browser transcript arrives through the page channel', () async {
     final platform = TestWebPlatform();
     WebViewPlatform.instance = platform;
     final page = createWebPage(
@@ -207,8 +207,8 @@ void main() {
     controller.delegate.finished(controller.location);
     await page.ready;
 
-    Future<Json> answer(int offset, Json reply) async {
-      final result = page.browser!.transcript(offset);
+    Future<Json> answer(Json reply) async {
+      final result = page.browser!.loadTranscript();
       await pumpEventQueue();
       final id = RegExp(r'id:"(\d+)"').firstMatch(controller.scripts.last)![1];
       controller.channel.onMessageReceived(
@@ -219,23 +219,26 @@ void main() {
       return result;
     }
 
-    final video = {
+    final transcript = await answer({
       'data': {
         'url': 'u',
         'title': 'Video',
         'language': 'English',
         'segments': [
-          for (var i = 0; i < 1000; i++) {'time': '$i:00', 'text': 'x' * 100},
+          {'time': '0:01', 'text': 'Hello'},
+          {'time': '0:04', 'text': 'there'},
         ],
       },
-    };
-    final first = await answer(0, video);
-    expect(first['title'], 'Video');
-    final second = await answer(first['nextOffset'] as int, video);
-    expect(second['offset'], first['nextOffset']);
+    });
+    expect(transcript, {
+      'url': 'u',
+      'title': 'Video',
+      'language': 'English',
+      'text': '[0:01] Hello there',
+    });
 
     await expectLater(
-      answer(0, {'error': 'This video has no captions.'}),
+      answer({'error': 'This video has no captions.'}),
       throwsA(
         isA<StateError>().having(
           (error) => error.message,

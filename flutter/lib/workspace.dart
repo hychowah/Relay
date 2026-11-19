@@ -409,6 +409,7 @@ class Workspace extends ChangeNotifier {
   Future<void> send(
     String text, {
     ({String appId, Uint8List bytes})? capture,
+    String? selection,
   }) async {
     if (text.trim().isEmpty || busy) return;
     recorder.action('send message', {
@@ -452,7 +453,11 @@ class Workspace extends ChangeNotifier {
         await saveConversation(conversationId!);
       }
       final context = permitted && includeContext
-          ? tab?.page?.messageContext(tab.appId!, viewToken)
+          ? tab?.page?.messageContext(
+              tab.appId!,
+              viewToken,
+              selection: selection,
+            )
           : null;
       final source = context?.savedSource;
       if (source != null) await api.savedReport(source);

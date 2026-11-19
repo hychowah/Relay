@@ -7,6 +7,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import 'browser_connection.dart';
+import 'browser_transcript.dart';
 import 'relay_api.dart';
 import 'web_page.dart';
 import 'workspace.dart';
@@ -20,6 +22,7 @@ import 'workspace_style.dart';
 import 'workspace_tabs.dart';
 import 'region_capture.dart';
 import 'bug_reports.dart';
+import 'transcript_pane.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -190,6 +193,8 @@ class _RelayShellState extends State<RelayShell> {
   ({WorkspaceTab tab, ui.Image image, bool reopenChat})? selecting;
   late bool chatOpen = widget.initialChatOpen, savedChatOpen = chatOpen;
   bool chatOnly = false;
+  bool transcriptOpen = false;
+  ({String pane, String text, String page})? transcriptSelection;
   late double chatWidth = widget.initialChatWidth;
   int lastPresentation = 0;
   String? lastPageUrl;
@@ -304,7 +309,11 @@ class _RelayShellState extends State<RelayShell> {
     if (text.trim().isEmpty || w.busy) return;
     final attachment = capture;
     try {
-      await w.send(text, capture: attachment);
+      await w.send(
+        text,
+        capture: attachment,
+        selection: transcriptSelection?.text,
+      );
       if (mounted && capture == attachment) setState(() => capture = null);
       if (mounted && draft.text == text) {
         draft.clear();
@@ -622,7 +631,7 @@ class _RelayShellState extends State<RelayShell> {
       tween: Tween(end: target),
       duration: workspaceMotion(context),
       curve: Curves.easeOutCubic,
-      child: ExcludeFocus(excluding: !chatOpen, child: _chat()),
+      child: ExcludeFocus(excluding: !chatOpen, child: _chat(desktop)),
       builder: (context, value, chat) {
         // 0 is closed, 1 is docked (or a sheet), and 2 fills the workspace.
         final reveal = value.clamp(0.0, 1.0);
@@ -821,7 +830,7 @@ class _RelayShellState extends State<RelayShell> {
     child: Text(label),
   );
 
-  Widget _chat() => Material(
+  Widget _chat(bool desktop) => Material(
     color: Colors.white,
     child: Column(
       children: [
@@ -907,58 +916,108 @@ class _RelayShellState extends State<RelayShell> {
             ],
           ),
         ),
+        ..._transcript(desktop),
         Expanded(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 800),
-              child: ConversationMessages(
-                workspace: w,
-                controller: messagesScroll,
-                onSelected: _selectedConversation,
-              ),
-            ),
-          ),
-        ),
-        if (w.busy || w.status != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 8, 18, 4),
-            child: Row(
-              children: [
-                if (w.busy)
-                  const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 1.5),
-                  )
-                else
-                  const Icon(
-                    Icons.check_circle_outline,
-                    size: 14,
-                    color: accent,
-                  ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    w.status ?? 'Working…',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: muted),
+          child: Column(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 800),
+                    child: ConversationMessages(
+                      workspace: w,
+                      controller: messagesScroll,
+                      onSelected: _selectedConversation,
+                    ),
                   ),
                 ),
-              ],
-            ),
-          ),
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 800),
-            child: _composer(),
+              ),
+              if (w.busy || w.status != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 4),
+                  child: Row(
+                    children: [
+                      if (w.busy)
+                        const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 1.5),
+                        )
+                      else
+                        const Icon(
+                          Icons.check_circle_outline,
+                          size: 14,
+                          color: accent,
+                        ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          w.status ?? 'Working…',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12, color: muted),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 800),
+                  child: _composer(),
+                ),
+              ),
+            ],
           ),
         ),
       ],
     ),
   );
+
+  // Desktop only: the transcript of a YouTube video in the active Browser tab
+  // opens above the conversation, which keeps the lower half.
+  List<Widget> _transcript(bool desktop) {
+    final tab = w.active;
+    final browser = tab?.page?.browser;
+    final video = desktop && browser != null
+        ? youtubeVideoId(tab!.page!.url)
+        : null;
+    final pane = video != null && transcriptOpen ? '${tab!.id} $video' : null;
+    final onPage = tab?.page?.context?['selection'] as String? ?? '';
+    // A transcript selection applies only while its pane is showing and until
+    // the user selects something newer on the page; this runs before the
+    // composer below reads it.
+    if (transcriptSelection case final kept?
+        when kept.pane != pane || (onPage.isNotEmpty && onPage != kept.page)) {
+      transcriptSelection = null;
+    }
+    return [
+      if (video != null)
+        TranscriptBar(
+          open: transcriptOpen,
+          onToggle: () => setState(() => transcriptOpen = !transcriptOpen),
+        ),
+      if (pane != null)
+        Expanded(
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: line)),
+            ),
+            child: TranscriptPane(
+              key: ValueKey(pane),
+              browser: browser!,
+              onSelected: (text) => setState(
+                () => transcriptSelection = text == null
+                    ? null
+                    : (pane: pane, text: text, page: onPage),
+              ),
+            ),
+          ),
+        ),
+    ];
+  }
 
   Widget _composer() => Padding(
     padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
@@ -1008,11 +1067,13 @@ class _RelayShellState extends State<RelayShell> {
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            (w.active!.page!.context?['selection'] as String? ??
-                                        '')
-                                    .isNotEmpty
-                                ? '“${w.active!.page!.context!['selection']}”'
-                                : w.active!.title,
+                            switch (transcriptSelection?.text ??
+                                w.active!.page!.context?['selection']) {
+                              final String selection
+                                  when selection.isNotEmpty =>
+                                '“$selection”',
+                              _ => w.active!.title,
+                            },
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(fontSize: 11, color: accent),

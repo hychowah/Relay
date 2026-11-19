@@ -349,9 +349,9 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     return result;
   }
 
-  // Desktop only. Every page asks YouTube again for the video the tab shows.
+  // Desktop only. Each call asks YouTube again for the video the tab shows.
   @override
-  Future<Json> transcript(int offset) async {
+  Future<Json> loadTranscript() async {
     final id = '${++_transcriptRequests}';
     final reply = _transcriptReplies[id] = Completer<Json>();
     try {
@@ -362,7 +362,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
         const Duration(seconds: 7),
         onTimeout: () => throw StateError('YouTube did not answer in time.'),
       );
-      return transcriptPage(transcriptFromSegments(data), offset);
+      return transcriptFromSegments(data);
     } finally {
       _transcriptReplies.remove(id);
     }
@@ -584,8 +584,12 @@ class _ReportPage extends _HostedPage {
   }
 
   @override
-  MessageContext? messageContext(String appId, String? token) {
-    final context = this.context!;
+  MessageContext? messageContext(
+    String appId,
+    String? token, {
+    String? selection,
+  }) {
+    final context = {...this.context!, 'selection': ?selection};
     final source = context['source'] as Json?;
     return (
       fields: {

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -42,12 +43,16 @@ class FakePage extends PageSurface with BrowserSurface {
   @override
   String get title => spec.name;
   @override
-  String get url => 'https://example.com/desk';
+  String url = 'https://example.com/desk';
+  Json? transcript;
+  StateError? transcriptError;
+  int transcriptLoads = 0;
+  String selection = 'selected passage';
   @override
   Json get context => {
     'viewId': spec.browser ? 'browser' : 'room',
     'generation': 5,
-    'selection': 'selected passage',
+    'selection': selection,
     'state': spec.browser
         ? {'sessionId': spec.sessionId, 'tabId': spec.id}
         : {'zone': 'work'},
@@ -61,7 +66,12 @@ class FakePage extends PageSurface with BrowserSurface {
   @override
   Future<Json> read() async => {'text': 'Desk: 150 by 80 cm', 'url': url};
   @override
-  Future<Json> transcript(int offset) async => {};
+  Future<Json> loadTranscript() async {
+    transcriptLoads++;
+    if (transcriptError case final error?) throw error;
+    return transcript!;
+  }
+
   @override
   Future<void> navigate(String text) async {
     changed(true);
@@ -760,6 +770,129 @@ void main() {
     expect(f.w.tabs.length, 1);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets(
+    'a YouTube Browser tab offers a selectable transcript beside chat',
+    (tester) async {
+      final f = Fixture();
+      await f.w.start();
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await f.w.openApp(f.w.apps[0]);
+      final page = f.pages.last;
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, initialDraft: '', saveDraft: (_) async {}),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Transcript'), findsNothing);
+
+      page.url = 'https://www.youtube.com/watch?v=video';
+      f.w.changed();
+      await tester.pumpAndSettle();
+      expect(find.text('Transcript'), findsOneWidget);
+      expect(page.transcriptLoads, 0);
+
+      page.transcriptError = StateError('This video has no captions.');
+      await tester.tap(find.text('Transcript'));
+      await tester.pumpAndSettle();
+      expect(find.text('This video has no captions.'), findsOneWidget);
+      page
+        ..transcriptError = null
+        ..transcript = {
+          'language': 'English',
+          'text': '[0:01] Hello there\n[0:40] Second part',
+        };
+      await tester.tap(find.text('Retry'));
+      await tester.pumpAndSettle();
+      expect(page.transcriptLoads, 2);
+      final paragraph = find.text('[0:40] Second part');
+      final panel = tester.getRect(
+        find.byKey(const ValueKey('conversation-panel')),
+      );
+      expect(tester.getCenter(paragraph).dy, lessThan(panel.center.dy));
+
+      final drag = await tester.startGesture(
+        tester.getTopLeft(paragraph) + const Offset(1, 5),
+        kind: PointerDeviceKind.mouse,
+      );
+      await drag.moveTo(tester.getTopRight(paragraph) + const Offset(-1, 5));
+      await drag.up();
+      await tester.pumpAndSettle();
+      expect(find.text('“[0:40] Second part”'), findsOneWidget);
+
+      // Focus moving to the composer keeps the transcript selection.
+      await tester.tap(find.byType(TextField).last);
+      await tester.enterText(find.byType(TextField).last, 'What happens here?');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(
+        f.sent!['appContext']['surface']['selection'],
+        '[0:40] Second part',
+      );
+      await tester.tapAt(
+        tester.getCenter(paragraph),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('“selected passage”'), findsOneWidget);
+
+      await tester.tap(find.text('Transcript'));
+      await tester.pumpAndSettle();
+      expect(find.text('[0:40] Second part'), findsNothing);
+      expect(find.text('“selected passage”'), findsOneWidget);
+      await tester.enterText(find.byType(TextField).last, 'And now?');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(f.sent!['appContext']['surface']['selection'], 'selected passage');
+
+      await tester.tap(find.text('Transcript'));
+      await tester.pumpAndSettle();
+      expect(find.text('[0:40] Second part'), findsOneWidget);
+
+      // A newer selection on the page replaces the transcript's.
+      final again = await tester.startGesture(
+        tester.getTopLeft(paragraph) + const Offset(1, 5),
+        kind: PointerDeviceKind.mouse,
+      );
+      await again.moveTo(tester.getTopRight(paragraph) + const Offset(-1, 5));
+      await again.up();
+      await tester.pumpAndSettle();
+      expect(find.text('“[0:40] Second part”'), findsOneWidget);
+      page.selection = 'newer page text';
+      f.w.changed();
+      await tester.pumpAndSettle();
+      expect(find.text('“newer page text”'), findsOneWidget);
+      page.selection = 'selected passage';
+
+      // The expanded conversation keeps the transcript.
+      await tester.tap(find.byTooltip('Conversation options'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Expand conversation'));
+      await tester.pumpAndSettle();
+      expect(find.text('[0:40] Second part'), findsOneWidget);
+      await tester.tap(find.byTooltip('Conversation options'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Show workspace'));
+      await tester.pumpAndSettle();
+      expect(find.text('[0:40] Second part'), findsOneWidget);
+
+      page.url = 'https://www.youtube.com/';
+      f.w.changed();
+      await tester.pumpAndSettle();
+      expect(find.text('Transcript'), findsNothing);
+      expect(find.text('“selected passage”'), findsOneWidget);
+
+      page.url = 'https://www.youtube.com/watch?v=video';
+      tester.view.physicalSize = const Size(390, 844);
+      f.w.changed();
+      await tester.pumpAndSettle();
+      expect(find.text('Transcript'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets('screenshot selection opens inside the active tab beside chat', (
     tester,

@@ -49,12 +49,21 @@ abstract class PageSurface {
   Future<Json> presentOnCurrentView(Json command) =>
       present({...command, 'expectedGeneration': context?['generation'] ?? 0});
 
-  MessageContext? messageContext(String appId, String? token) {
+  /// A [selection] chosen outside the page replaces the page's own.
+  MessageContext? messageContext(
+    String appId,
+    String? token, {
+    String? selection,
+  }) {
     final surface = context;
     if (surface == null) return null;
     return (
       fields: {
-        'appContext': {'appId': appId, 'viewToken': token, 'surface': surface},
+        'appContext': {
+          'appId': appId,
+          'viewToken': token,
+          'surface': {...surface, 'selection': ?selection},
+        },
       },
       savedSource: null,
       anchorsView: true,
@@ -67,7 +76,7 @@ abstract class PageSurface {
 
 mixin BrowserSurface {
   Future<Json> read();
-  Future<Json> transcript(int offset);
+  Future<Json> loadTranscript();
   Future<void> navigate(String text);
   bool get canGoBack => false;
   bool get canGoForward => false;

@@ -2,8 +2,9 @@ import 'dart:convert';
 
 import 'relay_api.dart';
 
-// Desktop Browser only: the agent's browser.transcript operation. YouTube is
-// the only supported site, and this script is its only site-specific code.
+// Desktop Browser only: the agent's browser.transcript operation and the chat
+// panel's transcript pane. YouTube is the only supported site; this file holds
+// all of its site-specific code.
 //
 // The page's own transcript panel request (get_panel) is replayed with the
 // user's session. Caption file URLs need a player-made proof-of-origin token,
@@ -47,6 +48,17 @@ const youtubeTranscriptScript = r'''void (async()=>{
    language:track.name?.simpleText||track.languageCode,segments}});
  }catch(error){send({error:String(error?.message||error)})}
 })()''';
+
+/// Identifies a YouTube video page, where the chat panel offers its transcript.
+String? youtubeVideoId(String url) {
+  final uri = Uri.tryParse(url);
+  if (uri == null ||
+      !RegExp(r'(^|\.)youtube\.com$').hasMatch(uri.host) ||
+      uri.path != '/watch') {
+    return null;
+  }
+  return uri.queryParameters['v'];
+}
 
 /// Joins caption segments into paragraphs, each starting with its time.
 Json transcriptFromSegments(Json data) {
