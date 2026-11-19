@@ -33,7 +33,10 @@ browser features such as embedded PDF viewing. This gives the app ordinary
 cross-origin iframe privileges, including forms, downloads and user-initiated
 top-level navigation; use it only for trusted registrations. The separate-origin
 requirement still applies. App manifests and agent calls cannot enable this flag.
-Generated content does not inherit this trust.
+Generated content does not inherit this trust. The default sandbox also ignores
+page dialogs (`confirm()` answers false at once) and blocks form submission, so
+an app that needs either must be registered as trusted
+(`tests/app-frame-dialogs.test.ts`).
 
 The [room-layout example](../examples/room-layout/README.md) is a complete v2 app
 without document APIs. Research Web implements v2 plus its existing v1 evidence
