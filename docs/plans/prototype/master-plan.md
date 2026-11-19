@@ -324,7 +324,7 @@ Tailscale checks for Relay and Research Web remain open prototype exits.
 
 Defer read/write effects to the first write, access scopes and versioned migrations to projects, and network policy injection to the Docker executor. Revisit server acknowledgement checks if bridge ownership changes, and new tool statuses or a run-oriented harness when existing lifecycles fall short.
 
-The [Flutter handoff](../flutter/master-plan.md#next) covers workspace transitions, agent comments and selection/capture testing. On the next preview teardown, use the [worktree removal command](../../../flutter/README.md#publish-a-worktree-test-build).
+The [Flutter handoff](../flutter/master-plan.md#next) covers everyday tab restoration, workspace transitions, agent comments and selection/capture testing. On the next preview teardown, use the [worktree removal command](../../../flutter/README.md#publish-a-worktree-test-build).
 
 1. Trial the external stock adapters project on the desktop clients
    with approved live registrations. Verify a sourced two-app question on the

@@ -12,6 +12,8 @@ class MainFlutterWindow: NSWindow {
     self.setContentSize(NSSize(width: 1280, height: 800))
     self.minSize = NSSize(width: 720, height: 600)
     self.center()
+    // AppKit reopens the window at the size and position it was last left.
+    self.setFrameAutosaveName("RelayMainWindow")
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 

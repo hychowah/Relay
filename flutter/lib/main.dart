@@ -24,6 +24,9 @@ Future<void> main() async {
   final prefs = await SharedPreferences.getInstance();
   final device = prefs.getString('device') ?? const Uuid().v4();
   await prefs.setString('device', device);
+  // Open tabs. The key keeps its first name, from when only an update restart
+  // saved them, so tabs survive updating from or returning to an older build.
+  final session = prefs.getString('updateSession');
   final workspace = Workspace(
     api: RelayApi(
       Uri.parse(
@@ -36,11 +39,9 @@ Future<void> main() async {
     deviceId: device,
     pages: createWebPage,
     conversationId: prefs.getString('conversation'),
-    pendingSession: prefs.getString('updateSession') == null
-        ? null
-        : jsonDecode(prefs.getString('updateSession')!) as Json,
-    sessionRestored: () async {
-      await prefs.remove('updateSession');
+    pendingSession: session == null ? null : jsonDecode(session) as Json,
+    storeSession: (session) async {
+      await prefs.setString('updateSession', jsonEncode(session));
     },
     saveConversation: (id) async {
       if (id == null) {
@@ -77,18 +78,14 @@ Future<void> main() async {
     RelayApp(
       workspace: workspace,
       updates: updates,
-      saveSession: () async {
-        if (workspace.pendingSession == null) {
-          await prefs.setString(
-            'updateSession',
-            jsonEncode(workspace.session()),
-          );
-        }
-      },
       initialDraft: prefs.getString('draft') ?? '',
       initialChatWidth: prefs.getDouble('chatWidth') ?? .30,
       saveChatWidth: (width) async {
         await prefs.setDouble('chatWidth', width);
+      },
+      initialChatOpen: prefs.getBool('chatOpen') ?? true,
+      saveChatOpen: (open) async {
+        await prefs.setBool('chatOpen', open);
       },
       saveDraft: (text) async {
         await prefs.setString('draft', text);
@@ -106,19 +103,21 @@ class RelayApp extends StatelessWidget {
     this.initialDraft = '',
     this.initialChatWidth = .30,
     this.saveChatWidth,
+    this.initialChatOpen = true,
+    this.saveChatOpen,
     required this.saveDraft,
     this.onClose,
     this.updates,
-    this.saveSession,
   });
   final Workspace workspace;
   final String initialDraft;
   final double initialChatWidth;
   final Future<void> Function(double)? saveChatWidth;
+  final bool initialChatOpen;
+  final Future<void> Function(bool)? saveChatOpen;
   final Future<void> Function(String) saveDraft;
   final VoidCallback? onClose;
   final AppUpdates? updates;
-  final Future<void> Function()? saveSession;
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Relay Flutter — experiment',
@@ -143,10 +142,11 @@ class RelayApp extends StatelessWidget {
       initialDraft: initialDraft,
       initialChatWidth: initialChatWidth,
       saveChatWidth: saveChatWidth,
+      initialChatOpen: initialChatOpen,
+      saveChatOpen: saveChatOpen,
       saveDraft: saveDraft,
       onClose: onClose,
       updates: updates,
-      saveSession: saveSession,
     ),
   );
 }
@@ -158,19 +158,21 @@ class RelayShell extends StatefulWidget {
     required this.initialDraft,
     this.initialChatWidth = .30,
     this.saveChatWidth,
+    this.initialChatOpen = true,
+    this.saveChatOpen,
     required this.saveDraft,
     this.onClose,
     this.updates,
-    this.saveSession,
   });
   final Workspace workspace;
   final String initialDraft;
   final double initialChatWidth;
   final Future<void> Function(double)? saveChatWidth;
+  final bool initialChatOpen;
+  final Future<void> Function(bool)? saveChatOpen;
   final Future<void> Function(String) saveDraft;
   final VoidCallback? onClose;
   final AppUpdates? updates;
-  final Future<void> Function()? saveSession;
   @override
   State<RelayShell> createState() => _RelayShellState();
 }
@@ -183,7 +185,8 @@ class _RelayShellState extends State<RelayShell> {
   Timer? saveTimer;
   ({String appId, Uint8List bytes})? capture;
   bool capturing = false;
-  bool chatOpen = true, chatOnly = false;
+  late bool chatOpen = widget.initialChatOpen, savedChatOpen = chatOpen;
+  bool chatOnly = false;
   late double chatWidth = widget.initialChatWidth;
   int lastPresentation = 0;
   String? lastPageUrl;
@@ -348,7 +351,7 @@ class _RelayShellState extends State<RelayShell> {
                     );
                     saveTimer?.cancel();
                     await widget.saveDraft(draft.text);
-                    await widget.saveSession?.call();
+                    await w.saveSession();
                   });
                 },
               ),
@@ -374,6 +377,11 @@ class _RelayShellState extends State<RelayShell> {
     if (url != lastPageUrl) {
       lastPageUrl = url;
       address.text = url == 'about:blank' ? '' : url ?? '';
+    }
+    // Several controls open or close chat; the panel reopens as it was left.
+    if (chatOpen != savedChatOpen) {
+      savedChatOpen = chatOpen;
+      widget.saveChatOpen?.call(chatOpen);
     }
     return Scaffold(
       body: SafeArea(
