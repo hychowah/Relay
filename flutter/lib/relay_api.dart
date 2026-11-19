@@ -159,8 +159,11 @@ class RelayApi {
     return items.cast<Json>().map(Conversation.fromJson).toList();
   }
 
-  Future<String> createConversation(String? botId) async =>
-      (await _request<Json>('/api/conversations', {'botId': botId}))['id']
+  Future<String> createConversation(String? botId, String? effort) async =>
+      (await _request<Json>('/api/conversations', {
+            'botId': botId,
+            'reasoningEffort': effort,
+          }))['id']
           as String;
   Future<void> setEffort(String id, String? effort) =>
       _request('/api/conversations/$id/settings', {'reasoningEffort': effort});

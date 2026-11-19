@@ -63,6 +63,13 @@ class Workspace extends ChangeNotifier {
   Json provider = {};
   List<Json> bots = [];
   String? selectedBotId;
+
+  /// Thinking effort chosen before the first message; the conversation is
+  /// saved with it when that message is sent.
+  String? draftEffort;
+  String? get effort => conversationId == null
+      ? draftEffort
+      : snapshot?.conversation?.reasoningEffort;
   Json? get activeBot =>
       bots.where((bot) => bot['id'] == selectedBotId).firstOrNull;
   List<WorkspaceApp> get allowedApps => selectedBotId == null
@@ -170,7 +177,11 @@ class Workspace extends ChangeNotifier {
 
   Future<void> changeEffort(String? effort) async {
     recorder.action('change thinking effort', {'effort': effort});
-    if (conversationId == null) await newConversation();
+    if (conversationId == null) {
+      draftEffort = effort;
+      changed();
+      return;
+    }
     await api.setEffort(conversationId!, effort);
     await refresh();
   }
@@ -433,7 +444,11 @@ class Workspace extends ChangeNotifier {
         }
       }
       if (conversationId == null) {
-        conversationId = await api.createConversation(selectedBotId);
+        conversationId = await api.createConversation(
+          selectedBotId,
+          draftEffort,
+        );
+        draftEffort = null;
         await saveConversation(conversationId!);
       }
       final context = permitted && includeContext
@@ -488,9 +503,10 @@ class Workspace extends ChangeNotifier {
     recorder.action('new conversation', {
       'botId': changeBot ? botId : selectedBotId,
     });
-    final id = await api.createConversation(changeBot ? botId : selectedBotId);
+    // The conversation is saved when its first message is sent, so an empty
+    // one never reaches history or needs cleaning up.
     selectedBotId = changeBot ? botId : selectedBotId;
-    await selectConversation(id);
+    await selectConversation(null);
   }
 
   Future<void> selectConversation(String? id) async {
@@ -498,6 +514,7 @@ class Workspace extends ChangeNotifier {
     _manual();
     _conversationRevision++;
     conversationId = id;
+    draftEffort = null;
     snapshot = null;
     status = null;
     error = null;

@@ -78,7 +78,13 @@ void main() {
             result = {'apps': []};
           } else if (path == '/api/conversations' && request.method == 'POST') {
             final id = 'new-${counter++}';
-            result = records[id] = {'id': id, 'title': 'New conversation'};
+            result = records[id] = {
+              'id': id,
+              'title': 'New conversation',
+              'reasoningEffort': jsonDecode(request.body)['reasoningEffort'],
+            };
+          } else if (path.endsWith('/messages')) {
+            result = {'id': 'run-1'};
           } else if (path == '/api/conversations') {
             query = request.url.queryParameters['q'];
             result = records.values
@@ -155,7 +161,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('New conversation'));
     await tester.pumpAndSettle();
+    expect(w.conversationId, isNull);
+    expect(records.keys, ['saved'], reason: 'An unsent chat is not saved');
+    await w.changeEffort('high');
+    expect(records.keys, ['saved']);
+    await w.send('Hello');
+    await tester.pumpAndSettle();
     expect(w.conversationId, 'new-1');
+    expect(records['new-1']!['reasoningEffort'], 'high');
+    expect(w.effort, 'high');
     expect(find.text('Reply for new-1'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });

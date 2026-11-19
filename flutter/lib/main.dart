@@ -1136,11 +1136,7 @@ class _RelayShellState extends State<RelayShell> {
                           const Icon(Icons.psychology_outlined, size: 15),
                           const SizedBox(width: 4),
                           Text(
-                            effortNames[w
-                                    .snapshot
-                                    ?.conversation
-                                    ?.reasoningEffort] ??
-                                'Thinking',
+                            effortNames[w.effort] ?? 'Thinking',
                             style: const TextStyle(fontSize: 11),
                           ),
                           const Icon(Icons.expand_more, size: 14),
@@ -1155,9 +1151,7 @@ class _RelayShellState extends State<RelayShell> {
                       }.entries)
                         MenuItemButton(
                           leadingIcon: Icon(
-                            (w.snapshot?.conversation?.reasoningEffort ??
-                                        'inherit') ==
-                                    entry.key
+                            (w.effort ?? 'inherit') == entry.key
                                 ? Icons.check
                                 : null,
                             size: 16,

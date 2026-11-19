@@ -208,13 +208,18 @@ void main() {
     await frame();
     expect(workspace.tabs.contains(browser), isFalse);
     final retainedPage = workspace.active?.page;
+    final saved = await workspace.conversations();
     await complete(workspace.newConversation());
-    final conversation = workspace.conversationId!;
+    expect(workspace.conversationId, isNull);
     expect(
-      (await workspace.conversations(query: 'New conversation'))
-          .any((entry) => entry.id == conversation),
-      isTrue,
+      (await workspace.conversations()).length,
+      saved.length,
+      reason: 'An unsent new conversation must not be saved',
     );
+    final conversation = await complete(
+      workspace.api.createConversation(null, null),
+    );
+    await complete(workspace.selectConversation(conversation));
     await complete(workspace.trashConversation(conversation));
     expect(workspace.conversationId, isNull);
     expect(
