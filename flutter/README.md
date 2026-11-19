@@ -82,7 +82,9 @@ Desktop chat width is saved; phones use an overlay with a compact progress/Stop 
 **Workspace menu → Appearance** sets Relay's own screens to System (the default),
 Light or Dark, saved per device. System follows the device's appearance as it
 changes. Pages from apps and websites keep their own look, and the Mac title bar
-follows macOS.
+follows macOS. **Newest tab first**, in the same menu, off by default and saved per device,
+slides each tab you or the agent open, new or already open, to the left end of the
+strip. Clicking a tab only switches to it.
 Browser and app tabs retain their views until closed. Every start, including an
 update restart, reopens the previous tabs and their views, the conversation, the
 draft and the chat panel as it was left; the Mac window keeps its size and position.
@@ -94,6 +96,15 @@ tabs side by side; click a pane to select it. Drag the divider between them to
 resize the panes, or double-click it to return to half and half. Click the
 button in the middle of the divider, drag a split tab back onto the tab strip,
 or close one, to end the split. Narrow windows show only the selected tab.
+
+On macOS only, a page in a Browser tab that opens a new window on a user action,
+such as **Continue with Google**, gets its own popup window titled with the
+site's host, beside its tab. The page and its popup can talk to each other and
+share sign-in. The popup closes when its page closes it, when the user closes
+it, or when its tab or the main window closes. Popup pages follow the Browser's
+address rule, and windows that pages open without a user action stay blocked.
+App views keep sending a new window's address to the default browser. A page
+dialog raised inside a popup window is not shown.
 
 On macOS, select page or PDF text and ask a question with page context enabled.
 With a YouTube video open in a Browser tab, ask about the video: the agent reads
@@ -112,6 +123,15 @@ Image input currently uses Claude. The service keeps a sent screenshot with its
 message, so reopening the chat shows it again; Trash hides it and the 24-hour
 Trash cleanup deletes it with the conversation.
 
+### Mac checks
+
+`npm run test:mac -- popup_windows_test.dart`, from the repository root on WSL,
+runs that self-contained integration test on the Mac against real WKWebViews,
+with its own loopback fixture. Like the smoothness suite below, it builds a
+temporary copy under its own bundle id, `app.relay.flutterTest`, and removes
+the copy and the test app's data afterwards. It refuses `workflow_test.dart`,
+which uses the Flutter deployment's records.
+
 ### Measure performance
 
 Run these from the repository root on WSL now and then; they have no pass or
@@ -123,14 +143,12 @@ switching, the transcript pane, scrolling a 2,000-message conversation and a
 streaming reply. Results go to `tmp/perf/ui-*.json` and are compared with the
 last run. They cover only Flutter's part of each frame.
 
-`npm run perf:stress` uses the same test app for about ten minutes. It repeats
-opening and closing ten web tabs, switching through 20 conversations, opening
-the transcript pane and polling a 2,000-message conversation, and reports
-memory growth per cycle after warm-up. Growth repeated across runs means a
-leak; a few MB per cycle or minute either way is garbage-collector noise. It then
-streams a long reply into a 10,000-message conversation with 15 tabs open while
-scrolling and switching tabs, and reports smoothness and memory. Results go to
-`tmp/perf/stress-*.json`.
+`npm run perf:stress` uses the same test app for about five minutes. It repeats
+opening and closing ten web tabs, switching through 20 conversations and
+opening the transcript pane, and reports memory growth per cycle after warm-up.
+It then streams a long reply into a 10,000-message conversation with 15 tabs
+open while scrolling and switching tabs, and reports smoothness and memory.
+Results go to `tmp/perf/stress-*.json`.
 
 `npm run perf:mem` reads the memory of the installed app and its WebKit
 processes, adds it to `tmp/perf/mem.jsonl` and shows recent readings; run it

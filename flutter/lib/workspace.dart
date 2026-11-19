@@ -36,6 +36,8 @@ class Workspace extends ChangeNotifier {
     this.pendingSession,
     this.storeSession,
     required this.saveConversation,
+    this.newestTabFirst = false,
+    this.saveNewestTabFirst,
   }) {
     api.recorder = recorder;
   }
@@ -55,6 +57,10 @@ class Workspace extends ChangeNotifier {
   final String deviceId;
   final PageFactory pages;
   final Future<void> Function(String?) saveConversation;
+
+  /// A tab the user or agent opens moves to the left end of the strip.
+  bool newestTabFirst;
+  final Future<void> Function(bool)? saveNewestTabFirst;
   final String windowId = _uuid.v4(), browserSessionId = _uuid.v4();
   final tabs = <WorkspaceTab>[];
   List<WorkspaceApp> apps = [];
@@ -219,7 +225,18 @@ class Workspace extends ChangeNotifier {
     active?.token = _uuid.v4();
   }
 
-  void select(WorkspaceTab tab, {bool manual = true}) {
+  void setNewestTabFirst(bool value) {
+    recorder.action('newest tab first', {'on': value});
+    newestTabFirst = value;
+    unawaited(saveNewestTabFirst?.call(value));
+    changed();
+  }
+
+  /// [opened] marks a tab the user or agent opened, which moves to the left
+  /// end with [newestTabFirst]. Clicking a tab, restoring, closing and split
+  /// changes keep the order, so tabs do not move under the mouse.
+  void select(WorkspaceTab tab, {bool manual = true, bool opened = false}) {
+    if (opened && newestTabFirst && tabs.remove(tab)) tabs.insert(0, tab);
     if (manual) _manual();
     final token = active?.token ?? tab.token;
     active = tab;
@@ -271,7 +288,7 @@ class Workspace extends ChangeNotifier {
     recorder.action('new tab');
     final tab = WorkspaceTab();
     tabs.add(tab);
-    select(tab);
+    select(tab, opened: true);
   }
 
   void closeTab(WorkspaceTab tab) {
@@ -322,7 +339,7 @@ class Workspace extends ChangeNotifier {
       }
       if (existing.error == null &&
           !(requireAppView && existing.report != null)) {
-        select(existing, manual: manual);
+        select(existing, manual: manual, opened: true);
         return existing;
       }
       existing.page?.dispose();
@@ -346,7 +363,7 @@ class Workspace extends ChangeNotifier {
         _replaceInSplit(blank, tab);
       }
     }
-    select(tab, manual: manual);
+    select(tab, manual: manual, opened: true);
     try {
       await _loadPage(tab);
     } catch (e) {
@@ -392,7 +409,7 @@ class Workspace extends ChangeNotifier {
     tab.report = report;
     tab.error = null;
     if (manual) presentations++;
-    select(tab, manual: false);
+    select(tab, manual: false, opened: true);
     try {
       if (!await _loadPage(tab, revision: revision)) {
         throw StateError('View changed while opening the source.');

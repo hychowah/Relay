@@ -22,9 +22,6 @@ const tabCycles = 6;
 const conversations = 20;
 const conversationCycles = 6;
 const transcriptCycles = 6;
-const pollConversationMessages = 2000;
-const pollMinutes = 5;
-const pollReadingSeconds = 5;
 const idleSeconds = 3; // before each end reading, so memory can be released
 const stressMessages = 10000;
 const stressTabs = 15;
@@ -43,7 +40,6 @@ void main() {
         apps: stressTabs,
         conversations: {
           for (var i = 0; i < conversations; i++) 'c$i': 20 + i * 20,
-          'long': pollConversationMessages,
         },
         streamHistory: stressMessages,
         streamSeconds: stressStreamSeconds,
@@ -94,10 +90,11 @@ void main() {
       workspace.newTab();
       ends.add(await idleReading());
     }
-    memory['Open and close $tabsPerCycle web tabs'] = {
-      ...memorySummary(start, ends, others: during),
-      'cycles': tabCycles,
-    };
+    memory['Open and close $tabsPerCycle web tabs'] = memorySummary(
+      start,
+      ends,
+      others: during,
+    );
     expect(workspace.error, isNull);
 
     // Switching through conversations of 20 to 400 messages.
@@ -109,10 +106,10 @@ void main() {
       }
       ends.add(await idleReading());
     }
-    memory['Switch through $conversations conversations'] = {
-      ...memorySummary(start, ends),
-      'cycles': conversationCycles,
-    };
+    memory['Switch through $conversations conversations'] = memorySummary(
+      start,
+      ends,
+    );
 
     // Opening and closing the transcript pane of an hour-long video.
     await workspace.openApp(app(WorkspaceApp.browserId));
@@ -127,31 +124,11 @@ void main() {
       await tester.tap(find.text('Transcript'));
       ends.add(await idleReading());
     }
-    memory['Open and close the transcript pane'] = {
-      ...memorySummary(start, ends, others: during),
-      'cycles': transcriptCycles,
-    };
-
-    // A long conversation left open and polled every second.
-    await showConversation('long');
-    start = await idleReading();
-    ends = [];
-    final minutes = <double>[];
-    final clock = Stopwatch()..start();
-    for (var k = 1; k <= pollMinutes * 60 ~/ pollReadingSeconds; k++) {
-      await pause(k * pollReadingSeconds * 1000 - clock.elapsedMilliseconds);
-      ends.add(await sampleMemory());
-      minutes.add(clock.elapsedMilliseconds / 60000);
-    }
-    memory['Poll a $pollConversationMessages-message conversation'] = {
-      ...memorySummary(
-        start,
-        ends,
-        at: minutes,
-        warmUp: 60 ~/ pollReadingSeconds,
-      ),
-      'minutes': pollMinutes,
-    };
+    memory['Open and close the transcript pane'] = memorySummary(
+      start,
+      ends,
+      others: during,
+    );
     expect(workspace.error, isNull);
 
     // Stress: a long reply streaming into a 10,000-message conversation with

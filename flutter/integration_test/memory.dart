@@ -12,6 +12,7 @@ double total(MemorySample sample) => sample.app + sample.webKit;
 /// WebKit's GPU, Networking and WebContent processes run as XPC services in
 /// the app's own launchd domain, which `launchctl print pid/<pid>` lists
 /// without root. Other apps' WebKit processes are in their own domains.
+/// tools/perf-mem.ts reads the installed app the same way; keep them in step.
 List<int> webKitPids(String launchctl) => [
   for (final match in RegExp(
     r'^\s*(\d+)\s+\S+\s+com\.apple\.WebKit\.',
@@ -56,39 +57,36 @@ Future<MemorySample> sampleMemory() async {
 
 double _round(num value) => (value * 10).round() / 10;
 
-/// Least-squares slope of [ys] over [xs].
-double _slope(List<double> xs, List<double> ys) {
-  final mx = xs.reduce((a, b) => a + b) / xs.length;
+/// Least-squares slope of [ys] over their positions, in units per reading.
+double _slope(List<double> ys) {
+  final mx = (ys.length - 1) / 2;
   final my = ys.reduce((a, b) => a + b) / ys.length;
   var num = 0.0, den = 0.0;
-  for (var i = 0; i < xs.length; i++) {
-    num += (xs[i] - mx) * (ys[i] - my);
-    den += (xs[i] - mx) * (xs[i] - mx);
+  for (var i = 0; i < ys.length; i++) {
+    num += (i - mx) * (ys[i] - my);
+    den += (i - mx) * (i - mx);
   }
   return num / den;
 }
 
+const _warmUp = 2;
+
 /// Summarizes a repeated action: [start] before it, [ends] after each cycle
-/// at times [at] (cycle numbers, or minutes), and [others] taken during it.
-/// Growth is the slope of the end readings after the first [warmUp] of them,
-/// so a leak shows as steady growth rather than a high peak. Growth needs at
-/// least two readings after the warm-up.
+/// and [others] taken during it. Growth is the slope of the end readings
+/// after the first two, which are a warm-up, so a leak shows as steady growth
+/// rather than a high peak. Growth needs at least two readings after them.
 Map<String, num> memorySummary(
   MemorySample start,
   List<MemorySample> ends, {
   List<MemorySample> others = const [],
-  List<double>? at,
-  int warmUp = 2,
 }) {
-  final xs = at ?? [for (var i = 1; i <= ends.length; i++) i.toDouble()];
-  double growth(double Function(MemorySample) value) => _round(
-    _slope(xs.sublist(warmUp), [for (final s in ends.skip(warmUp)) value(s)]),
-  );
+  double growth(double Function(MemorySample) value) =>
+      _round(_slope([for (final s in ends.skip(_warmUp)) value(s)]));
   return {
     'start_mb': _round(total(start)),
     'peak_mb': _round([start, ...ends, ...others].map(total).reduce(max)),
     'end_mb': _round(total(ends.last)),
-    if (ends.length >= warmUp + 2) ...{
+    if (ends.length >= _warmUp + 2) ...{
       'growth_mb': growth(total),
       'app_growth_mb': growth((s) => s.app),
       'webkit_growth_mb': growth((s) => s.webKit),

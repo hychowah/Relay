@@ -16,6 +16,7 @@ const log = join(root, "tmp", "perf", "mem.jsonl");
 // WebKit's processes run as XPC services in the app's own launchd domain;
 // `launchctl print pid/<pid>` lists them without root. `footprint` gives each
 // process's physical footprint, the figure Activity Monitor shows as Memory.
+// flutter/integration_test/memory.dart reads the test app the same way; keep them in step.
 const script = `pid=$(lsappinfo info -only pid ${INSTALLED_BUNDLE_ID} | sed -n 's/^"pid"=//p')
 [ -n "$pid" ] || exit 0
 ps -o etime= -p "$pid"
