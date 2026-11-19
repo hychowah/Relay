@@ -7,7 +7,7 @@ import { createWorkspace } from "../server/app.ts";
 import { addBugReports } from "../server/bug-reports.ts";
 import { Store } from "../server/store.ts";
 
-test("bug reports save the recording with the server's conversation and without API keys", async () => {
+test("bug reports save the recording with the server's conversation and without API keys, then list and open", async () => {
   const dir = await mkdtemp(join(tmpdir(), "relay-bug-reports-"));
   const store = new Store(":memory:");
   const workspace = createWorkspace(store, [], { mode: "fixture", model: "fixture", configured: true });
@@ -40,6 +40,15 @@ test("bug reports save the recording with the server's conversation and without 
     assert.equal(await readFile(join(dir, `${id}.png`), "utf8"), "png bytes");
 
     assert.equal((await post({ events: [] })).status, 400);
+
+    const list = await (await workspace.app.request("/api/bug-reports")).json();
+    assert.deepEqual(list, [{ id, savedAt: report.savedAt, description: "Stop did nothing", events: 2, screenshot: true }]);
+    const saved = await workspace.app.request(`/api/bug-reports/${id}`);
+    assert.equal((await saved.json()).events[1].body.apiKey, "[redacted]");
+    const picture = await workspace.app.request(`/api/bug-reports/${id}/screenshot`);
+    assert.equal(picture.headers.get("content-type"), "image/png");
+    assert.equal(await picture.text(), "png bytes");
+    assert.equal((await workspace.app.request("/api/bug-reports/..%2Frelay")).status, 404);
   } finally {
     await workspace.close();
     store.close();

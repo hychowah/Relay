@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
@@ -7,6 +7,8 @@ import type { Store } from "./store.ts";
 
 const maxReportCharacters = 20_000_000;
 const secretName = /api.?key|secret|password|authorization/i;
+// Only names this module writes; the check keeps requests inside the report folder.
+const reportId = /^[0-9TZ-]+-[0-9a-f]{8}$/;
 
 // Recordings include request bodies, such as provider settings with an API key.
 function redact(value: unknown): unknown {
@@ -16,8 +18,27 @@ function redact(value: unknown): unknown {
     [key, secretName.test(key) && item ? "[redacted]" : redact(item)]));
 }
 
-/** Saves client recordings as development bug reports: one JSON file each, plus an optional PNG. */
+/** Saves and serves development bug reports: one JSON file each, plus an optional PNG. */
 export function addBugReports(app: Hono, dir: string, store: Store) {
+  function reportFile(id: string, extension: "json" | "png") {
+    const path = join(dir, `${id}.${extension}`);
+    if (!reportId.test(id) || !existsSync(path)) throw new HTTPException(404, { message: "Bug report not found." });
+    return path;
+  }
+
+  app.get("/api/bug-reports", (c) => {
+    const files = existsSync(dir) ? readdirSync(dir).filter((name) => name.endsWith(".json")) : [];
+    return c.json(files.map((name) => {
+      const report = JSON.parse(readFileSync(join(dir, name), "utf8"));
+      return { id: report.id, savedAt: report.savedAt, description: report.description,
+        events: report.events.length, screenshot: Boolean(report.screenshot) };
+    }).sort((a, b) => b.savedAt.localeCompare(a.savedAt)));
+  });
+  app.get("/api/bug-reports/:id", (c) =>
+    c.body(readFileSync(reportFile(c.req.param("id"), "json"), "utf8"), 200, { "Content-Type": "application/json" }));
+  app.get("/api/bug-reports/:id/screenshot", (c) =>
+    c.body(readFileSync(reportFile(c.req.param("id"), "png")), 200, { "Content-Type": "image/png" }));
+
   app.post("/api/bug-reports", async (c) => {
     const text = await c.req.text();
     if (text.length > maxReportCharacters)

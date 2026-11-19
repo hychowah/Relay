@@ -18,6 +18,7 @@ import 'conversation_view.dart';
 import 'workspace_style.dart';
 import 'workspace_tabs.dart';
 import 'region_capture.dart';
+import 'bug_reports.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -347,6 +348,11 @@ class _RelayShellState extends State<RelayShell> {
       switch (action) {
         case 'record':
           await _recordBug();
+        case 'reports':
+          await showDialog<void>(
+            context: context,
+            builder: (_) => BugReportsDialog(api: w.api),
+          );
         case 'provider':
           await showDialog<void>(
             context: context,
@@ -741,6 +747,17 @@ class _RelayShellState extends State<RelayShell> {
               child: Divider(),
             ),
             _menuItem('chat', 'Chat only', Icons.chat_bubble_outline_rounded),
+            if (widget.updates != null)
+              _menuItem(
+                'updates',
+                widget.updates!.ready ? 'Update ready' : 'Updates',
+                Icons.system_update_alt_rounded,
+              ),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 5),
+              child: Divider(),
+            ),
+            const MenuLabel('DEVELOPMENT'),
             _menuItem(
               'record',
               w.recorder.recording
@@ -750,12 +767,7 @@ class _RelayShellState extends State<RelayShell> {
                   ? Icons.stop_circle_outlined
                   : Icons.fiber_manual_record_outlined,
             ),
-            if (widget.updates != null)
-              _menuItem(
-                'updates',
-                widget.updates!.ready ? 'Update ready' : 'Updates',
-                Icons.system_update_alt_rounded,
-              ),
+            _menuItem('reports', 'Bug reports', Icons.bug_report_outlined),
           ],
         ),
       ],

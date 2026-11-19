@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -180,6 +181,23 @@ class RelayApi {
 
   Future<Json> saveBugReport(Json report) =>
       _request('/api/bug-reports', report);
+  Future<List<Json>> bugReports() async =>
+      (await _request<List>('/api/bug-reports')).cast<Json>();
+  Future<Json> bugReport(String id) =>
+      _request('/api/bug-reports/${Uri.encodeComponent(id)}');
+  Future<Uint8List> bugReportScreenshot(String id) async {
+    final response = await _client
+        .get(
+          origin.resolve(
+            '/api/bug-reports/${Uri.encodeComponent(id)}/screenshot',
+          ),
+        )
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode >= 400) {
+      throw RelayApiException(response.statusCode, 'Screenshot unavailable.');
+    }
+    return response.bodyBytes;
+  }
 
   Future<void> checkIdleBeforeRestart(
     String deviceId,

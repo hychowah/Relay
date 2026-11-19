@@ -77,4 +77,6 @@ poll reply is kept once), error messages, the open tabs and a screenshot of the
 current page. The service saves it as `bug-reports/<time>-<id>.json` (with a
 `.png`) in `RELAY_DATA_DIR`, adds its own record of the conversation and replaces
 API keys and other secret fields with `[redacted]`. Reports contain conversation
-text, so they stay with the runtime data, outside the repository.
+text, so they stay with the runtime data, outside the repository. Choose **Bug
+reports** in the same menu to read them: each shows its description, screenshot
+and a timeline of events that expand to their full details.
