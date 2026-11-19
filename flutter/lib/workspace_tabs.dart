@@ -236,16 +236,27 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
       child: Padding(
         padding: const EdgeInsets.only(right: 5),
         child: Material(
+          // A split tab keeps an accent outline and tint, so it never looks
+          // like an app tab.
           color: selected
               ? colors.surface
+              : tab is SplitTab
+              ? colors.primary.withValues(alpha: .07)
               : inSplit
               ? colors.primaryContainer
               : Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
-            side: BorderSide(
-              color: selected ? colors.outline : Colors.transparent,
-            ),
+            side: tab is SplitTab
+                ? BorderSide(
+                    color: colors.primary.withValues(
+                      alpha: selected ? .9 : .45,
+                    ),
+                    width: selected ? 1.5 : 1,
+                  )
+                : BorderSide(
+                    color: selected ? colors.outline : Colors.transparent,
+                  ),
           ),
           child: Row(
             children: [
@@ -257,19 +268,20 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
                     padding: const EdgeInsets.fromLTRB(10, 9, 6, 9),
                     child: Row(
                       children: [
-                        Icon(
-                          tab is SplitTab
-                              ? Icons.space_dashboard_outlined
-                              : tab.isBrowser
-                              ? Icons.language
-                              : tab.appId == null
-                              ? Icons.add
-                              : Icons.grid_view_rounded,
-                          size: 15,
-                          color: selected
-                              ? colors.primary
-                              : colors.onSurfaceVariant,
-                        ),
+                        if (tab is SplitTab)
+                          _SplitMap(tab, color: colors.primary)
+                        else
+                          Icon(
+                            tab.isBrowser
+                                ? Icons.language
+                                : tab.appId == null
+                                ? Icons.add
+                                : Icons.grid_view_rounded,
+                            size: 15,
+                            color: selected
+                                ? colors.primary
+                                : colors.onSurfaceVariant,
+                          ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -278,7 +290,9 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 12,
-                              color: selected
+                              color: tab is SplitTab
+                                  ? colors.primary
+                                  : selected
                                   ? colors.onSurface
                                   : colors.onSurfaceVariant,
                             ),
@@ -309,6 +323,47 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
         ),
       ),
     ),
+  );
+}
+
+/// A small drawing of a split tab's panes as they are arranged, with the pane
+/// selected last filled in.
+class _SplitMap extends StatelessWidget {
+  const _SplitMap(this.split, {required this.color});
+  final SplitTab split;
+  final Color color;
+
+  Widget _draw(SplitLayout layout) => switch (layout) {
+    SplitPane(:final tab) => DecoratedBox(
+      key: ValueKey('split-map-${tab.id}'),
+      decoration: BoxDecoration(
+        color: tab == split.focus ? color : null,
+        border: Border.all(color: color),
+        borderRadius: BorderRadius.circular(1.5),
+      ),
+    ),
+    SplitBranch(:final axis, :final first, :final second, :final fraction) =>
+      Flex(
+        direction: axis,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: (fraction * 100).round().clamp(1, 99),
+            child: _draw(first),
+          ),
+          const SizedBox.square(dimension: 1.5),
+          Expanded(
+            flex: 100 - (fraction * 100).round().clamp(1, 99),
+            child: _draw(second),
+          ),
+        ],
+      ),
+  };
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Split of ${split.layout.tabs.length} tabs',
+    child: SizedBox(width: 20, height: 14, child: _draw(split.layout)),
   );
 }
 

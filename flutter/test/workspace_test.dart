@@ -891,6 +891,12 @@ void main() {
     expect(split.layout.tabs, [room, browser]);
     expect(f.w.active, room);
     expect(chip('Room layout + Browser'), findsOneWidget);
+    // The split tab draws its panes as they are arranged.
+    Rect mapPane(WorkspaceTab tab) =>
+        tester.getRect(find.byKey(ValueKey('split-map-${tab.id}')));
+    expect(mapPane(room).right, lessThan(mapPane(browser).left));
+    expect(mapPane(room).height, mapPane(browser).height);
+    expect(mapPane(room).height, greaterThan(10));
     expect(tester.element(roomView), same(roomElement));
     expect(tester.element(browserView), same(browserElement));
     final left = page(room);
@@ -965,6 +971,8 @@ void main() {
     expect(page(browser).bottom, lessThan(page(second).top));
     expect(page(browser).left, selected.left);
     expect(page(second).width, page(browser).width);
+    expect(mapPane(browser).bottom, lessThan(mapPane(second).top));
+    expect(mapPane(room).right, lessThan(mapPane(second).left));
     expect(page(room), beside, reason: 'other panes keep their place');
     expect(tester.element(browserView.first), same(browserElement));
     expect(f.w.active, second);
@@ -974,6 +982,17 @@ void main() {
     await tester.pump();
     expect(f.w.active, browser);
     expectNothingOver(browser, [room, second]);
+    // The split tab's map fills the pane selected last.
+    Color? fill(WorkspaceTab tab) =>
+        (tester
+                    .widget<DecoratedBox>(
+                      find.byKey(ValueKey('split-map-${tab.id}')),
+                    )
+                    .decoration
+                as BoxDecoration)
+            .color;
+    expect(fill(browser), isNotNull);
+    expect([fill(room), fill(second)], [null, null]);
 
     tester.view.physicalSize = const Size(700, 800);
     await tester.pumpAndSettle();

@@ -215,9 +215,10 @@ real WKWebViews.
    each edge, three or more panes both ways, one click selecting a dimmed
    pane, pages keeping their state, dragging and double-clicking both kinds of
    divider (also over a page), switching between an app's tab and the split
-   tab, and closing it. Check that the selected page clicks and scrolls:
+   tab, and closing it, and that the split tab's outline and pane map read
+   clearly in light and dark. Check that the selected page clicks and scrolls:
    nothing may be drawn over it (the 0.0.12 bug; its outline has been a
-   2-pixel frame since 0.0.13). Not in Stable yet; 64 Flutter tests pass on
+   2-pixel frame since 0.0.13). Not in Stable yet; 66 Flutter tests pass on
    WSL with fake pages. Splits saved by 0.0.13 are not restored.
 12. Check night mode on the Mac in Dark and Light, with macOS both light and
    dark: tabs, chat, Markdown replies, dialogs, menus and the empty Browser
