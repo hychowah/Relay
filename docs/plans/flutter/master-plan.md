@@ -147,20 +147,29 @@ for the Mac covers a test build, Stable's recorded commit, the refusals and
 Stable retiring the test builds it contains. A real Stable build through the
 tool, into a throwaway release folder, compiled on the Mac without the settings
 copy, recorded its commit, refused a second run and left no folder on the Mac.
-No Stable release has been published with the tool, and retiring real test
-builds at that point is unverified.
+
+Stable 0.0.9 (build 9) is published from `main` with that tool. Beyond 0.0.8 it
+carries everyday restoration, the updater's leftover removal, inline region
+capture, saved screenshots, bug reports and draft conversations. Analysis, 38
+Flutter tests and 82 backend tests passed on its commit. The feed serves the
+release with its commit, the download matches its hash, and publishing retired
+the one listed test build that Stable contains. The native Mac workflow was not
+rerun for 0.0.9, and it has not been installed or reviewed on the Mac.
 
 ## Next
 
-1. Everyday restoration and the updater's leftover removal are not in a Stable
-   release. Publish them as Stable when requested, and check that it retires
-   the test builds it contains.
-2. Republishing a test build's name leaves its earlier ZIP in the release
+1. Install Stable 0.0.9 on the Mac. Check that tabs, the chat panel and the
+   window come back after a restart, and that its first start removes the
+   update folders beside the app and the older downloads.
+2. Deploy the backend at `main`. The live service predates draft conversations,
+   so a thinking effort chosen before a new conversation's first message is not
+   applied there.
+3. Republishing a test build's name leaves its earlier ZIP in the release
    folder on WSL. Remove it at publish time if that folder grows.
-3. Review Stable 0.0.8 on the Mac: the panel, tab and menu transitions and text selection. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
-4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are unreleased in the Mac app. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified.
-5. Try the toolbar record button and **Bug reports** on the Mac. Source tests cover recording,
+4. Review Stable 0.0.9 on the Mac: the panel, tab and menu transitions and text selection. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
+5. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified.
+6. Try the toolbar record button and **Bug reports**, both in Stable 0.0.9, on the Mac. Source tests cover recording,
    saving and viewing; native screenshots and the live service's report folder are unverified.
-6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
+7. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.
