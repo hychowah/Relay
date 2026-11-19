@@ -340,7 +340,7 @@ void main() {
       await off.w.start();
       final offRoom = await off.w.openApp(off.w.apps[1]);
       await off.w.openApp(off.w.apps[0]);
-      expect(await off.w.openApp(off.w.apps[1]), offRoom);
+      off.w.select(offRoom, opened: true);
       expect(off.w.tabs.map((tab) => tab.appId), ['room-layout', 'browser']);
 
       final f = Fixture(newestTabFirst: true);
@@ -353,8 +353,7 @@ void main() {
       expect(f.w.tabs, [blank, browser, room]);
       f.w.dropInSplit(browser, left: false);
       expect(f.w.tabs, [blank, browser, room], reason: 'a split keeps order');
-      await f.w.openApp(f.w.apps[1]);
-      expect(f.w.active, room);
+      f.w.select(room, opened: true);
       expect(f.w.tabs, [room, blank, browser]);
       // An app the agent opens, here into the blank tab, also moves left.
       f.w.select(blank);
@@ -1253,11 +1252,6 @@ void main() {
     double left(String title) => tester.getTopLeft(chip(title)).dx;
     final start = left('Research'), end = left('Room layout');
     await tester.tap(chip('Research'));
-    await tester.pumpAndSettle();
-    expect(f.w.active!.appId, 'research');
-    expect(f.w.tabs.first, room, reason: 'clicking a tab keeps the order');
-    expect(left('Research'), start);
-    await f.w.openApp(f.w.apps[2]);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 60));
     expect(f.w.tabs.last, room);
@@ -1280,13 +1274,46 @@ void main() {
     strip.position.jumpTo(strip.position.maxScrollExtent);
     await tester.pumpAndSettle();
     expect(strip.position.pixels, greaterThan(0));
-    await f.w.openApp(f.w.apps[1]);
+    await tester.tap(chip('Room layout'));
     await tester.pumpAndSettle();
     expect(f.w.tabs.first, room);
     expect(strip.position.pixels, 0);
     expect(left('Room layout'), end);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets(
+    'with newest tab first, clicking tab D of A B C D gives D A B C',
+    (tester) async {
+      final f = Fixture()
+        ..configApps = [
+          ...apps,
+          {'id': 'notes', 'name': 'Notes', 'description': 'Notes'},
+        ];
+      await f.w.start();
+      final [a, b, c, d] = [for (final app in f.w.apps) await f.w.openApp(app)];
+      f.w.select(a);
+      f.w.setNewestTabFirst(true);
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, saveDraft: (_) async {}),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(WorkspaceTabs),
+          matching: find.text('Notes'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(f.w.tabs, [d, a, b, c]);
+      expect(f.w.active, d);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets(
     'deleting a tab during insertion keeps the next tab interactive',
