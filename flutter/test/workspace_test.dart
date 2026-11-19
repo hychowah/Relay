@@ -14,6 +14,7 @@ import 'package:relay_flutter/page_surface.dart';
 import 'package:relay_flutter/relay_api.dart';
 import 'package:relay_flutter/transcript_pane.dart';
 import 'package:relay_flutter/workspace.dart';
+import 'package:relay_flutter/capture_flight.dart';
 import 'package:relay_flutter/region_capture.dart';
 import 'package:relay_flutter/workspace_tabs.dart';
 
@@ -1464,7 +1465,7 @@ void main() {
         await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 10)),
         );
-        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 20));
       }
     }
 
@@ -1480,15 +1481,44 @@ void main() {
     await tester.pump();
     expect(find.byType(RegionCapture), findsNothing);
 
-    await tester.tap(find.byTooltip('Capture an area'));
-    await settle(find.byType(RegionCapture));
-    await tester.dragFrom(
-      page.topLeft + const Offset(20, 20),
-      const Offset(200, 120),
+    Future<void> captureArea() async {
+      await tester.tap(find.byTooltip('Capture an area'));
+      await settle(find.byType(RegionCapture));
+      await tester.dragFrom(
+        page.topLeft + const Offset(20, 20),
+        const Offset(200, 120),
+      );
+      await settle(find.byTooltip('Remove screenshot'));
+    }
+
+    final thumbnail = find.ancestor(
+      of: find.byWidgetPredicate((w) => w is Image && w.image is! NetworkImage),
+      matching: find.byType(Opacity),
     );
-    await settle(find.byTooltip('Remove screenshot'));
+
+    // Reduced motion attaches the area at once.
+    final dispatcher = tester.platformDispatcher;
+    dispatcher.accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+      disableAnimations: true,
+    );
+    addTearDown(dispatcher.clearAccessibilityFeaturesTestValue);
+    await tester.pump();
+    await captureArea();
+    expect(find.byType(CaptureFlight), findsNothing);
+    expect(tester.widget<Opacity>(thumbnail.first).opacity, 1);
+    await tester.tap(find.byTooltip('Remove screenshot'));
+    dispatcher.clearAccessibilityFeaturesTestValue();
+    await tester.pump();
+
+    await captureArea();
     expect(find.byType(RegionCapture), findsNothing);
     expect(find.text('Screenshot · room-layout'), findsOneWidget);
+    // The picture flies to the composer, whose thumbnail shows once it lands.
+    expect(find.byType(CaptureFlight), findsOneWidget);
+    expect(tester.widget<Opacity>(thumbnail.first).opacity, 0);
+    await tester.pumpAndSettle();
+    expect(find.byType(CaptureFlight), findsNothing);
+    expect(tester.widget<Opacity>(thumbnail.first).opacity, 1);
     f.w.provider = {'supportsImageInput': true};
     await tester.enterText(find.byType(EditableText).first, 'What is this?');
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);

@@ -12,19 +12,31 @@ Future<ui.Image> decodeFrame(Uint8List bytes) async {
   }
 }
 
+/// A selected area: its pixels as a PNG, the part of the frame they came from
+/// ([source], in frame pixels) and where that part was shown ([area], global).
+typedef CapturedRegion = ({Uint8List png, Rect source, Rect area});
+
 /// Fills the tab with a frozen frame so the crop matches what the user saw.
-/// Releasing a drag reports the selected pixels as a PNG; null means cancelled.
+/// Releasing a drag flashes the selected area like a camera and reports it;
+/// null means cancelled.
 class RegionCapture extends StatefulWidget {
   const RegionCapture({super.key, required this.image, required this.onDone});
   final ui.Image image;
-  final ValueChanged<Uint8List?> onDone;
+  final ValueChanged<CapturedRegion?> onDone;
 
   @override
   State<RegionCapture> createState() => _RegionCaptureState();
 }
 
-class _RegionCaptureState extends State<RegionCapture> {
+class _RegionCaptureState extends State<RegionCapture>
+    with SingleTickerProviderStateMixin {
   final focus = FocusNode(debugLabel: 'region capture');
+  // Rests at 1, where the flash has faded out.
+  late final flash = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 140),
+    value: 1,
+  );
   Offset? start;
   Rect? selection;
   bool cropping = false;
@@ -40,12 +52,19 @@ class _RegionCaptureState extends State<RegionCapture> {
   @override
   void dispose() {
     focus.dispose();
+    flash.dispose();
     super.dispose();
   }
 
   Future<void> attach(Size display) async {
     final bounds = selection!;
     setState(() => cropping = true);
+    // The flash answers the release at once, while the picture is encoded.
+    final shutter = MediaQuery.disableAnimationsOf(context)
+        ? null
+        : flash.forward(from: 0);
+    final box = context.findRenderObject()! as RenderBox;
+    final area = box.localToGlobal(bounds.topLeft) & bounds.size;
     final image = widget.image;
     final source = Rect.fromLTRB(
       bounds.left * image.width / display.width,
@@ -68,10 +87,17 @@ class _RegionCaptureState extends State<RegionCapture> {
       try {
         final data = await crop.toByteData(format: ui.ImageByteFormat.png);
         if (data == null) throw StateError('Could not encode the screenshot.');
+        // Closing the tool mid-flash cancels this wait.
+        await shutter?.orCancel;
         if (mounted) {
-          widget.onDone(
-            data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
-          );
+          widget.onDone((
+            png: data.buffer.asUint8List(
+              data.offsetInBytes,
+              data.lengthInBytes,
+            ),
+            source: source,
+            area: area,
+          ));
         }
       } finally {
         crop.dispose();
@@ -135,7 +161,7 @@ class _RegionCaptureState extends State<RegionCapture> {
                     fit: BoxFit.fill,
                     filterQuality: FilterQuality.medium,
                   ),
-                  CustomPaint(painter: _Shade(selection)),
+                  CustomPaint(painter: _Shade(selection, flash)),
                   if (selection == null)
                     Align(
                       alignment: Alignment.topCenter,
@@ -186,10 +212,12 @@ class _RegionCaptureState extends State<RegionCapture> {
   );
 }
 
-/// Dims the frame outside the selection so the chosen area stands out.
+/// Dims the frame outside the selection so the chosen area stands out, and
+/// paints the camera flash over it.
 class _Shade extends CustomPainter {
-  const _Shade(this.selection);
+  const _Shade(this.selection, this.flash) : super(repaint: flash);
   final Rect? selection;
+  final Animation<double> flash;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -206,6 +234,13 @@ class _Shade extends CustomPainter {
         ..addRect(rect),
       Paint()..color = const Color(0x73102820),
     );
+    final fade = 1 - flash.value;
+    if (fade > 0) {
+      canvas.drawRect(
+        rect,
+        Paint()..color = Color.fromRGBO(255, 255, 255, .85 * fade * fade),
+      );
+    }
     canvas.drawRect(
       rect,
       Paint()

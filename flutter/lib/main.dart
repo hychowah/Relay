@@ -22,6 +22,7 @@ import 'workspace_style.dart';
 import 'workspace_tabs.dart';
 import 'region_capture.dart';
 import 'bug_reports.dart';
+import 'capture_flight.dart';
 import 'transcript_pane.dart';
 
 Future<void> main() async {
@@ -219,6 +220,9 @@ class _RelayShellState extends State<RelayShell> {
   ({String appId, Uint8List bytes})? capture;
   bool capturing = false;
   ({WorkspaceTab tab, ui.Image image, bool reopenChat})? selecting;
+  // The composer's thumbnail, and the captured picture on its way there.
+  final captureSlot = GlobalKey();
+  OverlayEntry? flight;
   late bool chatOpen = widget.initialChatOpen, savedChatOpen = chatOpen;
   bool chatOnly = false;
   bool transcriptOpen = false;
@@ -265,6 +269,9 @@ class _RelayShellState extends State<RelayShell> {
     address.dispose();
     messagesScroll.dispose();
     selecting?.image.dispose();
+    flight
+      ?..remove()
+      ..dispose();
     w.removeListener(_changed);
     w.recorder.removeListener(_changed);
     widget.updates?.removeListener(_changed);
@@ -318,18 +325,44 @@ class _RelayShellState extends State<RelayShell> {
     }
   }
 
-  void _finishCapture(Uint8List? bytes) {
+  void _finishCapture(CapturedRegion? region) {
     final current = selecting;
     if (current == null) return;
+    _land();
     setState(() {
       selecting = null;
       if (current.reopenChat) chatOpen = true;
-      if (bytes != null) capture = (appId: current.tab.appId!, bytes: bytes);
+      if (region == null) return;
+      capture = (appId: current.tab.appId!, bytes: region.png);
+      if (MediaQuery.disableAnimationsOf(context)) return;
+      // The flight keeps its own handle on the frame, so the tool's handle
+      // is released as before.
+      final frame = current.image.clone();
+      flight = OverlayEntry(
+        builder: (_) => CaptureFlight(
+          frame: frame,
+          source: region.source,
+          from: region.area,
+          slot: captureSlot,
+          onLanded: _land,
+        ),
+      );
+      Overlay.of(context).insert(flight!);
     });
     // Let the overlay leave the tree before its frame is released.
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => current.image.dispose(),
     );
+  }
+
+  /// Ends the flight; the composer's thumbnail shows from here on.
+  void _land() {
+    final entry = flight;
+    if (entry == null) return;
+    setState(() => flight = null);
+    entry
+      ..remove()
+      ..dispose();
   }
 
   Future<void> _send() async {
@@ -1302,11 +1335,21 @@ class _RelayShellState extends State<RelayShell> {
               type: MaterialType.transparency,
               child: ListTile(
                 dense: true,
-                leading: Image.memory(
-                  attachment.bytes,
+                leading: SizedBox(
+                  key: captureSlot,
                   width: 52,
                   height: 38,
-                  fit: BoxFit.contain,
+                  // Hidden while the captured picture is still flying here.
+                  child: Opacity(
+                    opacity: flight == null ? 1 : 0,
+                    child: Image.memory(
+                      attachment.bytes,
+                      fit: BoxFit.contain,
+                      // A thumbnail-sized decode keeps the landing smooth.
+                      cacheWidth: (52 * MediaQuery.devicePixelRatioOf(context))
+                          .round(),
+                    ),
+                  ),
                 ),
                 subtitle: w.provider['supportsImageInput'] == true
                     ? null

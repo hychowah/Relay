@@ -5,7 +5,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:relay_flutter/region_capture.dart';
 
-Future<void> show(WidgetTester tester, ValueChanged<Uint8List?> onDone) async {
+Future<void> show(
+  WidgetTester tester,
+  ValueChanged<CapturedRegion?> onDone,
+) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
   canvas.drawColor(Colors.red, BlendMode.src);
@@ -36,26 +39,25 @@ void main() {
   testWidgets('dragging over the tab attaches only the selected pixels', (
     tester,
   ) async {
-    Uint8List? attached;
-    var done = false;
-    await show(tester, (bytes) {
-      attached = bytes;
-      done = true;
-    });
+    CapturedRegion? attached;
+    await show(tester, (region) => attached = region);
     final area = tester.getRect(find.byType(RegionCapture));
     final gesture = await tester.startGesture(area.center);
     await gesture.moveTo(area.center + const Offset(32, 20));
     await gesture.moveTo(area.bottomRight - const Offset(1, 1));
     await gesture.up();
-    for (var i = 0; i < 30 && !done; i++) {
+    // Frames advance the camera flash, which the tool finishes first.
+    for (var i = 0; i < 30 && attached == null; i++) {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 10)),
       );
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 20));
     }
-    expect(attached, isNotNull);
+    // The shell animates the picture from where the area was shown.
+    expect(attached!.area, const Rect.fromLTRB(100, 50, 199, 99));
+    expect(attached!.source, const Rect.fromLTRB(50, 25, 99.5, 49.5));
     await tester.runAsync(() async {
-      final codec = await ui.instantiateImageCodec(attached!);
+      final codec = await ui.instantiateImageCodec(attached!.png);
       final crop = (await codec.getNextFrame()).image;
       expect(crop.width, 50);
       expect(crop.height, 25);
@@ -69,7 +71,7 @@ void main() {
   testWidgets('a click keeps the tool open and Escape cancels it', (
     tester,
   ) async {
-    final results = <Uint8List?>[];
+    final results = <CapturedRegion?>[];
     await show(tester, results.add);
     await tester.pump();
     await tester.tapAt(
