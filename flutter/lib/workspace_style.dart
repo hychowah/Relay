@@ -2,8 +2,8 @@ import 'package:material_ui/material_ui.dart';
 
 // Relay's own colours. Widgets read them from the theme's ColorScheme so they
 // follow the light or dark setting: ink is onSurface, muted onSurfaceVariant,
-// accent primary, canvas surfaceContainerHighest, line outline, tint
-// primaryContainer and failed errorContainer.
+// accent primary, canvas surfaceContainerHighest, aside surfaceContainerHigh,
+// line outline, tint primaryContainer and failed errorContainer.
 typedef _Palette = ({
   Color ink,
   Color muted,
@@ -11,6 +11,7 @@ typedef _Palette = ({
   Color onAccent,
   Color canvas,
   Color surface,
+  Color aside,
   Color line,
   Color tint,
   Color failed,
@@ -23,6 +24,7 @@ const _Palette _light = (
   onAccent: Colors.white,
   canvas: Color(0xfff7f8f6),
   surface: Colors.white,
+  aside: Color(0xffedf0ec),
   line: Color(0xffe5e9e4),
   tint: Color(0xffedf3ee),
   failed: Color(0xfffff1ed),
@@ -35,6 +37,7 @@ const _Palette _dark = (
   onAccent: Color(0xff10241b),
   canvas: Color(0xff141917),
   surface: Color(0xff1b211f),
+  aside: Color(0xff262e2b),
   line: Color(0xff2f3834),
   tint: Color(0xff213129),
   failed: Color(0xff3a2622),
@@ -48,6 +51,7 @@ ThemeData workspaceTheme(Brightness brightness) {
     :onAccent,
     :canvas,
     :surface,
+    :aside,
     :line,
     :tint,
     :failed,
@@ -69,6 +73,7 @@ ThemeData workspaceTheme(Brightness brightness) {
         outline: line,
         outlineVariant: line,
         surfaceContainerHighest: canvas,
+        surfaceContainerHigh: aside,
       );
   final base = ThemeData(
     colorScheme: scheme,

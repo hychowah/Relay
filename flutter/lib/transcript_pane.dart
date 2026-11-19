@@ -23,6 +23,7 @@ class TranscriptBar extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(18, 7, 14, 7),
         decoration: BoxDecoration(
+          color: colors.surfaceContainerHigh,
           border: Border(bottom: BorderSide(color: colors.outline)),
         ),
         child: Row(
@@ -221,11 +222,12 @@ class _TranscriptPaneState extends State<TranscriptPane> {
                         key: keys[i],
                         padding: const EdgeInsets.only(top: 4),
                         // The same widgets with only a changed colour keep a
-                        // selection inside the paragraph.
+                        // selection inside the paragraph. The highlight is a
+                        // faint accent: primaryContainer matches the pane.
                         child: DecoratedBox(
                           decoration: BoxDecoration(
                             color: i == playing
-                                ? colors.primaryContainer
+                                ? colors.primary.withValues(alpha: .14)
                                 : null,
                             borderRadius: BorderRadius.circular(6),
                           ),
