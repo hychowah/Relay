@@ -22,7 +22,14 @@ const apps = [
     'description': 'Furniture',
     'protocolVersion': 2,
   },
+  {'id': 'research', 'name': 'Research', 'description': 'Reports'},
 ];
+const deskReport = {
+  'appId': 'research',
+  'resourceId': 'desk',
+  'revision': '1',
+  'title': 'Desk report',
+};
 
 class FakePage extends PageSurface with BrowserSurface {
   @override
@@ -102,9 +109,10 @@ class Fixture {
           final path = request.url.path;
           if (path == '/api/config') {
             if (offline) return http.Response('Offline', 503);
-            return reply({'apps': apps});
+            return reply({'apps': configApps});
           }
           if (path == '/api/bots') return reply([]);
+          if (path.endsWith('/report')) return reply({'source': deskReport});
           if (path.contains('/view')) {
             return reply({
               'url': 'http://localhost:3252/_relay/view?token=x',
@@ -146,6 +154,7 @@ class Fixture {
         if (failRoomRestore && spec.appId == 'room-layout') {
           page.result = {'status': 'failed', 'error': 'Unavailable'};
         }
+        page.loading = holdPages;
         pages.add(page);
         return page;
       },
@@ -153,12 +162,13 @@ class Fixture {
     );
   }
   bool offline = false, failRoomRestore = false;
+  List<Json> configApps = [...apps];
   late Workspace w;
   final pages = <FakePage>[];
   final acks = <Json>[];
   final stored = <Json>[];
   List<Json> commands = [], messages = [], runs = [];
-  Completer<void>? holdSnapshot;
+  Completer<void>? holdSnapshot, holdPages;
   Json? sent, bugReport;
   http.Response reply(Object data) => http.Response(jsonEncode(data), 200);
   Json command(String id, String target, {String? token}) => {
@@ -308,6 +318,60 @@ void main() {
     expect(next.w.active!.appId, 'room-layout');
     expect(next.w.pendingSession, isNull);
   });
+  test(
+    'saved tabs open at once on the saved active tab and load together',
+    () async {
+      final f = Fixture(
+        session: {
+          'active': 1,
+          'tabs': [
+            {'appId': 'browser', 'url': 'https://example.com/desk'},
+            {
+              'appId': 'room-layout',
+              'context': {
+                'viewId': 'room',
+                'state': {'zone': 'work'},
+              },
+            },
+            {'appId': 'browser', 'url': 'about:blank'},
+            {'appId': 'research', 'source': deskReport},
+          ],
+        },
+      );
+      addTearDown(f.w.dispose);
+      f.w.conversationId = 'conversation';
+      final hold = f.holdPages = Completer<void>();
+      final starting = f.w.start();
+      await pumpEventQueue();
+      expect(f.w.tabs.map((tab) => tab.appId), [
+        'browser',
+        'room-layout',
+        'browser',
+        'research',
+      ]);
+      final report = f.w.tabs[3];
+      expect(report.name, 'Desk report');
+      expect(
+        f.pages.map((page) => page.spec.id),
+        unorderedEquals(f.w.tabs.map((tab) => tab.id)),
+      );
+      expect(f.w.active, same(f.w.tabs[1]));
+      expect(f.stored, isEmpty, reason: 'the previous tabs stay saved');
+      expect(f.w.snapshot, isNotNull, reason: 'chat loads without the tabs');
+      final chosen = f.w.tabs[2];
+      f.w.select(chosen);
+      hold.complete();
+      await starting;
+      expect(f.w.pendingSession, isNull);
+      expect(f.w.active, same(chosen));
+      expect(f.w.tabs.length, 4);
+      expect((f.w.tabs[1].page as FakePage).lastCommand!['intent']['state'], {
+        'zone': 'work',
+      });
+      expect(report.report, isNotNull);
+      expect((report.page as FakePage).spec.report, same(report.report));
+    },
+  );
   test('empty tabs fill in place, existing apps retain their page, closing releases it', () async {
     final f = Fixture();
     addTearDown(f.w.dispose);
@@ -562,6 +626,33 @@ void main() {
       await f.w.start();
       await tester.pump();
       expect(find.text('Room layout'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
+    'the app picker shows current registrations and keeps open tabs',
+    (tester) async {
+      final f = Fixture();
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, saveDraft: (_) async {}),
+      );
+      await f.w.start();
+      final room = await f.w.openApp(f.w.apps[1]);
+      f.configApps = [
+        apps[0],
+        {'id': 'garden', 'name': 'Garden', 'protocolVersion': 2},
+      ];
+      f.w.newTab();
+      await tester.pump();
+      await tester.pump();
+      Finder picker(String name) => find.descendant(
+        of: find.byType(NewTabPage),
+        matching: find.text(name),
+      );
+      expect(picker('Garden'), findsOneWidget);
+      expect(picker('Room layout'), findsNothing);
+      expect(f.w.tabs, contains(room));
+      expect((room.page as FakePage).disposed, isFalse);
       await tester.pumpWidget(const SizedBox());
     },
   );

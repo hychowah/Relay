@@ -94,7 +94,7 @@ const publicReport = ({ source, sections }: Report): Report => ({
 
 export function createWorkspace(
   store: Store,
-  apps: RegisteredApp[],
+  apps: () => RegisteredApp[],
   provider: WorkspaceConfig["provider"],
   providerControls?: ProviderControls,
 ) {
@@ -137,7 +137,7 @@ export function createWorkspace(
   }
 
   function integration(appId: string) {
-    const entry = apps.find((item) => item.id === appId);
+    const entry = apps().find((item) => item.id === appId);
     if (!entry)
       throw new HTTPException(404, { message: "App is not registered." });
     return entry.integration;
@@ -167,6 +167,7 @@ export function createWorkspace(
     if (!run) return null;
     const snapshot = store.snapshot(run.conversationId)!;
     const bot = botFor(run.conversationId);
+    const registered = apps();
     const currentApp: AppContext | undefined = run.navigationSurface
       ? { appId: run.navigationSurface.appId, viewToken: run.navigationViewToken, surface: run.navigationSurface.context }
       : run.appContext;
@@ -180,9 +181,9 @@ export function createWorkspace(
     return {
       conversationId: run.conversationId,
       bot: bot ?? null,
-      allowedApps: apps.filter((entry) => !bot || bot.appIds.includes(entry.id))
+      allowedApps: registered.filter((entry) => !bot || bot.appIds.includes(entry.id))
         .map(({ id, name, description, protocolVersion }) => ({ id, name, description, protocolVersion })),
-      activeAppInstructions: apps.find((entry) => entry.protocolVersion !== 2 &&
+      activeAppInstructions: registered.find((entry) => entry.protocolVersion !== 2 &&
         entry.id === (currentApp?.appId ?? run.context?.source.appId) && (!bot || bot.appIds.includes(entry.id)))?.instructions,
       currentView: run.context && (!bot || bot.appIds.includes(run.context.source.appId))
         ? { ...run.context, selection: run.context.selection?.slice(0, 4000) } : undefined,
@@ -478,7 +479,7 @@ export function createWorkspace(
   app.get("/api/config", (c) =>
     c.json({
       provider: {...provider, supportsImageInput: supportsImageInput(provider.mode), supportsReasoningEffort: supportsReasoningEffort(provider.mode, provider.model)},
-      apps: apps.map(({ id, name, description, resourceId, protocolVersion, capabilities }) => ({
+      apps: apps().map(({ id, name, description, resourceId, protocolVersion, capabilities }) => ({
         id,
         name,
         description,
@@ -502,7 +503,8 @@ export function createWorkspace(
   app.get("/api/trash", (c) => c.json(store.trash()));
 
   function botInput(body: Record<string, unknown>): BotInput {
-    if (!Array.isArray(body.appIds) || body.appIds.some((id) => typeof id !== "string" || !apps.some((entry) => entry.id === id)))
+    const registered = apps();
+    if (!Array.isArray(body.appIds) || body.appIds.some((id) => typeof id !== "string" || !registered.some((entry) => entry.id === id)))
       throw new HTTPException(400, { message: "Choose registered apps for this bot." });
     return {
       name: textField(body.name, "Name").trim().slice(0, 80),

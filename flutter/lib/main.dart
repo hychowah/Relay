@@ -411,6 +411,8 @@ class _RelayShellState extends State<RelayShell> {
                 ForwardDialog(workspace: w, onSelected: _selectedConversation),
           );
         case 'library':
+          await w.refreshApps();
+          if (!mounted) return;
           await showDialog<void>(
             context: context,
             builder: (_) => AppLibrary(workspace: w),
@@ -570,6 +572,7 @@ class _RelayShellState extends State<RelayShell> {
                                   key: ValueKey(w.active?.id),
                                   apps: w.allowedApps,
                                   onChoose: _choose,
+                                  onShow: w.refreshApps,
                                 ),
                               ),
                             if (w.active?.report != null &&
@@ -1250,15 +1253,27 @@ class _RelayShellState extends State<RelayShell> {
 }
 
 class NewTabPage extends StatefulWidget {
-  const NewTabPage({super.key, required this.apps, required this.onChoose});
+  const NewTabPage({
+    super.key,
+    required this.apps,
+    required this.onChoose,
+    required this.onShow,
+  });
   final List<WorkspaceApp> apps;
   final Future<void> Function(WorkspaceApp) onChoose;
+  final Future<void> Function() onShow;
   @override
   State<NewTabPage> createState() => _NewTabPageState();
 }
 
 class _NewTabPageState extends State<NewTabPage> {
   String search = '';
+  @override
+  void initState() {
+    super.initState();
+    unawaited(widget.onShow());
+  }
+
   @override
   Widget build(BuildContext context) {
     final matches = widget.apps

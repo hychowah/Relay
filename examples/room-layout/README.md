@@ -11,7 +11,8 @@ node examples/room-layout/server.ts
 ```
 
 Open `http://127.0.0.1:3220` to use it independently. To connect it, include the
-registration in `apps.json` in your configured app list, then restart Relay.
+registration in `apps.json` in your configured app list; Relay picks it up
+without a restart.
 For a separate demo with private scratch data and the scripted provider:
 
 ```sh

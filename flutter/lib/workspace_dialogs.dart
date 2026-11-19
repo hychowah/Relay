@@ -33,6 +33,7 @@ Future<void> showBots(
   VoidCallback selected,
 ) async {
   await w.loadBots();
+  await w.refreshApps();
   if (!context.mounted) return;
   String? error;
   await showDialog<void>(
@@ -153,7 +154,11 @@ class _BotEditorState extends State<BotEditor> {
         'name': name.text,
         'objective': objective.text,
         'scope': scope.text,
-        'appIds': appIds.toList(),
+        // Save what the checkboxes show: an app no longer registered is dropped.
+        'appIds': [
+          for (final app in widget.workspace.apps)
+            if (appIds.contains(app.id)) app.id,
+        ],
       });
       await widget.workspace.loadBots();
       if (mounted) Navigator.pop(context);

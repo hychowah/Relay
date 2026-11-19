@@ -9,7 +9,7 @@ import { listProviderModels } from "./provider-models.ts";
 import { ProviderSettingsStore } from "./provider-settings.ts";
 import type { ProviderUpdate } from "../shared/types.ts";
 
-export async function startWorkspace(dataDir: string, apps: RegisteredApp[]) {
+export async function startWorkspace(dataDir: string, apps: () => RegisteredApp[]) {
   const settings = new ProviderSettingsStore(dataDir);
   let configuration = settings.configuration();
   const { mode, model, apiKey } = configuration;
@@ -44,7 +44,7 @@ export async function startWorkspace(dataDir: string, apps: RegisteredApp[]) {
         dataDir: resolve(dataDir, "harness"),
         mode, model, reasoningEffort,
         gateway: gateway && { url: gateway.url, token: gateway.token },
-        apps: apps.map(({ id, name, instructions, resourceId }) => ({ id, name, instructions, resourceId })),
+        apps,
         toolHandler: workspace.toolHandler,
         contextHandler: workspace.agentContext,
       });

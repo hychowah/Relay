@@ -87,7 +87,7 @@ test("model lookup accepts draft keys without saving or switching and enforces p
   const before = await readFile(join(dir,"provider.json"),"utf8");
   const selected = settings.status();
   let calls = 0;
-  const workspace = createWorkspace(store, [], {mode:"deepseek",model:"saved-model",configured:true}, {
+  const workspace = createWorkspace(store, () => [], {mode:"deepseek",model:"saved-model",configured:true}, {
     get:mode=>settings.status(mode),
     update:async()=>{throw new Error("Discovery must not update settings");},
     models:async input=>{

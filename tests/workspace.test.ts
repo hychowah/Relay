@@ -34,7 +34,7 @@ async function until(condition: () => boolean) {
 function setup(store: Store, mode: "fixture" | "anthropic" = "fixture") {
   const workspace = createWorkspace(
     store,
-    [
+    () => [
       {
         id: "rooms",
         name: "Rooms",
@@ -485,7 +485,7 @@ test("in-flight app reads expose a single running operation and interrupted reco
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   const report = roomReport();
-  const workspace = createWorkspace(store, [{
+  const workspace = createWorkspace(store, () => [{
     id: "rooms", name: "Rooms", description: "Fixture", resourceId: fixtureResourceId,
     integration: { search: async () => [], read: async () => { await gate; return report; } },
   }], { mode: "fixture", model: "fixture", configured: true });

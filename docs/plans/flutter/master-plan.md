@@ -167,6 +167,14 @@ The longest interval between Flutter frames was 33.3 ms on an empty-tab open.
 The [benchmark](../../../flutter/README.md#measure-the-conversation-panel-animation)
 covers the Flutter shell. Final screen presentation and real pages remain unmeasured.
 
+Restoring tabs adds every saved tab and shows the last active one at once, then
+loads all pages together without selecting them. A tab the user picks meanwhile
+stays selected, and the conversation loads without waiting for the tabs.
+Analysis and 40 Flutter tests passed on WSL, including one that holds every page
+unready. Reading the code shows that each WKWebView starts loading when its page
+is created, before it is shown; no Mac run has yet confirmed that hidden tabs
+load on the real WebViews.
+
 ## Next
 
 1. Install Stable 0.0.9 on the Mac. Check that tabs, the chat panel and the
@@ -183,6 +191,8 @@ covers the Flutter shell. Final screen presentation and real pages remain unmeas
    saving and viewing; native screenshots and the live service's report folder are unverified.
 7. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 8. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
-9. Check `browser.transcript` in WKWebView on the Mac with a short and an hour-long YouTube video, note how long each page takes against the 7-second limit, then ask about one through the real agent. Its page script passed against live YouTube only in headless Chromium with a Safari user agent. In the transcript pane, check on the Mac: opening it loads the hour-long transcript and scrolls smoothly; a drag selection survives clicking into the composer and reaches the question; moving to another video reloads it; a newer selection on the page replaces the transcript's; it stays hidden for other pages and narrow windows, and still loads in chat-only mode. Only a fake page tests the pane.
+9. Deploy the backend and a client build with apps-file reloading, then check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this; the Mac and the live service are unverified.
+10. With a build that has the tab restore change (it is not in Stable 0.0.9), restart on the Mac with a Browser tab and two or more app tabs open. Check that the last active tab shows first, the hidden tabs finish loading (none closed by the 20 s limit), and the chat history appears without waiting for them.
+11. Check `browser.transcript` in WKWebView on the Mac with a short and an hour-long YouTube video, note how long each page takes against the 7-second limit, then ask about one through the real agent. Its page script passed against live YouTube only in headless Chromium with a Safari user agent. In the transcript pane, check on the Mac: opening it loads the hour-long transcript and scrolls smoothly; a drag selection survives clicking into the composer and reaches the question; moving to another video reloads it; a newer selection on the page replaces the transcript's; it stays hidden for other pages and narrow windows, and still loads in chat-only mode. Only a fake page tests the pane.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

@@ -19,7 +19,7 @@ export interface HarnessOptions {
   model: string;
   gateway?: { url: string; token: string };
   reasoningEffort?: ReasoningEffort;
-  apps?: Array<{ id: string; name: string; instructions?: string; resourceId?: string }>;
+  apps?: () => Array<{ id: string; name: string }>;
   contextHandler?: (sessionId: string) => unknown;
   toolHandler: (
     sessionId: string,
@@ -117,7 +117,7 @@ export class Harness {
     );
     const callbackUrl = `http://127.0.0.1:${(this.callback.address() as AddressInfo).port}/tool`;
     if (this.options.mode === "fixture")
-      this.fixture = await startFixtureProvider(this.options.apps ?? []);
+      this.fixture = await startFixtureProvider(this.options.apps ?? (() => []));
     // The generated loader keeps the plugin package in source while configuration and data stay private.
     const pluginSource = fileURLToPath(
       new URL("./opencode-plugin.ts", import.meta.url),
