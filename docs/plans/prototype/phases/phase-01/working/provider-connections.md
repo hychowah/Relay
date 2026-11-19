@@ -12,8 +12,8 @@ changes: one provider/model capability decision, and a network prerequisite at
 the outbound request boundary rather than only in UI/startup/prompt admission.
 The user accepted both and requested implementation.
 
-`ProviderSettingsStore` owns selected mode, independent connection settings,
-private keys and migration from the original flat file. Browser status remains
+`ProviderSettingsStore` owns selected mode, independent connection settings
+and private keys. Browser status remains
 redacted. Blank keys reuse only the selected provider's saved/external key.
 Each provider definition supplies its adapter, endpoint, authentication format,
 display name, default model, token limits and models with thinking effort.

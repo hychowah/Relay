@@ -85,9 +85,7 @@ export class HttpIntegration {
       throw new AppRequestError(`${this.registration.name} is unavailable.`, 502);
     }
     if (!response.ok)
-      throw new AppRequestError(response.status === 409
-        ? "This saved version is no longer available in the live app. Its recorded evidence remains readable."
-        : `${this.registration.name} request failed (${response.status}).`, response.status, "app");
+      throw new AppRequestError(`${this.registration.name} request failed (${response.status}).`, response.status, "app");
     return response;
   }
 
@@ -223,15 +221,21 @@ export class HttpIntegration {
   }
 
   async search(query: string): Promise<Resource[]> {
-    await this.manifest();
+    if (!(await this.manifest()).capabilities?.search)
+      throw new AppRequestError(`${this.registration.name} does not publish saved-evidence search. Use app_discover for its operations.`, 400, "app");
     const result = await this.get("/_relay/search", { q: query });
     if (!object(result) || !Array.isArray(result.resources)) return protocol("The app returned an invalid search result.");
     return result.resources.map((item: Resource) => this.source(item));
   }
 
   async read(resourceId: string, revision?: string): Promise<Report> {
-    await this.manifest();
-    const result = await this.get("/_relay/read", { resourceId, ...(revision ? { revision } : {}) });
+    if (!(await this.manifest()).capabilities?.read)
+      throw new AppRequestError(`${this.registration.name} does not publish saved evidence. Use app_discover for its operations.`, 400, "app");
+    const result = await this.get("/_relay/read", { resourceId, ...(revision ? { revision } : {}) }).catch((error) => {
+      if (error instanceof AppRequestError && error.status === 409)
+        throw new AppRequestError("This saved version is no longer available in the live app. Its recorded evidence remains readable.", 409, error.kind);
+      throw error;
+    });
     if (!object(result)) return protocol("The app returned an invalid report.");
     const source = this.source(result.source as Source);
     if (source.resourceId !== resourceId || typeof source.revision !== "string" || !source.revision ||
