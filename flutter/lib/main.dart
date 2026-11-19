@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
@@ -183,6 +184,7 @@ class _RelayShellState extends State<RelayShell> {
   Timer? saveTimer;
   ({String appId, Uint8List bytes})? capture;
   bool capturing = false;
+  ({WorkspaceTab tab, ui.Image image, bool reopenChat})? selecting;
   bool chatOpen = true, chatOnly = false;
   late double chatWidth = widget.initialChatWidth;
   int lastPresentation = 0;
@@ -206,6 +208,7 @@ class _RelayShellState extends State<RelayShell> {
 
   void _changed() {
     if (mounted) {
+      if (selecting != null && w.active != selecting!.tab) _finishCapture(null);
       setState(() {
         if (lastPresentation != w.presentations) {
           chatOnly = false;
@@ -223,6 +226,7 @@ class _RelayShellState extends State<RelayShell> {
     draft.dispose();
     address.dispose();
     messagesScroll.dispose();
+    selecting?.image.dispose();
     w.removeListener(_changed);
     widget.updates?.removeListener(_changed);
     widget.updates?.dispose();
@@ -250,21 +254,43 @@ class _RelayShellState extends State<RelayShell> {
   Future<void> _capture() async {
     final tab = w.active;
     final page = tab?.page;
-    if (tab?.appId == null || page == null || capturing) return;
+    if (tab?.appId == null || page == null || capturing || selecting != null) {
+      return;
+    }
     setState(() => capturing = true);
     try {
-      final snapshot = await page.snapshot();
-      if (!mounted || w.active != tab) return;
-      final bytes = await selectRegion(context, snapshot);
-      if (mounted && bytes != null) {
-        setState(() => capture = (appId: tab!.appId!, bytes: bytes));
+      final image = await decodeFrame(await page.snapshot());
+      if (!mounted || w.active != tab) {
+        image.dispose();
+        return;
       }
+      // A phone's chat sheet covers the page, so step it aside while selecting.
+      final phone = MediaQuery.sizeOf(context).width < 900;
+      setState(() {
+        selecting = (tab: tab!, image: image, reopenChat: phone && chatOpen);
+        chatOnly = false;
+        if (phone) chatOpen = false;
+      });
     } catch (error) {
       w.error = error.toString();
       w.changed();
     } finally {
       if (mounted) setState(() => capturing = false);
     }
+  }
+
+  void _finishCapture(Uint8List? bytes) {
+    final current = selecting;
+    if (current == null) return;
+    setState(() {
+      selecting = null;
+      if (current.reopenChat) chatOpen = true;
+      if (bytes != null) capture = (appId: current.tab.appId!, bytes: bytes);
+    });
+    // Let the overlay leave the tree before its frame is released.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => current.image.dispose(),
+    );
   }
 
   Future<void> _send() async {
@@ -462,6 +488,14 @@ class _RelayShellState extends State<RelayShell> {
                                     child: tab.page!.widget,
                                   ),
                                 ),
+                            if (selecting case final s? when s.tab == w.active)
+                              Positioned.fill(
+                                child: RegionCapture(
+                                  key: ValueKey(s.image),
+                                  image: s.image,
+                                  onDone: _finishCapture,
+                                ),
+                              ),
                             if (w.active == null || w.active?.appId == null)
                               Positioned.fill(
                                 child: NewTabPage(
@@ -915,25 +949,28 @@ class _RelayShellState extends State<RelayShell> {
               ),
             ),
           if (capture case final attachment?)
-            ListTile(
-              dense: true,
-              leading: Image.memory(
-                attachment.bytes,
-                width: 52,
-                height: 38,
-                fit: BoxFit.contain,
-              ),
-              subtitle: w.provider['supportsImageInput'] == true
-                  ? null
-                  : const Text('Choose Claude to send this image.'),
-              title: Text(
-                'Screenshot · ${attachment.appId}',
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: IconButton(
-                tooltip: 'Remove screenshot',
-                icon: const Icon(Icons.close),
-                onPressed: () => setState(() => capture = null),
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                dense: true,
+                leading: Image.memory(
+                  attachment.bytes,
+                  width: 52,
+                  height: 38,
+                  fit: BoxFit.contain,
+                ),
+                subtitle: w.provider['supportsImageInput'] == true
+                    ? null
+                    : const Text('Choose Claude to send this image.'),
+                title: Text(
+                  'Screenshot · ${attachment.appId}',
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: IconButton(
+                  tooltip: 'Remove screenshot',
+                  icon: const Icon(Icons.close),
+                  onPressed: () => setState(() => capture = null),
+                ),
               ),
             ),
           Focus(
@@ -996,7 +1033,9 @@ class _RelayShellState extends State<RelayShell> {
                   IconButton(
                     tooltip: 'Capture an area',
                     icon: const Icon(Icons.crop_free, size: 18),
-                    onPressed: capturing || w.busy ? null : _capture,
+                    onPressed: capturing || selecting != null || w.busy
+                        ? null
+                        : _capture,
                   ),
                 if (w.provider['supportsReasoningEffort'] == true)
                   MenuAnchor(

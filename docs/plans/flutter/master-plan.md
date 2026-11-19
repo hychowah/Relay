@@ -123,7 +123,8 @@ reduced motion.
 
 ## Next
 
-1. Review Stable 0.0.8 on the Mac: the panel, tab and menu transitions, text selection and region capture. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
-2. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
+1. Review Stable 0.0.8 on the Mac: the panel, tab and menu transitions and text selection. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
+2. Region capture selecting inside the active tab is unreleased. Widget tests cover the crop, Escape and chat staying docked; dragging over a live WKWebView on the Mac is unverified.
+3. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

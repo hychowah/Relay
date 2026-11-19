@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
 
-import 'package:flutter/widgets.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -10,6 +11,7 @@ import 'package:relay_flutter/main.dart';
 import 'package:relay_flutter/page_surface.dart';
 import 'package:relay_flutter/relay_api.dart';
 import 'package:relay_flutter/workspace.dart';
+import 'package:relay_flutter/region_capture.dart';
 
 const apps = [
   {'id': 'browser', 'name': 'Browser', 'description': 'Web pages'},
@@ -31,6 +33,7 @@ class FakePage extends PageSurface with BrowserSurface {
   Json? lastCommand, result;
   Completer<Json>? pending;
   Completer<void>? loading;
+  Uint8List? frame;
   @override
   Widget get widget => SizedBox.expand(
     key: ValueKey('page-${spec.id}'),
@@ -51,6 +54,10 @@ class FakePage extends PageSurface with BrowserSurface {
   };
   @override
   Future<void> get ready => loading?.future ?? Future.value();
+  @override
+  bool get canCapture => frame != null;
+  @override
+  Future<Uint8List> snapshot() async => frame!;
   @override
   Future<Json> read() async => {'text': 'Desk: 150 by 80 cm', 'url': url};
   @override
@@ -624,6 +631,66 @@ void main() {
     await tester.tap(find.text('Room layout').last);
     await tester.pumpAndSettle();
     expect(f.w.tabs.length, 1);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('screenshot selection opens inside the active tab beside chat', (
+    tester,
+  ) async {
+    final f = Fixture();
+    await f.w.start();
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await f.w.openApp(f.w.apps[1]);
+    f.pages.last.frame = await tester.runAsync(() async {
+      final recorder = ui.PictureRecorder();
+      Canvas(recorder).drawColor(Colors.blue, BlendMode.src);
+      final image = await recorder.endRecording().toImage(80, 60);
+      final png = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      return png!.buffer.asUint8List();
+    });
+    await tester.pumpWidget(
+      RelayApp(workspace: f.w, initialDraft: '', saveDraft: (_) async {}),
+    );
+    await tester.pumpAndSettle();
+    final page = tester.getRect(find.text('View Room layout'));
+    final panel = tester.getRect(
+      find.byKey(const ValueKey('conversation-panel')),
+    );
+
+    Future<void> settle(Finder until) async {
+      for (var i = 0; i < 30 && until.evaluate().isEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+    }
+
+    await tester.tap(find.byTooltip('Capture an area'));
+    await settle(find.text('Drag over the area to attach'));
+    expect(find.byType(Dialog), findsNothing);
+    expect(tester.getRect(find.byType(RegionCapture)), page);
+    expect(
+      tester.getRect(find.byKey(const ValueKey('conversation-panel'))),
+      panel,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(find.byType(RegionCapture), findsNothing);
+
+    await tester.tap(find.byTooltip('Capture an area'));
+    await settle(find.byType(RegionCapture));
+    await tester.dragFrom(
+      page.topLeft + const Offset(20, 20),
+      const Offset(200, 120),
+    );
+    await settle(find.byTooltip('Remove screenshot'));
+    expect(find.byType(RegionCapture), findsNothing);
+    expect(find.text('Screenshot · room-layout'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 }
