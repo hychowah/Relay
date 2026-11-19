@@ -736,7 +736,55 @@ void main() {
     await tester.tapAt(right.center);
     await tester.pump();
     expect(f.w.active, browser);
-
+    // On macOS a native page gets no input wherever Flutter paints over it, so
+    // nothing may overlap the selected page, edges included. Its outline is a
+    // frame around the page, in the other pane a colour that does not show.
+    final pages = find
+        .ancestor(
+          of: find.byKey(ValueKey(browser.id)),
+          matching: find.byType(Stack),
+        )
+        .first;
+    final inPage = find.descendant(
+      of: find.byKey(ValueKey('page-${browser.id}')),
+      matching: find.byWidgetPredicate((_) => true),
+    );
+    final selected = tester.getRect(find.byKey(ValueKey('page-${browser.id}')));
+    final painted = find.descendant(
+      of: pages,
+      matching: find.byWidgetPredicate(
+        (w) => w is ColoredBox || w is DecoratedBox || w is CustomPaint,
+      ),
+    );
+    // The exit button sits on the divider and reaches 11 pixels into the page
+    // on purpose, so it is the one drawing left out.
+    final inside = {
+      ...inPage.evaluate(),
+      ...find
+          .descendant(
+            of: find.byWidgetPredicate(
+              (w) => w is Material && w.shape is CircleBorder,
+            ),
+            matching: find.byWidgetPredicate((_) => true),
+          )
+          .evaluate(),
+    };
+    final outline = Theme.of(tester.element(pages)).colorScheme.primary
+        .withValues(alpha: .45);
+    var outlines = 0;
+    for (final element in painted.evaluate()) {
+      if (inside.contains(element)) continue;
+      final box = element.renderObject! as RenderBox;
+      final rect = box.localToGlobal(Offset.zero) & box.size;
+      expect(
+        rect.overlaps(selected),
+        isFalse,
+        reason: '$rect ${element.widget} ${element.widget.key}',
+      );
+      final widget = element.widget;
+      if (widget is ColoredBox && widget.color == outline) outlines++;
+    }
+    expect(outlines, 4);
     tester.view.physicalSize = const Size(700, 800);
     await tester.pumpAndSettle();
     expect(find.text('View Room layout'), findsNothing);
@@ -808,7 +856,7 @@ void main() {
     expect(tester.element(browserView), same(browserElement));
 
     await dragDivider(-2000);
-    expect(page(room).width, closeTo(max(240, width * .2) - 3, 1));
+    expect(page(room).width, closeTo(max(240, width * .2) - 7, 1));
 
     final reset = grip();
     await tester.tapAt(reset, kind: PointerDeviceKind.mouse);
