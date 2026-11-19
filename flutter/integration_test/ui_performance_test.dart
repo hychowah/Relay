@@ -26,7 +26,7 @@ import 'package:relay_flutter/workspace_tabs.dart';
 
 import 'frame_summary.dart';
 
-// Seed sizes and repeat counts. The whole suite runs in about two minutes.
+// Seed sizes and repeat counts.
 const shortConversationMessages = 24;
 const longConversationMessages = 2000;
 const streamHistoryMessages = 40;
@@ -524,23 +524,6 @@ void main() {
       'display_hz': hz,
       'window_width': size.width,
       'window_height': size.height,
-      'settings': {
-        'short_conversation_messages': shortConversationMessages,
-        'long_conversation_messages': longConversationMessages,
-        'stream_history_messages': streamHistoryMessages,
-        'stream_seconds': streamSeconds,
-        'stream_reply_characters': _streamReply.length,
-        'panel_cycles': panelCycles,
-        'tab_rounds': tabRounds,
-        'tabs': titles.length,
-        'typing_rounds': typingRounds,
-        'typed_characters': typedText.length,
-        'scroll_pixels': scrollPixels,
-        'scroll_pixels_per_second': scrollPixelsPerSecond,
-        'transcript_minutes': transcriptMinutes,
-        'transcript_characters': '${_transcript['text']}'.length,
-        'transcript_scroll_pixels': transcriptScrollPixels,
-      },
       'scenarios': {
         for (final entry in ranges.entries)
           entry.key: frameSummary(

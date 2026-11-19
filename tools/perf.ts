@@ -10,7 +10,7 @@ import { gzipSync } from "node:zlib";
 import { randomUUID } from "node:crypto";
 import { Store } from "../server/store.ts";
 import type { Run, Snapshot } from "../shared/types.ts";
-import { latestResult, percentChange, printRows } from "./perf-table.ts";
+import { latestResult, printRows } from "./perf-table.ts";
 
 const SEED = {
   conversations: 200,
@@ -203,7 +203,7 @@ function printTable(previous: Metrics | undefined) {
     const change = before.value ? (metric.value - before.value) / before.value : 0;
     // Timings vary by tens of percent between quiet runs of the same commit, so only sizes are marked.
     const flag = metric.unit !== "ms" && change > LARGER ? "  << worse" : "";
-    return [name, format(metric), format(before), `${percentChange(metric.value, before.value)}${flag}`];
+    return [name, format(metric), format(before), `${change >= 0 ? "+" : ""}${(change * 100).toFixed(0)}%${flag}`];
   });
   const header = previous ? ["Metric", "This run", "Previous", "Change"] : ["Metric", "This run"];
   printRows([header, ...rows.map((row) => row.slice(0, header.length))]);

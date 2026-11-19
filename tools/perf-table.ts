@@ -12,11 +12,6 @@ export function latestResult<T>(dir: string, matches: (name: string) => boolean)
   return file ? { file, data: JSON.parse(readFileSync(join(dir, file), "utf8")) } : undefined;
 }
 
-export const percentChange = (value: number, before: number) => {
-  const change = before ? (value - before) / before : 0;
-  return `${change >= 0 ? "+" : ""}${(change * 100).toFixed(0)}%`;
-};
-
 /** Prints rows with the first column left-aligned and the others right-aligned. */
 export function printRows(rows: string[][]) {
   const widths = rows[0].map((_, i) => Math.max(...rows.map((row) => (row[i] ?? "").length)));

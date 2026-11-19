@@ -5,12 +5,12 @@
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { latestResult, percentChange, printRows } from "./perf-table.ts";
+import { latestResult, printRows } from "./perf-table.ts";
 
 // The test app gets its own bundle id, so it never reads or writes the
 // installed app's preferences, WebKit data or saved window position.
 const BUNDLE_ID = "app.relay.flutterPerf";
-// Marked changes. In three runs of one commit on the MacBook Neo, fps moved by
+// Marked changes. In four runs of one commit on the MacBook Neo, fps moved by
 // up to 3 (one 100 ms hitch among 190 frames) and slow frames by up to 1.1 points.
 const FPS_DROP = 5;
 const SLOW_RISE = 3;
@@ -60,32 +60,27 @@ flutter drive --profile -d macos --driver=test_driver/integration_test.dart \\
 
 const COLUMNS: Array<[key: string, header: string]> = [
   ["frames", "Frames"], ["fps", "FPS"], ["slow_frames_percent", "Slow %"],
-  ["build_ms_median", "Build p50"], ["build_ms_p90", "Build p90"],
-  ["raster_ms_median", "Raster p50"], ["raster_ms_p90", "Raster p90"],
-  ["gaps_over_25ms", "Gaps >25ms"], ["worst_gap_ms", "Worst gap"],
+  ["gaps_over_25ms", "Waits >25 ms"], ["worst_gap_ms", "Worst wait (ms)"],
 ];
 
-function change(key: string, value: number, before: number) {
-  const difference = value - before;
-  const signed = (text: string) => `${difference >= 0 ? "+" : ""}${text}`;
-  if (key === "fps") return signed(difference.toFixed(1)) + (difference < -FPS_DROP ? " <<" : "");
-  if (key === "slow_frames_percent") return signed(`${difference.toFixed(1)}pt`) + (difference > SLOW_RISE ? " <<" : "");
-  if (key === "gaps_over_25ms") return signed(String(difference));
-  // Frame times vary between runs, so their changes are shown, not marked.
-  return percentChange(value, before);
+// Each cell shows this run's value with the previous run's in brackets. Times
+// vary between runs, so only a clear fall in fps or rise in slow frames is marked.
+function cell(key: string, value: number, before?: number) {
+  const text = (n: number) => key === "frames" || key === "gaps_over_25ms" ? String(n) : n.toFixed(1);
+  if (before === undefined) return text(value);
+  const marked = key === "fps" ? before - value > FPS_DROP : key === "slow_frames_percent" && value - before > SLOW_RISE;
+  return `${text(value)} (${text(before)})${marked ? " <<" : ""}`;
 }
 
 function printTable(scenarios: Record<string, Summary>, previous?: Record<string, Summary>) {
-  const rows = [["Scenario", ...COLUMNS.map(([, header]) => header)]];
-  for (const [name, summary] of Object.entries(scenarios)) {
-    rows.push([name, ...COLUMNS.map(([key]) => key.endsWith("_ms") || key.includes("_ms_")
-      ? summary[key].toFixed(1) : String(summary[key]))]);
-    const before = previous?.[name];
-    if (before) rows.push(["  change", ...COLUMNS.map(([key]) => change(key, summary[key], before[key]))]);
-  }
-  printRows(rows);
-  console.log("Times are in ms. Slow % counts frames whose build or raster took longer than one display refresh.");
-  if (previous) console.log(`<< marks fps down by more than ${FPS_DROP} or slow frames up by more than ${SLOW_RISE} points.`);
+  printRows([
+    ["Scenario", ...COLUMNS.map(([, header]) => header)],
+    ...Object.entries(scenarios).map(([name, summary]) =>
+      [name, ...COLUMNS.map(([key]) => cell(key, summary[key], previous?.[name]?.[key]))]),
+  ]);
+  console.log("Slow %: frames whose build or raster took longer than one display refresh. "
+    + "Waits: gaps between frames while something moves.");
+  if (previous) console.log(`(Previous run.) << marks fps down by more than ${FPS_DROP} or slow % up by more than ${SLOW_RISE} points.`);
 }
 
 async function main() {

@@ -114,34 +114,14 @@ Trash cleanup deletes it with the conversation.
 
 ### Measure UI smoothness
 
-From the repository root on WSL, run `npm run perf:ui` now and then. It is not a
-test and has no pass or fail. It runs `integration_test/ui_performance_test.dart`
-in profile mode from a temporary copy of this checkout's `flutter/` folder on
-the Mac, then removes the copy and the test app's data. A test window shows for
-about three minutes: leave the Mac unused, with the window visible and Reduce
-Motion off. The test app has its own bundle id, `app.relay.flutterPerf`, so it
-never touches the installed app's settings, tabs, website data, window position
-or updates. It uses a loopback fixture with synthetic text, not a Relay server.
-
-The scenarios are: the chat panel opening and closing over an empty tab and over
-a web page; typing in the composer, one character per frame; switching between
-five tabs, four of them loaded WKWebViews; opening and scrolling the transcript
-pane of an hour-long video; scrolling 40,000 pixels up a 2,000-message
-conversation of mixed Markdown and back, while it is polled every second; and a
-12-second reply streaming in. Sizes and repeat counts are constants at the top
-of the test.
-
-For each scenario the table shows: frames measured; frames per second while
-something moves (the display rate when smooth); slow %, the share of frames
-whose build (Dart) or raster (GPU) work took longer than one display refresh;
-median and 90th-percentile build and raster times in ms; how many times the
-screen waited more than 25 ms for a new frame (a visible hitch at 60 Hz); and
-the longest such wait. These cover Flutter's part of each frame, not WebKit's.
-
-Each run is saved as `tmp/perf/ui-<timestamp>.json` with its commit and dirty
-flag, and the table shows the change from the previous UI run. Times change by
-tens of percent between runs, so only falls in frames per second and rises in
-slow frames beyond run-to-run noise are marked `<<`.
+Run `npm run perf:ui` from the repository root on WSL now and then; it has no pass
+or fail. For about three minutes a test window shows on the Mac: leave the Mac
+unused, with the window visible and Reduce Motion off. The test app has its own
+bundle id, `app.relay.flutterPerf`, and the run removes its data afterwards.
+Scenarios: the chat panel, typing, tab switching, the transcript pane, scrolling a
+2,000-message conversation and a streaming reply. Results go to
+`tmp/perf/ui-*.json` and are compared with the last run. They cover only
+Flutter's part of each frame.
 
 ## Mac updates
 
