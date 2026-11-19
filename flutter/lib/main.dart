@@ -21,6 +21,7 @@ import 'conversation_view.dart';
 import 'workspace_style.dart';
 import 'workspace_tabs.dart';
 import 'region_capture.dart';
+import 'split_layout.dart';
 import 'bug_reports.dart';
 import 'capture_flight.dart';
 import 'transcript_pane.dart';
@@ -226,6 +227,9 @@ class _RelayShellState extends State<RelayShell> {
   late bool chatOpen = widget.initialChatOpen, savedChatOpen = chatOpen;
   bool chatOnly = false;
   bool transcriptOpen = false;
+
+  /// The pane a tab is being dragged over and the side it would take.
+  (WorkspaceTab, SplitSide)? dropping;
   ({String pane, String text, String page})? transcriptSelection;
   late double chatWidth = widget.initialChatWidth;
   int lastPresentation = 0;
@@ -610,7 +614,7 @@ class _RelayShellState extends State<RelayShell> {
                       Expanded(
                         child: LayoutBuilder(
                           builder: (context, area) =>
-                              _pages(area.maxWidth, size.maxWidth >= 900),
+                              _pages(area.biggest, size.maxWidth >= 900),
                         ),
                       ),
                     ],
@@ -628,44 +632,81 @@ class _RelayShellState extends State<RelayShell> {
   /// Every tab's page stays in one keyed slot of this stack, so showing it
   /// alone, in a split pane or hidden only changes its position and never
   /// recreates its native view.
-  Widget _pages(double width, bool desktop) {
-    final pair = desktop && w.splitShown ? w.split! : null;
-    final shown = pair ?? [?w.active];
-    // Each pane keeps at least 240 pixels or a fifth of the page, whichever
-    // is larger.
-    final minFraction = (240 / width).clamp(.2, .5);
-    final fraction = w.splitWidth.clamp(minFraction, 1 - minFraction);
-    final middle = width * fraction;
-    Widget pane(WorkspaceTab tab, Widget child, {Key? key}) {
-      final side = pair?.indexOf(tab) ?? -1;
-      return Positioned.fill(
-        key: key,
-        left: side == 1 ? middle + 3 : 0,
-        right: side == 0 ? width - middle + 3 : 0,
-        child: child,
+  Widget _pages(Size size, bool desktop) {
+    final split = desktop ? w.shownSplit?.layout : null;
+    final area = Offset.zero & size;
+    final rects = <WorkspaceTab, Rect>{};
+    final dividers = <(SplitBranch, Rect, Rect)>[];
+    if (split != null) {
+      split.layOut(
+        area,
+        pane: (tab, rect) => rects[tab] = rect,
+        divider: (branch, area, line) => dividers.add((branch, area, line)),
       );
+    } else if (w.active case final tab?) {
+      rects[tab] = area;
     }
+    final shown = rects.keys.toList();
+    Widget pane(WorkspaceTab tab, Widget child, {Key? key}) =>
+        Positioned.fromRect(key: key, rect: rects[tab] ?? area, child: child);
 
-    final frame = pair == null ? 0.0 : 2.0;
+    final frame = split == null ? 0.0 : 2.0;
 
-    Widget dropZone(bool left) => Positioned.fill(
-      left: left ? 0 : width / 2,
-      right: left ? width / 2 : 0,
-      child: DragTarget<WorkspaceTab>(
-        onWillAcceptWithDetails: (details) => w.canSplitWith(details.data),
-        onAcceptWithDetails: (details) {
-          setState(() => chatOnly = false);
-          w.dropInSplit(details.data, left: left);
-        },
-        builder: (context, candidates, _) => candidates.isEmpty
-            ? const SizedBox.expand()
-            : DecoratedBox(
-                key: ValueKey(left ? 'drop-left' : 'drop-right'),
-                decoration: BoxDecoration(
-                  color: colors.primary.withValues(alpha: .12),
-                  border: Border.all(color: colors.primary, width: 2),
+    // A tab dropped on a pane takes the side whose edge is nearest.
+    Widget dropZone(WorkspaceTab target) => pane(
+      target,
+      Builder(
+        builder: (zone) {
+          SplitSide side(Offset global) {
+            final box = zone.findRenderObject()! as RenderBox;
+            return SplitSide.nearest(box.globalToLocal(global), box.size);
+          }
+
+          return DragTarget<WorkspaceTab>(
+            onWillAcceptWithDetails: (details) =>
+                details.data != target && details.data is! SplitTab,
+            onMove: (details) {
+              final next = (target, side(details.offset));
+              if (dropping != next) setState(() => dropping = next);
+            },
+            onLeave: (_) {
+              if (dropping?.$1 == target) setState(() => dropping = null);
+            },
+            onAcceptWithDetails: (details) {
+              setState(() {
+                dropping = null;
+                chatOnly = false;
+              });
+              w.dropInSplit(details.data, target, side(details.offset));
+            },
+            builder: (context, candidates, _) {
+              final hover = dropping;
+              if (candidates.isEmpty || hover == null || hover.$1 != target) {
+                return const SizedBox.expand();
+              }
+              final at = hover.$2;
+              return Align(
+                alignment: switch (at) {
+                  SplitSide.left => Alignment.centerLeft,
+                  SplitSide.right => Alignment.centerRight,
+                  SplitSide.top => Alignment.topCenter,
+                  SplitSide.bottom => Alignment.bottomCenter,
+                },
+                child: FractionallySizedBox(
+                  widthFactor: at.axis == Axis.horizontal ? .5 : 1,
+                  heightFactor: at.axis == Axis.vertical ? .5 : 1,
+                  child: DecoratedBox(
+                    key: ValueKey('drop-${at.name}'),
+                    decoration: BoxDecoration(
+                      color: colors.primary.withValues(alpha: .12),
+                      border: Border.all(color: colors.primary, width: 2),
+                    ),
+                  ),
                 ),
-              ),
+              );
+            },
+          );
+        },
       ),
     );
 
@@ -683,7 +724,7 @@ class _RelayShellState extends State<RelayShell> {
               Builder(
                 builder: (context) {
                   final bar = ColoredBox(
-                    color: pair != null && w.active == tab
+                    color: split != null && w.active == tab
                         ? colors.primary.withValues(alpha: .45)
                         : Colors.transparent,
                   );
@@ -723,7 +764,7 @@ class _RelayShellState extends State<RelayShell> {
                         right: frame,
                         bottom: frame,
                         child: Offstage(
-                          offstage: !shown.contains(tab),
+                          offstage: !rects.containsKey(tab),
                           child: tab.page!.widget,
                         ),
                       ),
@@ -781,7 +822,7 @@ class _RelayShellState extends State<RelayShell> {
           // The other pane's tint is painted over its page on purpose: on
           // macOS a native page loses the mouse wherever Flutter paints over
           // it, so one click there selects the pane.
-          if (pair != null && w.active != tab)
+          if (split != null && w.active != tab)
             pane(
               tab,
               key: ValueKey('pane-${tab.id}'),
@@ -797,60 +838,40 @@ class _RelayShellState extends State<RelayShell> {
               ),
             ),
         ],
-        if (pair != null) ...[
-          Positioned(
-            key: const ValueKey('split-divider'),
-            left: middle - 3,
-            width: 6,
-            top: 0,
-            bottom: 0,
-            child: MouseRegion(
-              cursor: SystemMouseCursors.resizeColumn,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onHorizontalDragUpdate: (details) => setState(() {
-                  w.splitWidth = (fraction + details.delta.dx / width).clamp(
-                    minFraction,
-                    1 - minFraction,
-                  );
-                }),
-                onHorizontalDragEnd: (_) => w.changed(),
-                onDoubleTap: () {
-                  w.splitWidth = .5;
-                  w.changed();
-                },
-                child: ColoredBox(color: colors.outline),
-              ),
-            ),
+        for (final (index, (branch, area, line)) in dividers.indexed)
+          Positioned.fromRect(
+            key: ValueKey('split-divider-$index'),
+            rect: line,
+            child: _divider(branch, area),
           ),
-          Positioned(
-            left: middle - 14,
-            width: 28,
-            top: 0,
-            bottom: 0,
-            child: Center(
-              child: Material(
-                shape: CircleBorder(side: BorderSide(color: colors.outline)),
-                color: colors.surface,
-                child: IconButton(
-                  tooltip: 'Exit split view',
-                  iconSize: 16,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 28,
-                    height: 28,
-                  ),
-                  icon: const Icon(Icons.close),
-                  // Leaving with the other tab keeps the selected one shown.
-                  onPressed: () =>
-                      w.leaveSplit(pair.firstWhere((tab) => tab != w.active)),
-                ),
-              ),
-            ),
-          ),
-        ],
-        if (desktop) ...[dropZone(true), dropZone(false)],
+        if (desktop) ...[for (final tab in shown) dropZone(tab)],
       ],
+    );
+  }
+
+  Widget _divider(SplitBranch branch, Rect area) {
+    final horizontal = branch.axis == Axis.horizontal;
+    void drag(DragUpdateDetails details) => setState(
+      () => horizontal
+          ? branch.resize(details.delta.dx, area.width)
+          : branch.resize(details.delta.dy, area.height),
+    );
+    return MouseRegion(
+      cursor: horizontal
+          ? SystemMouseCursors.resizeColumn
+          : SystemMouseCursors.resizeRow,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragUpdate: horizontal ? drag : null,
+        onHorizontalDragEnd: horizontal ? (_) => w.changed() : null,
+        onVerticalDragUpdate: horizontal ? null : drag,
+        onVerticalDragEnd: horizontal ? null : (_) => w.changed(),
+        onDoubleTap: () {
+          branch.fraction = .5;
+          w.changed();
+        },
+        child: ColoredBox(color: colors.outline),
+      ),
     );
   }
 
@@ -985,17 +1006,19 @@ class _RelayShellState extends State<RelayShell> {
         Expanded(
           child: DragTarget<WorkspaceTab>(
             onWillAcceptWithDetails: (details) =>
-                w.split?.contains(details.data) ?? false,
+                w.shownSplit?.layout.contains(details.data) ?? false,
             onAcceptWithDetails: (details) => w.leaveSplit(details.data),
             builder: (context, _, _) => WorkspaceTabs(
               tabs: List.of(w.tabs),
-              selected: chatOnly ? null : w.active,
-              split: MediaQuery.sizeOf(context).width >= 900 ? w.split : null,
+              selected: chatOnly ? null : w.shownSplit ?? w.active,
+              split: MediaQuery.sizeOf(context).width >= 900
+                  ? w.shownSplit?.layout.tabs
+                  : null,
               draggable: MediaQuery.sizeOf(context).width >= 900,
               onSelect: (tab) {
                 w.recorder.action('select tab', {'tab': tab.title});
                 setState(() => chatOnly = false);
-                w.select(tab);
+                w.select(tab, alone: true);
               },
               onClose: w.closeTab,
             ),

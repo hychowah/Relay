@@ -36,14 +36,19 @@ The implemented workflows include the following.
   install/restart. Flutter has its own release channel.
 - Every start restores the previous tabs and views, the draft, the chat panel
   state and the Mac window frame. Tabs are saved as they change.
-- Split view (desktop only): drag a tab onto the left or right half of the
-  page to show it beside the current tab. At most two panes; the pair and its
-  divider position are saved and restored with the tabs. Drag the divider to
-  resize the panes (each keeps at least 240 pixels or a fifth of the page,
-  whichever is larger), double-click it to return to half and half, or click
-  its middle button to end the split and keep the selected tab. Each new split
-  starts at half. The clicked pane is the selected tab for context and agent
-  navigation. Narrow windows show only the selected pane.
+- Split view (desktop only), without a preset grid: dropping a tab on a page
+  opens a split tab; the edge nearest the pointer decides where it goes,
+  beside or above or below that pane. Any number of panes, nested both ways; a
+  tab already in the split moves. App tabs stay in the strip: clicking one
+  shows it full screen, and the split tab returns to the split. Closing the
+  split tab ends only the split. A tab can be in several split tabs; closing
+  it takes it out of each, and a split left with one pane closes. Split tabs,
+  their panes and divider positions are saved and restored with the tabs.
+  Drag a divider to resize its two sides (each keeps at least 240 pixels or a
+  fifth of that split, whichever is larger) or double-click it to return to
+  half. Each new split starts at half. The clicked pane is the selected tab
+  for context and agent navigation. Narrow windows show only the selected
+  pane.
 - Night mode: Workspace menu → Appearance offers System, Light and Dark,
   saved per device. Relay's own screens follow it; app and website pages keep
   their own look, and the Mac title bar follows macOS.
@@ -217,11 +222,15 @@ and none of these builds has been reviewed on the Mac.
 9. Restart Stable 0.0.13 on the Mac with a Browser tab and two or more app tabs open. Check that the last active tab shows first, the hidden tabs finish loading (none closed by the 20 s limit), and the chat history appears without waiting for them.
 10. Check `browser.transcript` in WKWebView on the Mac with a short and an hour-long YouTube video, note how long each page takes against the 7-second limit, then ask about one through the real agent. Its page script passed against live YouTube only in headless Chromium with a Safari user agent. In the transcript pane, check on the Mac: opening it loads the hour-long transcript and scrolls smoothly; a drag selection survives clicking into the composer and reaches the question; moving to another video reloads it; a newer selection on the page replaces the transcript's; it stays hidden for other pages and narrow windows, and still loads in chat-only mode. For following, check that the highlight moves while the video plays, moves within a second of a seek, stays still while paused and during an ad, and still follows after moving to another video in the same tab; that scrolling the pane by hand or selecting there stops the scrolling while the highlight keeps moving; and that **Follow video** resumes it without losing the kept selection. An earlier draft of the play-time script, with an extra in-page navigation check, passed live in headless Chromium (play, seek, pause, in-page navigation; no ad appeared); the committed shorter script was not run live, and only a fake page tests the pane.
 11. Try the split view on the Mac with real WKWebViews: dragging a tab over a
-   page, the drop highlight, clicking the dimmed pane to select it, pages
-   keeping their state as they move in and out of the split, dragging the
-   divider (also when the pointer passes over a page), double-clicking it, and
-   its exit button, which must not get in the way of the left page's scrollbar
-   or content. Only widget tests with fake pages cover it. A bug report on
+   page, the drop highlight following the nearest edge, three or more panes
+   split both ways, clicking a dimmed pane to select it, pages keeping their
+   state as they move in and out of the split, dragging the side-by-side and
+   stacked dividers (also when the pointer passes over a page),
+   double-clicking them, switching between an app's tab and the split tab,
+   and closing the split tab. The multi-pane split tab is not in
+   Stable yet; analysis and 58 Flutter tests passed on WSL, and only widget
+   tests with fake pages cover it. Sessions saved by 0.0.13 or earlier come
+   back unsplit once, since the saved form changed. A bug report on
    0.0.12 showed neither page took clicks or scrolling after a split: the
    selected pane's border took the whole pane's input on macOS. Its outline
    is now a 2-pixel frame around the page, with nothing drawn over it, in
