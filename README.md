@@ -81,3 +81,20 @@ API keys and other secret fields with `[redacted]`. Reports contain conversation
 text, so they stay with the runtime data, outside the repository. Choose **Bug
 reports** in the workspace menu to read them: each shows its description, screenshot
 and a timeline of events that expand to their full details.
+
+### Measure performance
+
+Run `npm run perf` on Linux (WSL) from time to time to see how speed changes
+as the project grows. It is not a test and has no pass or fail. In about half a
+minute, with
+no network or API keys, it seeds a temporary database with synthetic
+conversations, memories and a 2,000-message conversation, then measures:
+server startup, the main HTTP reads (time and response size), history search,
+message writes, app search through a small local fixture app, message round
+trips with the scripted provider, server memory, and the web build (time and
+JS/CSS size). Add `-- --skip-build` to leave out the web build.
+
+Each run is saved in `tmp/perf/` and the table compares it with the previous
+run, marking results more than 20% worse. The numbers depend on the machine,
+so compare runs from the same machine. The Flutter client is measured only by
+the [Mac animation benchmark](flutter/README.md#measure-the-conversation-panel-animation).
