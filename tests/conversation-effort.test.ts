@@ -45,6 +45,12 @@ test("conversation effort migrates old records, persists per chat, and reaches t
     for (const effort of ["medium", "ultra", 1, {}, undefined])
       assert.equal((await post(route, { reasoningEffort: effort })).status, 400);
     assert.equal((await post("/api/conversations/missing/settings", { reasoningEffort: "low" })).status, 404);
+    const saved = store.conversations().length;
+    assert.equal((await post("/api/conversations", { reasoningEffort: "ultra" })).status, 400);
+    assert.equal(store.conversations().length, saved, "A refused effort saves no conversation");
+    const drafted = await post("/api/conversations", { reasoningEffort: "high" });
+    assert.equal(drafted.status, 201);
+    assert.equal(store.conversation((await drafted.json()).id)!.reasoningEffort, "high");
     provider.model = "unsupported";
     assert.equal((await post(route, { reasoningEffort: "max" })).status, 400);
     provider.model = "deepseek-flash";

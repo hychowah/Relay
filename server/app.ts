@@ -13,7 +13,7 @@ import type {
   ProviderUpdate,
   BotInput,
   Memory,
-  Operation, OperationResult, OperationProgress, ViewIntent, SurfaceContext,
+  Operation, OperationResult, OperationProgress, ViewIntent, SurfaceContext, ReasoningEffort,
 } from "../shared/types.ts";
 import type { Harness } from "./harness.ts";
 import { AppRequestError } from "./integrations/http.ts";
@@ -126,6 +126,14 @@ export function createWorkspace(
     tasks.add(task);
     try { await task; }
     finally { tasks.delete(task); trashCleanup = undefined; }
+  }
+
+  function reasoningEffort(effort: unknown): ReasoningEffort | null {
+    if (effort !== null && !reasoningEfforts.includes(effort as ReasoningEffort))
+      throw new HTTPException(400, { message: "Choose a supported thinking effort." });
+    if (effort !== null && effort !== "default" && !supportsReasoningEffort(provider.mode, provider.model))
+      throw new HTTPException(400, { message: "This model does not support thinking effort." });
+    return effort as ReasoningEffort | null;
   }
 
   function integration(appId: string) {
@@ -597,8 +605,9 @@ export function createWorkspace(
         ? body.title.trim().slice(0, 100)
         : "New conversation";
     if (body.botId && !store.bot(body.botId)) throw new HTTPException(404, { message: "Bot not found." });
+    const effort = body.reasoningEffort === undefined ? null : reasoningEffort(body.reasoningEffort);
     return c.json(
-      store.createConversation(title, await harness.createSession(title), body.botId || null),
+      store.createConversation(title, await harness.createSession(title), body.botId || null, effort),
       201,
     );
   });
@@ -648,11 +657,7 @@ export function createWorkspace(
     const id = c.req.param("id");
     const body = await c.req.json();
     if (!store.conversation(id)) throw new HTTPException(404, { message: "Conversation not found." });
-    const effort = body?.reasoningEffort;
-    if (effort !== null && !reasoningEfforts.includes(effort))
-      throw new HTTPException(400, { message: "Choose a supported thinking effort." });
-    if (effort !== null && effort !== "default" && !supportsReasoningEffort(provider.mode, provider.model))
-      throw new HTTPException(400, { message: "This model does not support thinking effort." });
+    const effort = reasoningEffort(body?.reasoningEffort);
     if (changingProvider || store.activeRun(id))
       throw new HTTPException(409, { message: "Wait for the current reply or settings change to finish." });
     return c.json(store.setReasoningEffort(id, effort));

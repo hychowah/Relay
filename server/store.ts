@@ -166,17 +166,19 @@ export class Store {
     return bot;
   }
 
-  createConversation(title: string, sessionId: string, botId: string | null = null): Conversation {
+  createConversation(
+    title: string, sessionId: string, botId: string | null = null, reasoningEffort: ReasoningEffort | null = null,
+  ): Conversation {
     const conversation = {
       id: randomUUID(),
       title,
       botId,
-      reasoningEffort: null,
+      reasoningEffort,
       createdAt: new Date().toISOString(),
     };
     this.db
-      .prepare("INSERT INTO conversations (id, session_id, title, created_at, bot_id) VALUES (?, ?, ?, ?, ?)")
-      .run(conversation.id, sessionId, title, conversation.createdAt, botId);
+      .prepare("INSERT INTO conversations (id, session_id, title, created_at, bot_id, reasoning_effort) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(conversation.id, sessionId, title, conversation.createdAt, botId, reasoningEffort);
     return conversation;
   }
 

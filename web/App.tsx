@@ -150,6 +150,7 @@ export default function App() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [savingEffort, setSavingEffort] = useState(false);
+  const [draftEffort, setDraftEffort] = useState<ReasoningEffort | null>(null);
   const [deletingConversation, setDeletingConversation] = useState<string>();
   const [confirmTrashId, setConfirmTrashId] = useState<string>();
   const [showTrash, setShowTrash] = useState(false);
@@ -873,6 +874,7 @@ export default function App() {
     return () => { cancelled = true; };
   }, [appId]);
   useEffect(() => {
+    setDraftEffort(null);
     if (!conversationId) {
       setSnapshot(undefined);
       sessionStorage.removeItem("relay.conversation");
@@ -1067,28 +1069,10 @@ export default function App() {
     setConversationId("");
     setSnapshot(undefined);
     setDraft("");
+    setDraftEffort(null);
     setHistorySearch("");
     expandChat();
     setSidebarOpen(false);
-  }
-  async function newConversation(botId = selectedBotId) {
-    setShowTrash(false);
-    try {
-      const next = await api<Conversation>("/api/conversations", {
-        botId: botId || null,
-      });
-      setConversations((current) => [next, ...current]);
-      const nextBot = bots.find((bot) => bot.id === botId);
-      if (nextBot && currentViewAppId && !nextBot.appIds.includes(currentViewAppId)) clearAppContext();
-      setSelectedBotId(botId);
-      setSnapshot(undefined);
-      setConversationId(next.id);
-      setDraft("");
-      expandChat();
-      setSidebarOpen(false);
-    } catch (e) {
-      setError((e as Error).message);
-    }
   }
   async function deleteConversation(conversation: Conversation) {
     setDeletingConversation(conversation.id);
@@ -1122,21 +1106,20 @@ export default function App() {
     finally { setDeletingConversation(undefined); }
   }
   async function changeEffort(reasoningEffort: ReasoningEffort | null) {
+    const originalId = conversationId;
+    if (!originalId) {
+      setDraftEffort(reasoningEffort);
+      return;
+    }
     setSavingEffort(true);
     ++effortRevision.current;
     setError("");
-    const originalId = conversationId;
     try {
-      const conversation = originalId
-        ? { id: originalId }
-        : await api<Conversation>("/api/conversations", { botId: selectedBotId || null });
-      const updated = await api<Conversation>(`/api/conversations/${conversation.id}/settings`, { reasoningEffort });
+      const updated = await api<Conversation>(`/api/conversations/${originalId}/settings`, { reasoningEffort });
       setConversations((current) => [updated, ...current.filter((item) => item.id !== updated.id)]);
-      if (activeConversation.current === originalId) {
-        if (!originalId) setConversationId(updated.id);
+      if (activeConversation.current === originalId)
         setSnapshot((current) => current?.conversation.id === updated.id
           ? { ...current, conversation: updated } : current);
-      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -1170,6 +1153,7 @@ export default function App() {
       if (!id) {
         const next = await api<Conversation>("/api/conversations", {
           botId: selectedBotId || null,
+          reasoningEffort: draftEffort,
         });
         setConversations((current) => [next, ...current]);
         id = next.id;
@@ -1252,7 +1236,7 @@ export default function App() {
         </a>
         <button
           className={`sidebar-action ${!selectedBotId ? "selected" : ""}`}
-          onClick={() => void newConversation("")}
+          onClick={() => selectBot("")}
         >
           <span>＋</span> New chat
         </button>
@@ -1323,7 +1307,7 @@ export default function App() {
           <button
             className="icon-button"
             aria-label="New conversation"
-            onClick={() => void newConversation()}
+            onClick={() => selectBot(selectedBotId)}
           >
             +
           </button>
@@ -1612,7 +1596,7 @@ export default function App() {
                   className="icon-button"
                   aria-label="Start new conversation"
                   title="Start new conversation"
-                  onClick={() => void newConversation()}
+                  onClick={() => selectBot(selectedBotId)}
                 >
                   +
                 </button>
@@ -1799,7 +1783,7 @@ export default function App() {
                       <span>Thinking</span>
                       <select
                         aria-label="Conversation thinking effort"
-                        value={(snapshot?.conversation.id === conversationId ? snapshot.conversation : conversations.find((item) => item.id === conversationId))?.reasoningEffort ?? "inherit"}
+                        value={(conversationId ? (snapshot?.conversation.id === conversationId ? snapshot.conversation : conversations.find((item) => item.id === conversationId))?.reasoningEffort : draftEffort) ?? "inherit"}
                         disabled={sending || !!running || savingEffort || deletingConversation === conversationId || (!!conversationId && !snapshot)}
                         onChange={(event) => void changeEffort(event.target.value === "inherit" ? null : event.target.value as ReasoningEffort)}
                       >
