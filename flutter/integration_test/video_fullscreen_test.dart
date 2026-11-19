@@ -130,10 +130,21 @@ void main() {
     );
     expect(await measure(), [640, 360, 30, 80, 240, 135, 'header', null]);
 
-    // Stopping the screen also ends the page's fullscreen.
-    await controller.runJavaScript(
-      "document.getElementById('player').requestFullscreen()",
-    );
+    // Starting used up the action: asking again at once stays out. An app
+    // script is no click, so the page gets in only once WebKit's 5-second
+    // activation has run out. Stopping the screen also ends it.
+    Future<void> askAgain(String outcome) async {
+      await controller.runJavaScript(
+        "document.getElementById('player').requestFullscreen()"
+        ".then(() => document.title = 'in', () => document.title = 'out')",
+      );
+      await until(() => page.title == outcome, 'asking again: ${page.title}');
+    }
+
+    await askAgain('out');
+    expect(browser.fullScreen, isFalse);
+    await Future<void>.delayed(const Duration(milliseconds: 5200));
+    await askAgain('in');
     await until(() => browser.fullScreen, 'the page did not tell Relay again');
     await browser.fillScreen(false);
     expect(browser.fullScreen, isFalse);

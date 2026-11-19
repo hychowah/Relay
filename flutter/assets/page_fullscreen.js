@@ -32,6 +32,17 @@
   // inside a frame also counts for the frames that contain it.
   const clicked = () => apply(isActive, activation, []);
 
+  // As in a browser, starting fullscreen uses up the click: after fullscreen
+  // starts or ends, the next start needs a new click or key press other than
+  // Escape, or WebKit's 5-second activation must have run out. Clicks inside
+  // a frame are not seen here, so a frame's request within those seconds
+  // waits for a click on this page.
+  const now = performance.now.bind(performance);
+  let fresh = true, spentAt = -Infinity;
+  const unspent = () => fresh || now() - spentAt > 5000;
+  const spend = () => { fresh = false; spentAt = now(); };
+  addEventListener("pointerdown", (event) => { if (event.isTrusted) fresh = true; }, true);
+
   let current = null, addedPopover = false;
   const sheet = new CSSStyleSheet();
 
@@ -100,6 +111,7 @@ html[data-relay-fullscreen-root]{overflow:hidden!important}`;
   function exit() {
     const element = current;
     if (!element) return;
+    spend();
     tell("exit");
     release();
     announce(element);
@@ -107,6 +119,7 @@ html[data-relay-fullscreen-root]{overflow:hidden!important}`;
 
   function enter(element) {
     if (current === element) return;
+    spend();
     const previous = release();
     if (previous) announce(previous);
     current = element;
@@ -128,7 +141,8 @@ html[data-relay-fullscreen-root]{overflow:hidden!important}`;
   }
 
   function request() {
-    const allowed = this instanceof Element && this.isConnected && clicked();
+    if (this === current) return Promise.resolve();
+    const allowed = this instanceof Element && this.isConnected && clicked() && unspent();
     if (!allowed) {
       if (this instanceof Element) {
         queueMicrotask(() => this.dispatchEvent(new Event("fullscreenerror", { bubbles: true, composed: true })));
@@ -168,7 +182,10 @@ html[data-relay-fullscreen-root]{overflow:hidden!important}`;
   // frame inside the fullscreen element reaches the top page, which ends it
   // for every frame.
   addEventListener("keydown", (event) => {
-    if (apply(keyOf, event, []) !== "Escape") return;
+    if (apply(keyOf, event, []) !== "Escape") {
+      if (event.isTrusted) fresh = true;
+      return;
+    }
     if (!current) {
       if (!top) topWindow.postMessage({ relayFullscreen: "exit" }, "*");
       return;
@@ -186,8 +203,11 @@ html[data-relay-fullscreen-root]{overflow:hidden!important}`;
   addEventListener("message", (event) => {
     const state = event.data?.relayFullscreen;
     if (state === "exit") return exit();
-    if (state !== "enter" || !clicked()) return;
+    if (state !== "enter") return;
     const frame = [...document.getElementsByTagName("iframe")].find((f) => f.contentWindow === event.source);
-    if (frame && (frame.allowFullscreen || /\bfullscreen\b/.test(frame.allow))) enter(frame);
+    if (!frame || !(frame.allowFullscreen || /\bfullscreen\b/.test(frame.allow))) return;
+    if (clicked() && unspent()) return enter(frame);
+    // Refused, so the player leaves the fullscreen it took inside its frame.
+    frame.contentWindow.postMessage({ relayFullscreen: "exit" }, "*");
   });
 })();

@@ -98,14 +98,25 @@ test("a page's fullscreen element fills the tab's view and the user can always l
     changes: ["player", null],
   });
 
-  // Escape with focus in a frame inside the fullscreen element ends it too.
+  // Starting uses up the click: a page that keeps asking stays out after
+  // Escape, and the user's next click lets it in.
+  await top.evaluate(`window.asking = setInterval(() => document.getElementById("player").requestFullscreen().catch(() => {}), 50)`);
+  await page.waitForTimeout(500);
+  assert.equal((await state()).messages.length, 2);
+  await top.evaluate("clearInterval(window.asking)");
   await page.click("#full");
+  await told(3, "fullscreen:enter:key");
+
+  // Escape with focus in a frame inside the fullscreen element ends it too.
   await (await frame("#inner")).press("#full", "Escape");
   await told(4, "fullscreen:exit:key");
   assert.equal((await state()).element, null);
 
   // An embedded player that allows fullscreen fills the page with its frame.
+  // The page does not see clicks inside the frame, so within 5 seconds of an
+  // exit it also needs a click of its own.
   const embedded = await frame("#embed");
+  await page.mouse.click(700, 480);
   await embedded.click("#full");
   await told(5, "fullscreen:enter:key");
   assert.equal((await state()).element, "embed");
@@ -114,6 +125,13 @@ test("a page's fullscreen element fills the tab's view and the user can always l
   await embedded.press("#full", "Escape");
   await told(6, "fullscreen:exit:key");
   assert.equal(await embedded.evaluate(() => document.fullscreenElement), null);
+
+  // At once again, with no click on the page, the page refuses and the
+  // player leaves the fullscreen it took inside its frame.
+  await embedded.click("#full");
+  await embedded.waitForFunction(() => document.fullscreenElement === null);
+  assert.deepEqual(await box(embedded, "#video"), { x: 0, y: 0, width: 200, height: 100 });
+  assert.equal((await state()).messages.length, 6);
 
   // A frame that does not allow fullscreen fills only its own frame.
   const plain = await frame("#plain");

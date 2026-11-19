@@ -252,6 +252,8 @@ real WKWebViews.
    another site, then leave macOS fullscreen by hand: the tab strip and chat
    must return. A video in a sign-in popup must fill only the popup; a popup
    opened with `noopener` has no opener, so it would still reach the tab's
-   fullscreen. Only a fixture page ran on the Mac.
+   fullscreen. Restarting an embedded player within 5 s of leaving needs a
+   click on the page, which cannot see the frame's clicks. Only a fixture
+   page ran on the Mac.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.
