@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' show max;
 import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
@@ -589,10 +590,12 @@ void main() {
       f.w.dropInSplit(room, left: true);
       expect(f.w.split, [room, browser]);
       expect(f.w.active, room);
+      f.w.splitWidth = .3;
       f.w.dropInSplit(room, left: false);
       expect(f.w.split, [browser, room]);
       f.w.dropInSplit(blank, left: false);
       expect(f.w.split, [browser, blank], reason: 'at most two panes');
+      expect(f.w.splitWidth, .3, reason: 'swaps keep the divider');
       f.w.select(room);
       expect(f.w.splitShown, isFalse);
       f.w.select(browser);
@@ -609,6 +612,7 @@ void main() {
       );
 
       f.w.dropInSplit(room, left: true);
+      expect(f.w.splitWidth, .5, reason: 'a new split starts at half');
       f.w.select(blank);
       final opened = await f.w.openApp(f.w.apps[0]);
       expect(opened.id, blank.id);
@@ -627,14 +631,19 @@ void main() {
       final room = await first.w.openApp(first.w.apps[1]);
       await first.w.openApp(first.w.apps[0]);
       first.w.dropInSplit(room, left: false);
+      first.w
+        ..splitWidth = .3
+        ..changed();
       final saved = jsonDecode(jsonEncode(first.stored.last)) as Json;
       expect(saved['split'], [1, 0]);
+      expect(saved['splitWidth'], .3);
 
       final next = Fixture(session: saved);
       addTearDown(next.w.dispose);
       await next.w.start();
       final tabs = next.w.tabs;
       expect(next.w.split, [tabs[1], tabs[0]]);
+      expect(next.w.splitWidth, .3);
       expect(next.w.active, tabs[0]);
       expect(next.w.splitShown, isTrue);
 
@@ -672,6 +681,8 @@ void main() {
     await f.w.start();
     expect(f.w.tabs.map((tab) => tab.appId), ['browser', 'research']);
     expect(f.w.split, f.w.tabs);
+    // Sessions saved before the divider existed have no width: start at half.
+    expect(f.w.splitWidth, .5);
     f.w.leaveSplit(f.w.active!);
     f.failRoomRestore = false;
     await f.w.start();
@@ -747,6 +758,72 @@ void main() {
     expect(find.text('View Browser'), findsNothing);
     expect(tester.element(roomView), same(roomElement));
     expect(tester.element(browserView), same(browserElement));
+    await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets('the split divider resizes, resets and ends the split', (
+    tester,
+  ) async {
+    final f = Fixture();
+    await f.w.start();
+    final room = await f.w.openApp(f.w.apps[1]);
+    final browser = await f.w.openApp(f.w.apps[0]);
+    f.w.dropInSplit(room, left: true);
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    final roomView = find.text('View Room layout', skipOffstage: false);
+    final browserView = find.text('View Browser', skipOffstage: false);
+    final roomElement = tester.element(roomView);
+    final browserElement = tester.element(browserView);
+    Rect page(WorkspaceTab tab) =>
+        tester.getRect(find.byKey(ValueKey('page-${tab.id}')));
+    final width = page(browser).right - page(room).left;
+    // Above the exit button in the middle of the divider.
+    Offset grip() => tester
+        .getRect(find.byKey(const ValueKey('split-divider')))
+        .center
+        .translate(0, -150);
+    Future<void> dragDivider(double dx) async {
+      final drag = await tester.startGesture(
+        grip(),
+        kind: PointerDeviceKind.mouse,
+      );
+      // The first pixels of a move only start the drag, as a mouse does.
+      await drag.moveBy(Offset(dx.sign * 2, 0));
+      await drag.moveBy(Offset(dx, 0));
+      await tester.pump();
+      await drag.up();
+      await tester.pumpAndSettle();
+    }
+
+    await dragDivider(150);
+    expect(page(room).width, closeTo(width / 2 + 147, 2));
+    expect(page(browser).width, closeTo(width / 2 - 153, 2));
+    expect(f.stored.last['splitWidth'], closeTo(.5 + 150 / width, .01));
+    expect(tester.element(roomView), same(roomElement));
+    expect(tester.element(browserView), same(browserElement));
+
+    await dragDivider(-2000);
+    expect(page(room).width, closeTo(max(240, width * .2) - 3, 1));
+
+    final reset = grip();
+    await tester.tapAt(reset, kind: PointerDeviceKind.mouse);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tapAt(reset, kind: PointerDeviceKind.mouse);
+    await tester.pumpAndSettle();
+    expect(page(room).width, closeTo(page(browser).width, 1));
+    expect(f.stored.last['splitWidth'], .5);
+
+    await tester.tap(find.byTooltip('Exit split view'));
+    await tester.pumpAndSettle();
+    expect(f.w.split, isNull);
+    expect(f.w.active, room, reason: 'the selected tab stays shown');
+    expect(f.w.tabs, [room, browser]);
+    expect(find.byKey(const ValueKey('split-divider')), findsNothing);
+    expect(tester.element(roomView), same(roomElement));
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets('a click that moves a few pixels still selects the tab', (

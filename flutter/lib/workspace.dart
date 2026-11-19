@@ -84,6 +84,9 @@ class Workspace extends ChangeNotifier {
   /// Desktop only: two tabs shown side by side as [left, right]. The pair is
   /// shown while one of them is active; other tabs still show alone.
   List<WorkspaceTab>? split;
+
+  /// The left pane's share of the page width; each new pair starts at half.
+  double splitWidth = .5;
   bool get splitShown => split?.contains(active) ?? false;
   String? conversationId, error, status, _commandId;
   bool sending = false, _polling = false, _disposed = false;
@@ -235,6 +238,7 @@ class Workspace extends ChangeNotifier {
       'tab': tab.title,
       'side': left ? 'left' : 'right',
     });
+    if (!splitShown) splitWidth = .5;
     final pair = splitShown ? split! : [active!, active!];
     final side = left ? 0 : 1;
     final other = pair[1 - side] == tab ? pair[side] : pair[1 - side];
@@ -778,7 +782,10 @@ class Workspace extends ChangeNotifier {
 
   Json session() => {
     'active': active == null ? -1 : tabs.indexOf(active!),
-    if (split != null) 'split': [for (final tab in split!) tabs.indexOf(tab)],
+    if (split != null) ...{
+      'split': [for (final tab in split!) tabs.indexOf(tab)],
+      'splitWidth': splitWidth,
+    },
     'tabs': tabs
         .map(
           (tab) => {
@@ -854,6 +861,7 @@ class Workspace extends ChangeNotifier {
         pair.first != pair.last &&
         pair.every(tabs.contains)) {
       split = pair;
+      splitWidth = (saved['splitWidth'] as num?)?.toDouble() ?? .5;
     }
     final selected = _restoredTabs[saved['active']] ?? tabs.lastOrNull;
     if (active == null && selected != null && tabs.contains(selected)) {
