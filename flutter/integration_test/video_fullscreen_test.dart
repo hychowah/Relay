@@ -76,14 +76,17 @@ void main() {
 
     // A player in a transformed column below a fixed header, as on video
     // sites. The script that adds fullscreen runs before the page's own.
-    await controller.loadHtmlString(
-      '''<!doctype html><title>Video</title>
+    await controller.loadHtmlString('''<!doctype html><title>Video</title>
       <style>body{margin:0}header{position:fixed;inset:0 0 auto;height:60px;z-index:9;background:#ddd}
       main{transform:translateX(0);margin:80px 0 0 30px;width:240px}</style>
       <header id="header">Header</header>
       <main><div id="player" style="height:135px;background:#246"></div></main>
-      <script>document.title = document.fullscreenEnabled ? 'ready' : 'no fullscreen';</script>''',
-    );
+      <script>
+        document.title = document.fullscreenEnabled ? 'ready' : 'no fullscreen';
+        // Without a click or key press, the page cannot take the screen.
+        document.getElementById('player').requestFullscreen()
+          .then(() => document.title = 'taken without a click', () => {});
+      </script>''');
     await until(
       () => page.title == 'ready',
       'fullscreen is off (${page.title})',
@@ -106,8 +109,8 @@ void main() {
     await until(() => browser.fullScreen, 'the page did not tell Relay');
     expect(await measure(), [640, 360, 0, 0, 640, 360, 'player', 'player']);
 
-    // Shown on the whole screen, the window takes the screen; stopping
-    // returns it and ends the page's fullscreen.
+    // Shown on the whole screen, the window takes the screen. Escape ends
+    // the page's fullscreen, and stopping returns the window.
     final view = tester.binding.platformDispatcher.views.first;
     final window = view.physicalSize;
     await browser.fillScreen(true);
@@ -116,12 +119,24 @@ void main() {
       'the window did not go fullscreen',
     );
     await Future<void>.delayed(const Duration(seconds: 2));
+    await controller.runJavaScript(
+      "dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))",
+    );
+    await until(() => !browser.fullScreen, 'Escape did not end it');
     await browser.fillScreen(false);
     await until(
       () => view.physicalSize == window,
       'the window stayed fullscreen',
     );
-    await until(() => !browser.fullScreen, 'the page stayed fullscreen');
+    expect(await measure(), [640, 360, 30, 80, 240, 135, 'header', null]);
+
+    // Stopping the screen also ends the page's fullscreen.
+    await controller.runJavaScript(
+      "document.getElementById('player').requestFullscreen()",
+    );
+    await until(() => browser.fullScreen, 'the page did not tell Relay again');
+    await browser.fillScreen(false);
+    expect(browser.fullScreen, isFalse);
     expect(await measure(), [640, 360, 30, 80, 240, 135, 'header', null]);
     await tester.pumpWidget(const SizedBox());
   });

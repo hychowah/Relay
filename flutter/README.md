@@ -119,7 +119,9 @@ player embedded from another site that allows fullscreen. In split view the
 video fills its own pane. A tab shown alone takes the whole screen: the tab
 strip, address bar and chat hide and the window enters macOS fullscreen.
 Escape, the player's own button, or leaving macOS fullscreen ends it, and so
-does another tab opening. As in a browser, only a click or key press can start it.
+does another tab opening, or the player leaving the page. As in a browser, only
+a click or key press can start it. A video in a popup window fills only that
+window.
 
 On macOS, select page or PDF text and ask a question with page context enabled.
 With a YouTube video open in a Browser tab, ask about the video: the agent reads

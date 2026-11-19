@@ -250,6 +250,8 @@ real WKWebViews.
    under memory pressure is a product decision for the user.
 18. On the Mac, try YouTube fullscreen alone, in a split pane and embedded in
    another site, then leave macOS fullscreen by hand: the tab strip and chat
-   must return. Only a fixture page ran on the Mac.
+   must return. A video in a sign-in popup must fill only the popup; a popup
+   opened with `noopener` has no opener, so it would still reach the tab's
+   fullscreen. Only a fixture page ran on the Mac.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.
