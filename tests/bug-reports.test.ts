@@ -42,13 +42,27 @@ test("bug reports save the recording with the server's conversation and without 
     assert.equal((await post({ events: [] })).status, 400);
 
     const list = await (await workspace.app.request("/api/bug-reports")).json();
-    assert.deepEqual(list, [{ id, savedAt: report.savedAt, description: "Stop did nothing", events: 2, screenshot: true }]);
+    assert.deepEqual(list, [{ id, savedAt: report.savedAt, description: "Stop did nothing", status: "open", events: 2, screenshot: true }]);
     const saved = await workspace.app.request(`/api/bug-reports/${id}`);
     assert.equal((await saved.json()).events[1].body.apiKey, "[redacted]");
     const picture = await workspace.app.request(`/api/bug-reports/${id}/screenshot`);
     assert.equal(picture.headers.get("content-type"), "image/png");
     assert.equal(await picture.text(), "png bytes");
     assert.equal((await workspace.app.request("/api/bug-reports/..%2Frelay")).status, 404);
+
+    const mark = (status: string) => workspace.app.request(`/api/bug-reports/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }),
+    });
+    assert.equal((await mark("fixed")).status, 400);
+    assert.equal((await mark("solved")).status, 200);
+    const [solved] = await (await workspace.app.request("/api/bug-reports")).json();
+    assert.equal(solved.status, "solved");
+    const kept = JSON.parse(await readFile(join(dir, `${id}.json`), "utf8"));
+    assert.equal(kept.events.length, 2);
+
+    assert.equal((await workspace.app.request(`/api/bug-reports/${id}`, { method: "DELETE" })).status, 204);
+    assert.deepEqual(await readdir(dir), []);
+    assert.equal((await workspace.app.request(`/api/bug-reports/${id}`, { method: "DELETE" })).status, 404);
   } finally {
     await workspace.close();
     store.close();

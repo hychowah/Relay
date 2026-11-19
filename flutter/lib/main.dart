@@ -646,6 +646,8 @@ class _RelayShellState extends State<RelayShell> {
       );
     }
 
+    final frame = pair == null ? 0.0 : 2.0;
+
     Widget dropZone(bool left) => Positioned.fill(
       left: left ? 0 : width / 2,
       right: left ? width / 2 : 0,
@@ -674,7 +676,61 @@ class _RelayShellState extends State<RelayShell> {
             pane(
               tab,
               key: ValueKey(tab.id),
-              Offstage(offstage: !shown.contains(tab), child: tab.page!.widget),
+              // The selected pane's outline is a frame around its page, never
+              // a drawing over it: anything painted over a native page takes
+              // its mouse on macOS. Both panes keep the frame, so selecting
+              // only changes a colour and never resizes a page.
+              Builder(
+                builder: (context) {
+                  final bar = ColoredBox(
+                    color: pair != null && w.active == tab
+                        ? colors.primary.withValues(alpha: .45)
+                        : Colors.transparent,
+                  );
+                  return Stack(
+                    children: [
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: 0,
+                        height: frame,
+                        child: bar,
+                      ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: frame,
+                        child: bar,
+                      ),
+                      Positioned(
+                        left: 0,
+                        top: frame,
+                        bottom: frame,
+                        width: frame,
+                        child: bar,
+                      ),
+                      Positioned(
+                        right: 0,
+                        top: frame,
+                        bottom: frame,
+                        width: frame,
+                        child: bar,
+                      ),
+                      Positioned.fill(
+                        left: frame,
+                        top: frame,
+                        right: frame,
+                        bottom: frame,
+                        child: Offstage(
+                          offstage: !shown.contains(tab),
+                          child: tab.page!.widget,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
         if (w.active == null)
           Positioned.fill(
@@ -722,33 +778,23 @@ class _RelayShellState extends State<RelayShell> {
               key: ValueKey('loading-${tab.id}'),
               const Center(child: CircularProgressIndicator()),
             ),
-          // Native views take clicks before Flutter sees them, so the painted
-          // tint on the other pane is what lets a click there select it.
-          if (pair != null)
+          // The other pane's tint is painted over its page on purpose: on
+          // macOS a native page loses the mouse wherever Flutter paints over
+          // it, so one click there selects the pane.
+          if (pair != null && w.active != tab)
             pane(
               tab,
               key: ValueKey('pane-${tab.id}'),
-              w.active == tab
-                  ? IgnorePointer(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: colors.primary.withValues(alpha: .45),
-                            width: 2,
-                          ),
-                        ),
-                      ),
-                    )
-                  : GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTapDown: (_) {
-                        w.recorder.action('select tab', {'tab': tab.title});
-                        w.select(tab);
-                      },
-                      child: ColoredBox(
-                        color: colors.onSurface.withValues(alpha: .04),
-                      ),
-                    ),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (_) {
+                  w.recorder.action('select tab', {'tab': tab.title});
+                  w.select(tab);
+                },
+                child: ColoredBox(
+                  color: colors.onSurface.withValues(alpha: .04),
+                ),
+              ),
             ),
         ],
         if (pair != null) ...[
