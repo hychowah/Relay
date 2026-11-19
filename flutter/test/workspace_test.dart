@@ -1250,15 +1250,25 @@ void main() {
       matching: find.text(title),
     );
     double left(String title) => tester.getTopLeft(chip(title)).dx;
+    // The moving chip is drawn larger while it travels, then lands at rest.
+    double width(String title) => tester
+        .getRect(
+          find.ancestor(of: chip(title), matching: find.byType(Material)).first,
+        )
+        .width;
     final start = left('Research'), end = left('Room layout');
+    final rest = width('Research');
     await tester.tap(chip('Research'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 60));
     expect(f.w.tabs.last, room);
     expect(left('Research'), allOf(lessThan(start), greaterThan(end)));
+    expect(width('Research'), greaterThan(rest));
+    expect(width('Room layout'), rest);
     await tester.pumpAndSettle();
     expect(left('Research'), end);
     expect(left('Room layout'), start);
+    expect(width('Research'), rest);
 
     // A tab moved from the far end of a scrolled strip is scrolled into view.
     for (var i = 0; i < 6; i++) {
