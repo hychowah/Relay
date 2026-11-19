@@ -4,8 +4,10 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import 'bug_recorder.dart';
 import 'relay_records.dart';
 
+export 'bug_recorder.dart';
 export 'relay_records.dart';
 
 class RelayApiException implements Exception {
@@ -21,6 +23,7 @@ class RelayApi {
     : _client = client ?? http.Client();
   final Uri origin;
   final http.Client _client;
+  BugRecorder? recorder;
   Future<T> _request<T>(String path, [Json? body, String? method]) async {
     final url = origin.resolve(path);
     final request = http.Request(
@@ -31,10 +34,31 @@ class RelayApi {
       request.headers['Content-Type'] = 'application/json';
       request.body = jsonEncode(body);
     }
-    final response = await _client
-        .send(request)
-        .then(http.Response.fromStream)
-        .timeout(const Duration(seconds: 20));
+    final watch = Stopwatch()..start();
+    final http.Response response;
+    try {
+      response = await _client
+          .send(request)
+          .then(http.Response.fromStream)
+          .timeout(const Duration(seconds: 20));
+    } catch (error) {
+      recorder?.exchange(
+        request.method,
+        path,
+        request.body,
+        failure: error,
+        elapsed: watch.elapsed,
+      );
+      rethrow;
+    }
+    recorder?.exchange(
+      request.method,
+      path,
+      request.body,
+      status: response.statusCode,
+      reply: response.body,
+      elapsed: watch.elapsed,
+    );
     if (response.statusCode >= 400) {
       var message = response.body;
       try {
@@ -153,6 +177,9 @@ class RelayApi {
   Future<void> cancelRun(String id) => _request('/api/runs/$id/cancel', {});
   Future<void> acknowledge(String id, Json body) =>
       _request('/api/commands/$id/ack', body);
+
+  Future<Json> saveBugReport(Json report) =>
+      _request('/api/bug-reports', report);
 
   Future<void> checkIdleBeforeRestart(
     String deviceId,

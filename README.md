@@ -69,3 +69,12 @@ npm test
 npm run build
 python3 tools/check_records.py
 ```
+
+**Bug reports.** In the Flutter app, choose **Record a bug** in the workspace
+menu, reproduce the problem, then press the red record button and describe it.
+The recording holds your actions, each server request and reply (a repeated
+poll reply is kept once), error messages, the open tabs and a screenshot of the
+current page. The service saves it as `bug-reports/<time>-<id>.json` (with a
+`.png`) in `RELAY_DATA_DIR`, adds its own record of the conversation and replaces
+API keys and other secret fields with `[redacted]`. Reports contain conversation
+text, so they stay with the runtime data, outside the repository.

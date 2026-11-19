@@ -193,6 +193,7 @@ class _RelayShellState extends State<RelayShell> {
     draft = TextEditingController(text: widget.initialDraft);
     draft.addListener(_save);
     w.addListener(_changed);
+    w.recorder.addListener(_changed);
     widget.updates?.addListener(_changed);
   }
 
@@ -224,6 +225,7 @@ class _RelayShellState extends State<RelayShell> {
     address.dispose();
     messagesScroll.dispose();
     w.removeListener(_changed);
+    w.recorder.removeListener(_changed);
     widget.updates?.removeListener(_changed);
     widget.updates?.dispose();
     w.dispose();
@@ -299,9 +301,52 @@ class _RelayShellState extends State<RelayShell> {
     }
   }
 
+  Future<void> _recordBug() async {
+    if (!w.recorder.recording) {
+      w.recorder.start();
+      return;
+    }
+    // Capture before the dialog so the picture shows what the user saw.
+    final page = w.active?.page;
+    Uint8List? screenshot;
+    if (page != null && page.canCapture) {
+      try {
+        screenshot = await page.snapshot();
+      } catch (_) {
+        /* The report is still useful without a picture. */
+      }
+    }
+    if (!mounted) return;
+    final window = '${MediaQuery.sizeOf(context)}';
+    final answer = await askBugReport(context, w.recorder.events.length);
+    if (answer == null) return;
+    if (!answer.save) {
+      w.recorder.stop();
+      return;
+    }
+    final file = await w.saveBugReport(
+      answer.description,
+      screenshot: screenshot,
+      client: {
+        'app': widget.updates?.installedLabel,
+        'window': window,
+        'chatOpen': chatOpen,
+        'chatOnly': chatOnly,
+        'chatWidth': chatWidth,
+      },
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Bug report saved: $file')));
+    }
+  }
+
   Future<void> _menu(String action) async {
+    if (action != 'record') w.recorder.action('menu', {'item': action});
     try {
       switch (action) {
+        case 'record':
+          await _recordBug();
         case 'provider':
           await showDialog<void>(
             context: context,
@@ -634,6 +679,7 @@ class _RelayShellState extends State<RelayShell> {
             tabs: List.of(w.tabs),
             selected: chatOnly ? null : w.active,
             onSelect: (tab) {
+              w.recorder.action('select tab', {'tab': tab.title});
               setState(() => chatOnly = false);
               w.select(tab);
             },
@@ -652,9 +698,16 @@ class _RelayShellState extends State<RelayShell> {
           icon: const Icon(Icons.add),
         ),
         const SizedBox(width: 8),
+        if (w.recorder.recording)
+          IconButton(
+            tooltip: 'Recording a bug. Stop and save',
+            onPressed: () => _menu('record'),
+            icon: const Icon(Icons.fiber_manual_record, color: Colors.red),
+          ),
         IconButton(
           tooltip: 'Toggle chat',
           onPressed: () => setState(() {
+            w.recorder.action(chatOpen ? 'close chat' : 'open chat');
             chatOpen = !chatOpen;
             chatOnly = false;
           }),
@@ -688,6 +741,15 @@ class _RelayShellState extends State<RelayShell> {
               child: Divider(),
             ),
             _menuItem('chat', 'Chat only', Icons.chat_bubble_outline_rounded),
+            _menuItem(
+              'record',
+              w.recorder.recording
+                  ? 'Stop and save bug report'
+                  : 'Record a bug',
+              w.recorder.recording
+                  ? Icons.stop_circle_outlined
+                  : Icons.fiber_manual_record_outlined,
+            ),
             if (widget.updates != null)
               _menuItem(
                 'updates',

@@ -30,6 +30,8 @@ The implemented workflows include the following.
   phone progress/Stop controls and chat-only mode.
 - Background update downloads with progress, verified caches, manual install/restart,
   and draft/tab restoration. Flutter has its own release channel.
+- Development bug recording: actions, server exchanges, errors, tabs and a page
+  screenshot are saved on the service as a report (see the root README).
 
 `server/runtime.ts` shares the existing harness/provider lifecycle between the
 web and Flutter deployments. Provider settings are imported once into Flutter's
@@ -124,6 +126,8 @@ reduced motion.
 ## Next
 
 1. Review Stable 0.0.8 on the Mac: the panel, tab and menu transitions, text selection and region capture. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
-2. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
+2. Try **Record a bug** on the Mac after the next deploy. Source tests cover recording
+   and saving; native screenshots and the live service's report folder are unverified.
+3. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

@@ -104,6 +104,11 @@ class Fixture {
           if (path == '/api/conversations') {
             return reply({'id': 'conversation'});
           }
+          if (path == '/api/bug-reports') {
+            if (offline) return http.Response('Offline', 503);
+            bugReport = jsonDecode(request.body) as Json;
+            return reply({'id': 'report', 'file': 'bug-reports/report.json'});
+          }
           final state = {
             'messages': messages,
             'runs': List.of(runs),
@@ -134,7 +139,7 @@ class Fixture {
   final acks = <Json>[];
   List<Json> commands = [], messages = [], runs = [];
   Completer<void>? holdSnapshot;
-  Json? sent;
+  Json? sent, bugReport;
   http.Response reply(Object data) => http.Response(jsonEncode(data), 200);
   Json command(String id, String target, {String? token}) => {
     'id': id,
@@ -204,6 +209,52 @@ void main() {
       await f.w.start();
       expect(cleared, 1);
       expect(f.w.tabs.length, 3);
+    },
+  );
+  test(
+    'a bug recording keeps actions, changed replies and errors until saved',
+    () async {
+      final f = Fixture();
+      addTearDown(f.w.dispose);
+      await f.w.start();
+      f.w.recorder.start();
+      await f.w.openApp(f.w.apps[1]);
+      await f.w.send('Where is the desk?');
+      await f.w.refresh();
+      f.w.error = 'Stop failed';
+      f.w.changed();
+      f.offline = true;
+      await expectLater(f.w.saveBugReport('Desk missing'), throwsA(anything));
+      expect(f.w.recorder.recording, isTrue, reason: 'a failed save can retry');
+      f.offline = false;
+      final file = await f.w.saveBugReport(
+        'Desk missing',
+        screenshot: Uint8List.fromList([1, 2]),
+      );
+      expect(file, 'bug-reports/report.json');
+      expect(f.w.recorder.recording, isFalse);
+      final report = f.bugReport!;
+      expect(report['description'], 'Desk missing');
+      expect(report['conversationId'], 'conversation');
+      expect(report['screenshot'], base64Encode([1, 2]));
+      final events = (report['events'] as List).cast<Json>();
+      expect(
+        events
+            .where((event) => event['type'] == 'action')
+            .map((e) => e['name']),
+        ['open app', 'send message'],
+      );
+      expect(
+        events.where((e) => e['path'] == '/api/conversations/conversation'),
+        hasLength(1),
+        reason: 'identical poll replies are recorded once',
+      );
+      expect(
+        events.where((e) => e['type'] == 'error').map((e) => e['message']),
+        ['Stop failed'],
+      );
+      await f.w.send('After saving');
+      expect(f.w.recorder.events.length, events.length);
     },
   );
   test('empty tabs fill in place, existing apps retain their page, closing releases it', () async {

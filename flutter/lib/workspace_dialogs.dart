@@ -504,3 +504,52 @@ class _MemoryEditorState extends State<MemoryEditor> {
     ),
   );
 }
+
+/// Asks how to finish a bug recording. Null keeps recording; otherwise the
+/// result says whether to save it, with the user's description.
+Future<({bool save, String description})?> askBugReport(
+  BuildContext context,
+  int events,
+) {
+  final description = TextEditingController();
+  return showDialog<({bool save, String description})>(
+    context: context,
+    builder: (context) => WorkspaceDialog(
+      title: 'Save bug report',
+      actions: [
+        TextButton(
+          onPressed: () =>
+              Navigator.pop(context, (save: false, description: '')),
+          child: const Text('Discard'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, (
+            save: true,
+            description: description.text.trim(),
+          )),
+          child: const Text('Save on server'),
+        ),
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$events recorded events, a screenshot of the current page and '
+            'the server record of this conversation will be saved.',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: description,
+            autofocus: true,
+            minLines: 3,
+            maxLines: 8,
+            decoration: const InputDecoration(
+              labelText: 'What went wrong?',
+              hintText: 'What you expected and what happened instead',
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}

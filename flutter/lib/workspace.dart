@@ -36,7 +36,10 @@ class Workspace extends ChangeNotifier {
     this.pendingSession,
     this.sessionRestored,
     required this.saveConversation,
-  });
+  }) {
+    api.recorder = recorder;
+  }
+  final recorder = BugRecorder();
   Json? pendingSession;
   final Future<void> Function()? sessionRestored;
   final _restoredTabs = <int, WorkspaceTab>{};
@@ -75,8 +78,31 @@ class Workspace extends ChangeNotifier {
   ConversationRun? get running =>
       snapshot?.runs.where((run) => run.status == 'running').firstOrNull;
   bool get busy => sending || running != null;
+  String? _lastError, _lastTabError;
   void changed() {
-    if (!_disposed) notifyListeners();
+    if (_disposed) return;
+    if (error != null && error != _lastError) {
+      recorder.add('error', {'message': error});
+    }
+    final tabError = active?.error;
+    if (tabError != null && tabError != _lastTabError) {
+      recorder.add('error', {'tab': active!.title, 'message': tabError});
+    }
+    _lastError = error;
+    _lastTabError = tabError;
+    notifyListeners();
+  }
+
+  void _pageChanged(WorkspaceTab tab, bool manualChange) {
+    if (manualChange) {
+      recorder.action('page changed', {
+        'tab': tab.title,
+        'url': tab.page?.url,
+        'context': tab.page?.context,
+      });
+      if (active == tab) _manual();
+    }
+    changed();
   }
 
   Future<void> start() async {
@@ -118,6 +144,7 @@ class Workspace extends ChangeNotifier {
   }
 
   Future<void> changeEffort(String? effort) async {
+    recorder.action('change thinking effort', {'effort': effort});
     if (conversationId == null) await newConversation();
     await api.setEffort(conversationId!, effort);
     await refresh();
@@ -138,12 +165,14 @@ class Workspace extends ChangeNotifier {
   }
 
   void newTab() {
+    recorder.action('new tab');
     final tab = WorkspaceTab();
     tabs.add(tab);
     select(tab);
   }
 
   void closeTab(WorkspaceTab tab) {
+    recorder.action('close tab', {'tab': tab.title});
     final index = tabs.indexOf(tab);
     if (active == tab) {
       _manual();
@@ -174,6 +203,7 @@ class Workspace extends ChangeNotifier {
     bool requireAppView = false,
   }) async {
     final id = app.id;
+    if (manual) recorder.action('open app', {'appId': id});
     final blank = active?.appId == null ? active : null;
     final existing = app.isBrowser
         ? null
@@ -218,10 +248,7 @@ class Workspace extends ChangeNotifier {
           relayOrigin: api.origin,
           appView: view,
         ),
-        (manualChange) {
-          if (manualChange && active == tab) _manual();
-          changed();
-        },
+        (manualChange) => _pageChanged(tab, manualChange),
       );
       changed();
       await tab.page!.ready.timeout(const Duration(seconds: 20));
@@ -238,7 +265,10 @@ class Workspace extends ChangeNotifier {
     Json? focus,
     bool manual = true,
   }) async {
-    if (manual) _manual();
+    if (manual) {
+      recorder.action('open source', {'source': source, 'focus': focus});
+      _manual();
+    }
     final revision = _manualRevision;
     final appId = source['appId'] as String;
     final report = await api.readSource(source);
@@ -270,6 +300,7 @@ class Workspace extends ChangeNotifier {
       if (revision != _manualRevision || !tabs.contains(tab)) {
         throw StateError('View changed while opening the source.');
       }
+      final opened = tab;
       tab.page = pages(
         PageSpec(
           id: tab.id,
@@ -280,10 +311,7 @@ class Workspace extends ChangeNotifier {
           appView: view,
           report: report,
         ),
-        (manualChange) {
-          if (manualChange && active == tab) _manual();
-          changed();
-        },
+        (manualChange) => _pageChanged(opened, manualChange),
       );
       changed();
       await tab.page!.ready.timeout(const Duration(seconds: 20));
@@ -308,6 +336,7 @@ class Workspace extends ChangeNotifier {
   }
 
   Future<void> browserAction(String action) async {
+    recorder.action('browser $action');
     _manual();
     try {
       await active?.page?.browser?.browserAction(action);
@@ -318,6 +347,7 @@ class Workspace extends ChangeNotifier {
   }
 
   Future<void> navigate(String text) async {
+    recorder.action('browser navigate', {'address': text});
     try {
       _manual();
       await active?.page?.browser?.navigate(text);
@@ -345,6 +375,12 @@ class Workspace extends ChangeNotifier {
     ({String appId, Uint8List bytes})? capture,
   }) async {
     if (text.trim().isEmpty || busy) return;
+    recorder.action('send message', {
+      'text': text,
+      'tab': active?.title,
+      'includeContext': includeContext,
+      'capture': capture != null,
+    });
     sending = true;
     error = null;
     changed();
@@ -407,6 +443,7 @@ class Workspace extends ChangeNotifier {
 
   Future<void> stop() async {
     if (running == null) return;
+    recorder.action('stop reply', {'runId': running!.id});
     if (_commandId != null) active?.page?.cancel(_commandId!);
     try {
       await api.cancelRun(running!.id);
@@ -423,12 +460,16 @@ class Workspace extends ChangeNotifier {
   }) => api.conversations(query: query, trash: trash);
 
   Future<void> newConversation({String? botId, bool changeBot = false}) async {
+    recorder.action('new conversation', {
+      'botId': changeBot ? botId : selectedBotId,
+    });
     final id = await api.createConversation(changeBot ? botId : selectedBotId);
     selectedBotId = changeBot ? botId : selectedBotId;
     await selectConversation(id);
   }
 
   Future<void> selectConversation(String? id) async {
+    recorder.action('open conversation', {'conversationId': id});
     _manual();
     _conversationRevision++;
     conversationId = id;
@@ -441,11 +482,15 @@ class Workspace extends ChangeNotifier {
   }
 
   Future<void> trashConversation(String id) async {
+    recorder.action('trash conversation', {'conversationId': id});
     await api.trashConversation(id);
     if (conversationId == id) await selectConversation(null);
   }
 
-  Future<void> restoreConversation(String id) => api.restoreConversation(id);
+  Future<void> restoreConversation(String id) {
+    recorder.action('restore conversation', {'conversationId': id});
+    return api.restoreConversation(id);
+  }
 
   Future<void>? _inFlight;
   Future<void> refresh() {
@@ -521,6 +566,7 @@ class Workspace extends ChangeNotifier {
       return;
     }
     final revision = _manualRevision;
+    recorder.add('agent view command', {'command': command.json});
     presentations++;
     changed();
     _commandId = command.id;
@@ -580,6 +626,34 @@ class Workspace extends ChangeNotifier {
     } finally {
       _commandId = null;
       changed();
+    }
+  }
+
+  /// Stops the recording and saves it on the server; returns the report file.
+  Future<String> saveBugReport(
+    String description, {
+    Uint8List? screenshot,
+    Json client = const {},
+  }) async {
+    recorder.stop();
+    try {
+      final saved = await api.saveBugReport({
+        'description': description,
+        ...recorder.report,
+        'client': {
+          ...client,
+          'deviceId': deviceId,
+          'windowId': windowId,
+          'provider': provider,
+        },
+        'conversationId': conversationId,
+        'workspace': session(),
+        if (screenshot != null) 'screenshot': base64Encode(screenshot),
+      });
+      return saved['file'] as String;
+    } catch (_) {
+      recorder.resume();
+      rethrow;
     }
   }
 
