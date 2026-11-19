@@ -47,6 +47,10 @@ The implemented workflows include the following.
 - Night mode: Workspace menu → Appearance offers System, Light and Dark,
   saved per device. Relay's own screens follow it; app and website pages keep
   their own look, and the Mac title bar follows macOS.
+- Newest tab first: a Workspace menu setting, off by default and saved per
+  device. When on, a tab the user clicks or opens, or the agent opens, slides
+  to the left end of the strip. Restoring, closing and split changes keep the
+  order; reduced motion skips the slide.
 - Development bug recording: actions, server exchanges, errors, tabs and a page
   screenshot are saved on the service as a report and read in the Bug reports
   viewer, where each report is marked open or solved, or deleted (see the root
@@ -127,11 +131,9 @@ channel access from sandboxed subframes, PDF rendering in WKWebView and behavior
 on physical Android devices remain unverified. The [platform decision](../prototype/phases/phase-01/decisions/0002-client-platform.md)
 records supported platforms and the Windows constraint.
 
-Pre-commit review fixed update-session loss when the backend is unavailable:
-Reconnect retries unfinished tabs and clears the saved session only on success.
-It also fixed the first snapshot interaction being mistaken for native initial
-context. Focused regressions cover both; they are included in release 0.0.4.
-Native interaction tests were not rerun for this packaging pass.
+Since 0.0.4, Reconnect retries unfinished tabs and clears the saved session
+only on success, and the first snapshot interaction is no longer mistaken for
+native initial context. Focused regressions cover both.
 
 The motion and comment changes passed analysis, 27 Flutter tests,
 nine bridge tests and five Browser tests. An isolated Mac test exercised chat
@@ -163,13 +165,9 @@ Stable retiring the test builds it contains. A real Stable build through the
 tool, into a throwaway release folder, compiled on the Mac without the settings
 copy, recorded its commit, refused a second run and left no folder on the Mac.
 
-Stable 0.0.9 (build 9) is published from `main` with that tool. Beyond 0.0.8 it
-carries everyday restoration, the updater's leftover removal, inline region
-capture, saved screenshots, bug reports and draft conversations. Analysis, 38
-Flutter tests and 82 backend tests passed on its commit. The feed serves the
-release with its commit, the download matches its hash, and publishing retired
-the one listed test build that Stable contains. The native Mac workflow was not
-rerun for 0.0.9, and it has not been installed or reviewed on the Mac.
+Stable 0.0.9 (build 9), published with that tool, added everyday restoration,
+the updater's leftover removal, inline region capture, saved screenshots, bug
+reports and draft conversations. The native Mac workflow was not rerun for it.
 
 On 2026-11-19 four runs of the [UI smoothness suite](../../../flutter/README.md#measure-ui-smoothness)
 on the MacBook Neo (Mac17,5, 60 Hz) held 57–60 fps in every scenario, with at
@@ -199,6 +197,12 @@ The backend at `main` was deployed with 0.0.10 and again with 0.0.13: it offers
 `browser.transcript`, applies an edit to the live apps file without a restart,
 and serves the bug report status routes. The native Mac workflow was not rerun,
 and none of these builds has been reviewed on the Mac.
+
+Browser popups (desktop only): webview_flutter_wkwebview 3.27.2 loaded a
+page's new window into its opener, which broke sign-in popups. A forwarding UI
+delegate in the Mac runner now opens a child popup window. `npm run test:mac --
+popup_windows_test.dart` passed on the Mac with real WKWebViews, and failed with
+the delegate, its dialog forwarding or the popup blocker removed.
 
 ## Next
 
@@ -234,9 +238,16 @@ and none of these builds has been reviewed on the Mac.
    Since 0.0.13 the transcript is an inset card with an accent border and
    muted timestamps. On the Mac, in both modes, check that it reads apart
    from the conversation and the playing paragraph is visible.
-13. Check on the Mac that Analysis Web's **Start analysis** shows its confirm
-   dialog, titled with the page's host, and that OK starts the analysis and
+13. Check on the Mac that Analysis Web, registered as trusted, shows the
+   confirm dialog of **Start analysis**, titled with the page's host, and that OK starts the analysis and
    Cancel does not. Page alert and confirm dialogs are tested only with a faked
    web view.
+14. Try **Newest tab first** on the Mac with real pages open: clicking a tab,
+   a new tab, an app opening and an agent opening a tab should each slide that
+   tab smoothly to the left end while the others move right, also when the
+   strip is scrolled. Only widget tests cover the order and the slide.
+15. In a build with popup windows, sign in to figma.com with **Continue with
+   Google**: the popup shows its host, closes itself and leaves Figma signed in.
+   Also close a tab, and the main window, with a popup open.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

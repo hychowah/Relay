@@ -56,6 +56,10 @@ Future<void> main() async {
         await prefs.setString('conversation', id);
       }
     },
+    newestTabFirst: prefs.getBool('newestTabFirst') ?? false,
+    saveNewestTabFirst: (value) async {
+      await prefs.setBool('newestTabFirst', value);
+    },
   );
   final connection = BrowserConnection(
     Uri.parse(
@@ -995,7 +999,7 @@ class _RelayShellState extends State<RelayShell> {
               onSelect: (tab) {
                 w.recorder.action('select tab', {'tab': tab.title});
                 setState(() => chatOnly = false);
-                w.select(tab);
+                w.select(tab, opened: true);
               },
               onClose: w.closeTab,
             ),
@@ -1080,6 +1084,11 @@ class _RelayShellState extends State<RelayShell> {
                   ),
               ],
               child: const Text('Appearance'),
+            ),
+            CheckboxMenuButton(
+              value: w.newestTabFirst,
+              onChanged: (value) => w.setNewestTabFirst(value!),
+              child: const Text('Newest tab first'),
             ),
             if (widget.updates != null)
               _menuItem(

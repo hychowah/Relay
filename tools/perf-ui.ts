@@ -2,9 +2,10 @@
 // gate. It runs flutter/integration_test/ui_performance_test.dart from a
 // temporary copy of this checkout's flutter/ folder on the Mac, saves the
 // result to tmp/perf/ui-<timestamp>.json and compares it with the previous UI run.
-import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { flutterScript, mac, withMacCopy } from "./mac-flutter.ts";
 import { latestResult, printRows } from "./perf-table.ts";
 
 // The test app gets its own bundle id, so it never reads or writes the
@@ -22,40 +23,7 @@ const git = (...args: string[]) => execFileSync("git", args, { cwd: root, encodi
 type Summary = Record<string, number>;
 type Result = { scenarios: Record<string, Summary> };
 
-/** Runs a command on the Mac; resolves with its output, or rejects with its tail. */
-function mac(ssh: string, command: string, input?: Buffer) {
-  return new Promise<string>((done, fail) => {
-    const child = spawn(ssh, [command], { stdio: ["pipe", "pipe", "pipe"] });
-    let output = "";
-    child.stdout.on("data", (chunk) => { output += chunk; });
-    child.stderr.on("data", (chunk) => { output += chunk; });
-    child.on("error", fail);
-    child.on("close", (code) => code === 0 ? done(output)
-      : fail(new Error(`Mac command failed (${code}):\n${output.split("\n").slice(-40).join("\n")}`)));
-    child.stdin.end(input);
-  });
-}
-
-// Removes the temporary folder, the test app's own settings and data, and the
-// small DerivedData folder Xcode keeps for the temporary project path.
-const cleanupScript = (remote: string) => `pkill -f '${remote}/' || true
-sleep 1
-rm -rf '${remote}'
-defaults delete ${BUNDLE_ID} >/dev/null 2>&1 || true
-cd ~/Library
-rm -rf "Preferences/${BUNDLE_ID}.plist" "Application Support/${BUNDLE_ID}" "Caches/${BUNDLE_ID}" \\
-  "WebKit/${BUNDLE_ID}" "HTTPStorages/${BUNDLE_ID}" "HTTPStorages/${BUNDLE_ID}.binarycookies" \\
-  "Saved Application State/${BUNDLE_ID}.savedState"
-grep -l '"path":"${remote}/' Developer/Xcode/DerivedData/*/Build/Intermediates.noindex/XCBuildData/PIFCache/workspace/* 2>/dev/null \\
-  | sed 's|/Build/.*||' | while read -r folder; do rm -rf "$folder"; done`;
-
-const runScript = (remote: string) => `set -eu
-export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-export PATH="$HOME/Developer/relay-flutter-experiment/sdk/bin:$PATH"
-cd '${remote}/flutter'
-sed -i '' 's/^PRODUCT_BUNDLE_IDENTIFIER = .*/PRODUCT_BUNDLE_IDENTIFIER = ${BUNDLE_ID}/' macos/Runner/Configs/AppInfo.xcconfig
-grep -qx 'PRODUCT_BUNDLE_IDENTIFIER = ${BUNDLE_ID}' macos/Runner/Configs/AppInfo.xcconfig
-flutter drive --profile -d macos --driver=test_driver/integration_test.dart \\
+const runScript = (remote: string) => `${flutterScript(remote, BUNDLE_ID)}flutter drive --profile -d macos --driver=test_driver/integration_test.dart \\
   --target=integration_test/ui_performance_test.dart`;
 
 const COLUMNS: Array<[key: string, header: string]> = [
@@ -85,22 +53,7 @@ function printTable(scenarios: Record<string, Summary>, previous?: Record<string
 
 async function main() {
   const started = performance.now();
-  let ssh: string;
-  try { ssh = git("config", "--get", "relay.macSSH"); }
-  catch { throw new Error("Set relay.macSSH in local git config (see flutter/README.md)."); }
-  const remote = (await mac(ssh, "mktemp -d /tmp/relay-perf-ui.XXXXXXXX")).trim();
-  if (!/^\/tmp\/relay-perf-ui\.[A-Za-z0-9]+$/.test(remote)) throw new Error(`Unexpected Mac folder: ${remote}`);
-  let cleaning: Promise<unknown> | undefined;
-  const cleanup = () => cleaning ??= mac(ssh, cleanupScript(remote)).catch((error) =>
-    console.error(`Cleanup on the Mac failed; remove ${remote} and the ${BUNDLE_ID} data by hand.\n${error.message}`));
-  process.once("SIGINT", () => void cleanup().finally(() => process.exit(130)));
-  try {
-    // This checkout's Flutter source, including uncommitted edits.
-    const files = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "flutter"],
-      { cwd: root, encoding: "utf8" }).split("\0").filter((path) => path && existsSync(join(root, path)));
-    const source = execFileSync("tar", ["--null", "-T", "-", "-czf", "-"],
-      { cwd: root, input: files.join("\0"), maxBuffer: 512 * 1024 * 1024 });
-    await mac(ssh, `tar -xzf - -C '${remote}'`, source);
+  await withMacCopy(root, BUNDLE_ID, async (ssh, remote) => {
     const [model, macos] = (await mac(ssh, "sysctl -n hw.model; sw_vers -productVersion")).trim().split("\n");
     console.log(`Building and running the suite on the Mac (${model}). Leave the Mac alone for about 3 minutes...`);
     await mac(ssh, runScript(remote));
@@ -119,9 +72,7 @@ async function main() {
     if (previous) console.log(`Compared with ${previous.file}`);
     printTable(report.scenarios, previous?.data.scenarios);
     console.log(`\nSaved ${file.slice(root.length + 1)} (${result.seconds} s)`);
-  } finally {
-    await cleanup();
-  }
+  });
 }
 
 await main();
