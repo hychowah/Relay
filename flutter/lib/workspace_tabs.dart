@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'workspace.dart';
@@ -10,10 +11,16 @@ class WorkspaceTabs extends StatefulWidget {
     required this.selected,
     required this.onSelect,
     required this.onClose,
+    this.split,
+    this.draggable = false,
   });
   final List<WorkspaceTab> tabs;
   final WorkspaceTab? selected;
   final ValueChanged<WorkspaceTab> onSelect, onClose;
+  final List<WorkspaceTab>? split;
+
+  /// Desktop only: chips can be dragged onto the page to split it.
+  final bool draggable;
 
   @override
   State<WorkspaceTabs> createState() => _WorkspaceTabsState();
@@ -95,14 +102,41 @@ class _WorkspaceTabsState extends State<WorkspaceTabs> {
     padding: EdgeInsets.zero,
     itemBuilder: (context, index, animation) {
       final tab = widget.tabs[index];
+      final chip = _chip(
+        tab,
+        selected: widget.selected == tab,
+        paired: widget.split?.contains(tab) ?? false,
+        onSelect: () => widget.onSelect(tab),
+        onClose: () => widget.onClose(tab),
+      );
       return _transition(
         animation,
-        _chip(
-          tab,
-          selected: widget.selected == tab,
-          onSelect: () => widget.onSelect(tab),
-          onClose: () => widget.onClose(tab),
-        ),
+        widget.draggable
+            ? _TabDraggable(
+                data: tab,
+                dragAnchorStrategy: pointerDragAnchorStrategy,
+                feedback: Transform.translate(
+                  offset: const Offset(-24, -18),
+                  child: Material(
+                    elevation: 6,
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 9,
+                      ),
+                      child: Text(
+                        tab.title,
+                        style: const TextStyle(fontSize: 12, color: ink),
+                      ),
+                    ),
+                  ),
+                ),
+                childWhenDragging: Opacity(opacity: .5, child: chip),
+                child: chip,
+              )
+            : chip,
       );
     },
   );
@@ -110,6 +144,7 @@ class _WorkspaceTabsState extends State<WorkspaceTabs> {
   Widget _chip(
     WorkspaceTab tab, {
     required bool selected,
+    bool paired = false,
     VoidCallback? onSelect,
     VoidCallback? onClose,
   }) => Center(
@@ -118,7 +153,11 @@ class _WorkspaceTabsState extends State<WorkspaceTabs> {
       child: Padding(
         padding: const EdgeInsets.only(right: 5),
         child: Material(
-          color: selected ? Colors.white : Colors.transparent,
+          color: selected
+              ? Colors.white
+              : paired
+              ? tint
+              : Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
             side: BorderSide(color: selected ? line : Colors.transparent),
@@ -154,6 +193,16 @@ class _WorkspaceTabsState extends State<WorkspaceTabs> {
                             ),
                           ),
                         ),
+                        if (paired)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 4),
+                            child: Icon(
+                              Icons.vertical_split,
+                              size: 13,
+                              color: accent,
+                              semanticLabel: 'Split view',
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -170,4 +219,40 @@ class _WorkspaceTabsState extends State<WorkspaceTabs> {
       ),
     ),
   );
+}
+
+// A mouse drag normally starts after one pixel, which turned slight movement
+// during a click into a drag and lost the tab selection.
+class _TabDraggable extends Draggable<WorkspaceTab> {
+  const _TabDraggable({
+    required super.child,
+    required super.feedback,
+    super.data,
+    super.dragAnchorStrategy,
+    super.childWhenDragging,
+  });
+  @override
+  MultiDragGestureRecognizer createRecognizer(
+    GestureMultiDragStartCallback onStart,
+  ) => _TabDragRecognizer()..onStart = onStart;
+}
+
+class _TabDragRecognizer extends ImmediateMultiDragGestureRecognizer {
+  @override
+  MultiDragPointerState createNewPointerState(PointerDownEvent event) =>
+      _TabDragState(event.position, event.kind, gestureSettings);
+}
+
+class _TabDragState extends MultiDragPointerState {
+  _TabDragState(super.initialPosition, super.kind, super.gestureSettings);
+  @override
+  void checkForResolutionAfterMove() {
+    if (pendingDelta!.distance > kTouchSlop) {
+      resolve(GestureDisposition.accepted);
+    }
+  }
+
+  @override
+  void accepted(GestureMultiDragStartCallback starter) =>
+      starter(initialPosition);
 }

@@ -35,6 +35,10 @@ The implemented workflows include the following.
   install/restart. Flutter has its own release channel.
 - Every start restores the previous tabs and views, the draft, the chat panel
   state and the Mac window frame. Tabs are saved as they change.
+- Split view (desktop only): drag a tab onto the left or right half of the
+  page to show it beside the current tab. At most two panes; the pair is saved
+  and restored with the tabs. The clicked pane is the selected tab for context
+  and agent navigation. Narrow windows show only the selected pane.
 - Development bug recording: actions, server exchanges, errors, tabs and a page
   screenshot are saved on the service as a report and read in the Bug reports
   viewer (see the root README).
@@ -201,5 +205,9 @@ has not been installed or reviewed on the Mac.
 8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.
 9. Restart Stable 0.0.10 on the Mac with a Browser tab and two or more app tabs open. Check that the last active tab shows first, the hidden tabs finish loading (none closed by the 20 s limit), and the chat history appears without waiting for them.
 10. Check `browser.transcript` in WKWebView on the Mac with a short and an hour-long YouTube video, note how long each page takes against the 7-second limit, then ask about one through the real agent. Its page script passed against live YouTube only in headless Chromium with a Safari user agent. In the transcript pane, check on the Mac: opening it loads the hour-long transcript and scrolls smoothly; a drag selection survives clicking into the composer and reaches the question; moving to another video reloads it; a newer selection on the page replaces the transcript's; it stays hidden for other pages and narrow windows, and still loads in chat-only mode. Only a fake page tests the pane.
+11. Try the split view on the Mac with real WKWebViews: dragging a tab over a
+   page, the drop highlight, clicking the dimmed pane to select it, and pages
+   keeping their state as they move in and out of the split. Only widget tests
+   with fake pages cover it.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

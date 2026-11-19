@@ -547,51 +547,9 @@ class _RelayShellState extends State<RelayShell> {
                           ),
                         ),
                       Expanded(
-                        child: Stack(
-                          children: [
-                            for (final tab in w.tabs)
-                              if (tab.page != null)
-                                Positioned.fill(
-                                  key: ValueKey(tab.id),
-                                  child: Offstage(
-                                    offstage: w.active != tab,
-                                    child: tab.page!.widget,
-                                  ),
-                                ),
-                            if (selecting case final s? when s.tab == w.active)
-                              Positioned.fill(
-                                child: RegionCapture(
-                                  key: ValueKey(s.image),
-                                  image: s.image,
-                                  onDone: _finishCapture,
-                                ),
-                              ),
-                            if (w.active == null || w.active?.appId == null)
-                              Positioned.fill(
-                                child: NewTabPage(
-                                  key: ValueKey(w.active?.id),
-                                  apps: w.allowedApps,
-                                  onChoose: _choose,
-                                  onShow: w.refreshApps,
-                                ),
-                              ),
-                            if (w.active?.report != null &&
-                                (w.active?.page == null ||
-                                    w.active?.error != null))
-                              Positioned.fill(
-                                child: SavedReport(
-                                  report: w.active!.report!,
-                                  error: w.active?.error,
-                                ),
-                              ),
-                            if (w.active?.error != null &&
-                                w.active?.report == null)
-                              Center(child: Text(w.active!.error!)),
-                            if (w.active?.appId != null &&
-                                w.active?.page == null &&
-                                w.active?.report == null)
-                              const Center(child: CircularProgressIndicator()),
-                          ],
+                        child: LayoutBuilder(
+                          builder: (context, area) =>
+                              _pages(area.maxWidth, size.maxWidth >= 900),
                         ),
                       ),
                     ],
@@ -603,6 +561,130 @@ class _RelayShellState extends State<RelayShell> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Every tab's page stays in one keyed slot of this stack, so showing it
+  /// alone, in a split pane or hidden only changes its position and never
+  /// recreates its native view.
+  Widget _pages(double width, bool desktop) {
+    final pair = desktop && w.splitShown ? w.split! : null;
+    final shown = pair ?? [?w.active];
+    Widget pane(WorkspaceTab tab, Widget child, {Key? key}) {
+      final side = pair?.indexOf(tab) ?? -1;
+      return Positioned.fill(
+        key: key,
+        left: side == 1 ? width / 2 + 1 : 0,
+        right: side == 0 ? width / 2 + 1 : 0,
+        child: child,
+      );
+    }
+
+    Widget dropZone(bool left) => Positioned.fill(
+      left: left ? 0 : width / 2,
+      right: left ? width / 2 : 0,
+      child: DragTarget<WorkspaceTab>(
+        onWillAcceptWithDetails: (details) => w.canSplitWith(details.data),
+        onAcceptWithDetails: (details) {
+          setState(() => chatOnly = false);
+          w.dropInSplit(details.data, left: left);
+        },
+        builder: (context, candidates, _) => candidates.isEmpty
+            ? const SizedBox.expand()
+            : DecoratedBox(
+                key: ValueKey(left ? 'drop-left' : 'drop-right'),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: .12),
+                  border: Border.all(color: accent, width: 2),
+                ),
+              ),
+      ),
+    );
+
+    return Stack(
+      children: [
+        for (final tab in w.tabs)
+          if (tab.page != null)
+            pane(
+              tab,
+              key: ValueKey(tab.id),
+              Offstage(offstage: !shown.contains(tab), child: tab.page!.widget),
+            ),
+        if (w.active == null)
+          Positioned.fill(
+            child: NewTabPage(
+              apps: w.allowedApps,
+              onChoose: _choose,
+              onShow: w.refreshApps,
+            ),
+          ),
+        for (final tab in shown) ...[
+          if (selecting case final s? when s.tab == tab)
+            pane(
+              tab,
+              RegionCapture(
+                key: ValueKey(s.image),
+                image: s.image,
+                onDone: _finishCapture,
+              ),
+            ),
+          if (tab.appId == null)
+            pane(
+              tab,
+              key: ValueKey('new-${tab.id}'),
+              NewTabPage(
+                apps: w.allowedApps,
+                onChoose: _choose,
+                onShow: w.refreshApps,
+              ),
+            ),
+          if (tab.report != null && (tab.page == null || tab.error != null))
+            pane(
+              tab,
+              key: ValueKey('report-${tab.id}'),
+              SavedReport(report: tab.report!, error: tab.error),
+            ),
+          if (tab.error != null && tab.report == null)
+            pane(
+              tab,
+              key: ValueKey('error-${tab.id}'),
+              Center(child: Text(tab.error!)),
+            ),
+          if (tab.appId != null && tab.page == null && tab.report == null)
+            pane(
+              tab,
+              key: ValueKey('loading-${tab.id}'),
+              const Center(child: CircularProgressIndicator()),
+            ),
+          // Native views take clicks before Flutter sees them, so the painted
+          // tint on the other pane is what lets a click there select it.
+          if (pair != null)
+            pane(
+              tab,
+              key: ValueKey('pane-${tab.id}'),
+              w.active == tab
+                  ? IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: accent.withValues(alpha: .45),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    )
+                  : GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapDown: (_) {
+                        w.recorder.action('select tab', {'tab': tab.title});
+                        w.select(tab);
+                      },
+                      child: ColoredBox(color: ink.withValues(alpha: .04)),
+                    ),
+            ),
+        ],
+        if (desktop) ...[dropZone(true), dropZone(false)],
+      ],
     );
   }
 
@@ -735,15 +817,22 @@ class _RelayShellState extends State<RelayShell> {
         ],
         const SizedBox(width: 18),
         Expanded(
-          child: WorkspaceTabs(
-            tabs: List.of(w.tabs),
-            selected: chatOnly ? null : w.active,
-            onSelect: (tab) {
-              w.recorder.action('select tab', {'tab': tab.title});
-              setState(() => chatOnly = false);
-              w.select(tab);
-            },
-            onClose: w.closeTab,
+          child: DragTarget<WorkspaceTab>(
+            onWillAcceptWithDetails: (details) =>
+                w.split?.contains(details.data) ?? false,
+            onAcceptWithDetails: (details) => w.leaveSplit(details.data),
+            builder: (context, _, _) => WorkspaceTabs(
+              tabs: List.of(w.tabs),
+              selected: chatOnly ? null : w.active,
+              split: MediaQuery.sizeOf(context).width >= 900 ? w.split : null,
+              draggable: MediaQuery.sizeOf(context).width >= 900,
+              onSelect: (tab) {
+                w.recorder.action('select tab', {'tab': tab.title});
+                setState(() => chatOnly = false);
+                w.select(tab);
+              },
+              onClose: w.closeTab,
+            ),
           ),
         ),
         IconButton(

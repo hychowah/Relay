@@ -80,6 +80,11 @@ class Workspace extends ChangeNotifier {
             )
             .toList();
   WorkspaceTab? active;
+
+  /// Desktop only: two tabs shown side by side as [left, right]. The pair is
+  /// shown while one of them is active; other tabs still show alone.
+  List<WorkspaceTab>? split;
+  bool get splitShown => split?.contains(active) ?? false;
   String? conversationId, error, status, _commandId;
   bool sending = false, _polling = false, _disposed = false;
   int _manualRevision = 0;
@@ -219,6 +224,45 @@ class Workspace extends ChangeNotifier {
     changed();
   }
 
+  bool canSplitWith(WorkspaceTab tab) =>
+      splitShown || (active != null && active != tab);
+
+  /// Shows [tab] on one side: beside the current tab, in place of that side's
+  /// tab, or swapped with its partner.
+  void dropInSplit(WorkspaceTab tab, {required bool left}) {
+    if (!canSplitWith(tab)) return;
+    recorder.action('split tabs', {
+      'tab': tab.title,
+      'side': left ? 'left' : 'right',
+    });
+    final pair = splitShown ? split! : [active!, active!];
+    final side = left ? 0 : 1;
+    final other = pair[1 - side] == tab ? pair[side] : pair[1 - side];
+    split = left ? [tab, other] : [other, tab];
+    select(tab);
+  }
+
+  /// Ends the split; the partner stays shown alone.
+  void leaveSplit(WorkspaceTab tab) {
+    final pair = split;
+    if (pair == null || !pair.contains(tab)) return;
+    recorder.action('end split', {'tab': tab.title});
+    split = null;
+    if (active == tab) {
+      select(pair.firstWhere((other) => other != tab));
+    } else {
+      changed();
+    }
+  }
+
+  void _replaceInSplit(WorkspaceTab old, WorkspaceTab tab) {
+    final pair = split;
+    if (pair == null || !pair.contains(old)) return;
+    split = pair.contains(tab)
+        ? null
+        : [for (final item in pair) item == old ? tab : item];
+  }
+
   void newTab() {
     recorder.action('new tab');
     final tab = WorkspaceTab();
@@ -229,6 +273,10 @@ class Workspace extends ChangeNotifier {
   void closeTab(WorkspaceTab tab) {
     recorder.action('close tab', {'tab': tab.title});
     final index = tabs.indexOf(tab);
+    final partner = split?.contains(tab) == true
+        ? split!.firstWhere((other) => other != tab)
+        : null;
+    if (partner != null) split = null;
     if (active == tab) {
       _manual();
       active = null;
@@ -236,7 +284,7 @@ class Workspace extends ChangeNotifier {
     tabs.remove(tab);
     tab.page?.dispose();
     if (active == null && tabs.isNotEmpty) {
-      select(tabs[(index - 1).clamp(0, tabs.length - 1)]);
+      select(partner ?? tabs[(index - 1).clamp(0, tabs.length - 1)]);
     }
     changed();
   }
@@ -264,7 +312,10 @@ class Workspace extends ChangeNotifier {
         ? null
         : tabs.where((tab) => tab.appId == id).firstOrNull;
     if (existing != null) {
-      if (blank != null) tabs.remove(blank);
+      if (blank != null) {
+        tabs.remove(blank);
+        _replaceInSplit(blank, existing);
+      }
       if (existing.error == null &&
           !(requireAppView && existing.report != null)) {
         select(existing, manual: manual);
@@ -288,6 +339,7 @@ class Workspace extends ChangeNotifier {
         tabs.add(tab);
       } else {
         tabs[tabs.indexOf(blank)] = tab;
+        _replaceInSplit(blank, tab);
       }
     }
     select(tab, manual: manual);
@@ -326,6 +378,7 @@ class Workspace extends ChangeNotifier {
       );
       if (blank != null) {
         tabs[tabs.indexOf(blank)] = tab;
+        _replaceInSplit(blank, tab);
       } else {
         tabs.add(tab);
       }
@@ -725,6 +778,7 @@ class Workspace extends ChangeNotifier {
 
   Json session() => {
     'active': active == null ? -1 : tabs.indexOf(active!),
+    if (split != null) 'split': [for (final tab in split!) tabs.indexOf(tab)],
     'tabs': tabs
         .map(
           (tab) => {
@@ -753,6 +807,11 @@ class Workspace extends ChangeNotifier {
     final items = (saved['tabs'] as List).cast<Json>();
     final loads = <Future<bool>>[];
     var complete = true;
+    final savedSplit = saved['split'] as List? ?? const [];
+    // Once both tabs of the saved pair are back, a reconnect leaves the split
+    // as the user has it, including ended.
+    final splitRestored =
+        savedSplit.isNotEmpty && savedSplit.every(_restoredTabs.containsKey);
     for (var index = 0; index < items.length; index++) {
       // A reconnect retries only unfinished tabs, preserving later user changes.
       if (_restoredTabs.containsKey(index)) continue;
@@ -785,6 +844,16 @@ class Workspace extends ChangeNotifier {
       );
       tabs.add(_restoredTabs[index] = tab);
       loads.add(_restoreTab(index, item, tab));
+    }
+    // A tab that is unavailable leaves no pair; one that fails to load later
+    // is closed, which ends the split.
+    final pair = [for (final index in savedSplit) ?_restoredTabs[index]];
+    if (!splitRestored &&
+        split == null &&
+        pair.length == 2 &&
+        pair.first != pair.last &&
+        pair.every(tabs.contains)) {
+      split = pair;
     }
     final selected = _restoredTabs[saved['active']] ?? tabs.lastOrNull;
     if (active == null && selected != null && tabs.contains(selected)) {
