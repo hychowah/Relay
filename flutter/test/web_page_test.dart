@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:relay_flutter/browser_transcript.dart';
@@ -112,6 +113,32 @@ void main() {
     expect(safariUserAgent(base, '26.6.2'), expected);
     expect(safariUserAgent(base, null), isNull);
     expect(safariUserAgent(expected, '26.6.2'), isNull);
+  });
+
+  test('popup pages follow the Browser address rule', () async {
+    Future<Object?> ask(String url) =>
+        browserChannelCall(MethodCall('allowPopupPage', url));
+    for (final url in [
+      'http://127.0.0.1:8080/',
+      'http://localhost/',
+      'http://10.1.2.3/',
+      'http://192.168.0.2/',
+      'http://169.254.169.254/latest',
+      'http://100.100.1.1/',
+      'http://[::1]/',
+      'https://user@8.8.8.8/',
+      'file:///etc/hosts',
+      'javascript:alert(1)',
+      'data:text/html,hi',
+    ]) {
+      expect(await ask(url), isFalse, reason: url);
+    }
+    expect(await ask('about:blank'), isTrue);
+    expect(await ask('https://8.8.8.8/sign-in'), isTrue);
+    expect(
+      () => browserChannelCall(const MethodCall('other')),
+      throwsA(isA<MissingPluginException>()),
+    );
   });
 
   test(
