@@ -104,10 +104,10 @@ Covers C07 in practice. Read those rules before this phase starts.
 1. Check the Mac client: one request to the scratch target, the review screen
    and Start, the session link, and the layout at the chat-side width. Since
    2026-11-19 the coding app runs as a local service, registered with the live
-   Flutter backend under the default frame restrictions, with a scratch target
-   and the Research Web target.
-2. The user decides whether to register the app as trusted. The framed session
-   page needs forms for sign-in and typing, which the default restrictions
-   block; until then the session opens through its link.
+   Flutter backend, with a scratch target, the Research Web target and the
+   Relay target.
+2. The app is registered as trusted since 2026-11-19, at the user's request,
+   so the framed session page can submit its sign-in and message forms. Check
+   on the Mac that signing in, typing and approving work inside the tab.
 3. Build phase 2 after that check. Decide there what the agent may read about
    a session; today operations and results carry no session data.
