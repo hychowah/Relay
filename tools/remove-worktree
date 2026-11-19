@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Remove a feature worktree and retire its branch's published Flutter previews."""
 import fcntl
-import json
 from pathlib import Path
-import re
 import subprocess
 import sys
+
+import preview_feed
 
 
 def main():
@@ -29,26 +29,11 @@ def main():
         subprocess.run(remove, check=True)
         return
 
-    with (releases / ".preview.lock").open("a") as lock:
+    with (releases / preview_feed.LOCK).open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        retired = {}
-        retained = set()
-        for path in releases.iterdir():
-            if not re.fullmatch(r"preview-[a-z0-9][a-z0-9-]{0,62}\.json", path.name):
-                continue
-            manifest = json.loads(path.read_text())
-            if manifest["branch"] == branch:
-                retired[path] = manifest["file"]
-            else:
-                retained.add(manifest["file"])
-
         subprocess.run(remove, check=True)
-        for path in retired:
-            path.unlink()
-        for filename in set(retired.values()) - retained:
-            if re.fullmatch(r"Relay-Flutter-preview-[0-9a-f]{64}\.zip", filename):
-                (releases / filename).unlink(missing_ok=True)
-        print(f"Retired {len(retired)} preview(s) for {branch}.")
+        retired = preview_feed.retire(releases, lambda manifest: manifest["branch"] == branch)
+        print(f"Retired {retired} preview(s) for {branch}.")
 
 
 if __name__ == "__main__":

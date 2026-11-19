@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Build this worktree's Flutter client on the Mac and publish a named preview."""
+"""Build this checkout's Flutter client on the Mac and publish it as a named test build or as Stable.
+
+The Mac build runs in a temporary folder that is removed afterwards, so
+publishing leaves nothing on the Mac."""
 import fcntl
 import hashlib
 import io
@@ -16,15 +19,18 @@ import tempfile
 import uuid
 import zipfile
 
+import preview_feed
+
 
 def git(*args):
     return subprocess.check_output(["git", *args], text=True).strip()
 
 
 def main():
-    if len(sys.argv) != 2 or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", sys.argv[1]):
-        sys.exit("Usage: tools/publish-preview <lowercase-name>")
-    name = sys.argv[1]
+    stable = sys.argv[1:] == ["--stable"]
+    if not stable and (len(sys.argv) != 2 or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", sys.argv[1])):
+        sys.exit("Usage: tools/publish-flutter <lowercase-name> | --stable")
+    name = None if stable else sys.argv[1]
     os.chdir(git("rev-parse", "--show-toplevel"))
     # Local git config is shared by all linked worktrees.
     try:
@@ -37,10 +43,26 @@ def main():
     releases.mkdir(parents=True, exist_ok=True)
     branch = git("rev-parse", "--abbrev-ref", "HEAD")
     commit = git("rev-parse", "HEAD")
-    dirty = bool(git("status", "--porcelain"))
-    build = str(uuid.uuid4().int % 10**15)
-    remote = subprocess.check_output([ssh, "mktemp -d /tmp/relay-preview.XXXXXXXX"], text=True).strip()
-    if not re.fullmatch(r"/tmp/relay-preview\.[A-Za-z0-9]+", remote):
+    if stable:
+        # Stable records its commit, which later decides the test builds it contains.
+        if git("status", "--porcelain", "--", "flutter"):
+            sys.exit("Commit the Flutter changes first: Stable records the commit it was built from.")
+        version = re.search(r"^version: (\d+\.\d+\.\d+)", Path("flutter/pubspec.yaml").read_text(), re.M)[1]
+        filename = f"Relay-Flutter-{version}-macOS-arm64.zip"
+        published = "This version is already published. Increase the version in flutter/pubspec.yaml first."
+        if (releases / filename).exists():
+            sys.exit(published)
+        flags = []
+        identity = ("CFBundleShortVersionString", version)
+    else:
+        if branch == "HEAD":
+            sys.exit("Check out a branch first: a test build is retired through its branch or its commit.")
+        dirty = bool(git("status", "--porcelain"))
+        build = str(uuid.uuid4().int % 10**15)
+        flags = [f"--build-number={build}", f"--dart-define=RELAY_PREVIEW={name}"]
+        identity = ("CFBundleVersion", build)
+    remote = subprocess.check_output([ssh, "mktemp -d /tmp/relay-build.XXXXXXXX"], text=True).strip()
+    if not re.fullmatch(r"/tmp/relay-build\.[A-Za-z0-9]+", remote):
         sys.exit("Mac did not return a build directory")
     try:
         with tempfile.TemporaryDirectory(dir=releases) as stage:
@@ -52,7 +74,7 @@ def main():
                     for path in filter(None, map(os.fsdecode, paths.split(b"\0"))):
                         if not os.path.lexists(path):
                             continue
-                        if path == "flutter/macos/Runner/Info.plist":
+                        if name and path == "flutter/macos/Runner/Info.plist":
                             info = plistlib.loads(Path(path).read_bytes())
                             if info.get("RelayUpdateFormat") != "1":
                                 sys.exit("Bring the preview-capable updater into this worktree before publishing.")
@@ -65,7 +87,6 @@ def main():
                             tar.add(path, recursive=False)
                 snapshot.seek(0)
                 subprocess.run([ssh, f"tar -xzf - -C {remote}"], stdin=snapshot, check=True)
-            flags = [f"--build-number={build}", f"--dart-define=RELAY_PREVIEW={name}"]
             # The app has no built-in server address: the environment or local git config supplies it.
             addresses = {"RELAY_URL": "relay.appUrl", "BROWSER_URL": "relay.browserUrl", "RELAY_UPDATE_URL": None}
             for key, setting in addresses.items():
@@ -91,27 +112,43 @@ ditto -c -k --sequesterRsrc --keepParent "$bundle" {remote}/release.zip"""
                 subprocess.run([ssh, f"cat {remote}/release.zip"], stdout=output, check=True)
             with zipfile.ZipFile(archive) as package:
                 info = plistlib.loads(package.read("Relay Flutter.app/Contents/Info.plist"))
-            if (info.get("CFBundleIdentifier"), info.get("RelayPreview"), info.get("CFBundleVersion")) != ("app.relay.flutterExperiment", name, build):
-                sys.exit("The archive does not identify the requested preview build")
+            built = (info.get("CFBundleIdentifier"), info.get("RelayPreview"), info.get(identity[0]))
+            if built != ("app.relay.flutterExperiment", name, identity[1]):
+                sys.exit("The archive does not identify the requested build")
             with archive.open("rb") as source:
                 digest = hashlib.file_digest(source, "sha256").hexdigest()
             mac_digest = subprocess.check_output([ssh, f"shasum -a 256 {remote}/release.zip"], text=True).split()[0]
             if mac_digest != digest:
                 sys.exit("The transferred archive differs from the signed Mac build.")
-            filename = f"Relay-Flutter-preview-{digest}.zip"
-            manifest = dict(name=name, branch=branch, commit=commit, dirty=dirty,
-                            version=info["CFBundleShortVersionString"], build=build,
-                            file=filename, sha256=digest, size=archive.stat().st_size)
-            metadata = stage / "preview.json"
+            size = archive.stat().st_size
+            if stable:
+                manifest = dict(version=version, file=filename, size=size, sha256=digest, commit=commit)
+            else:
+                filename = f"Relay-Flutter-preview-{digest}.zip"
+                manifest = dict(name=name, branch=branch, commit=commit, dirty=dirty,
+                                version=info["CFBundleShortVersionString"], build=build,
+                                file=filename, sha256=digest, size=size)
+            metadata = stage / "manifest.json"
             metadata.write_text(json.dumps(manifest) + "\n")
-            with (releases / ".preview.lock").open("a") as lock:
+            with (releases / preview_feed.LOCK).open("a") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
                 # The worktree may have been retired during the Mac build.
                 if not Path(".git").exists():
                     sys.exit("The source worktree was removed during the build.")
-                archive.replace(releases / filename)
-                metadata.replace(releases / f"preview-{name}.json")
-            print(f"Published {name} ({branch} {commit[:8]}, {digest[:8]})")
+                if stable:
+                    if (releases / filename).exists():
+                        sys.exit(published)
+                    archive.replace(releases / filename)
+                    metadata.replace(releases / "latest.json")
+                    # A test build whose commit Stable contains has nothing left to offer.
+                    retired = preview_feed.retire(releases, lambda preview: not preview.get("dirty") and subprocess.run(
+                        ["git", "merge-base", "--is-ancestor", preview["commit"], commit],
+                        stderr=subprocess.DEVNULL).returncode == 0)
+                    print(f"Published Stable {version} ({commit[:8]}, {digest[:8]}); retired {retired} test build(s) it contains.")
+                else:
+                    archive.replace(releases / filename)
+                    metadata.replace(releases / f"preview-{name}.json")
+                    print(f"Published {name} ({branch} {commit[:8]}, {digest[:8]})")
     finally:
         subprocess.run([ssh, f"rm -rf {remote}"], check=False)
 

@@ -39,6 +39,9 @@ status, assumptions, and the next step. Update its Next section at handoff.
   the checkout that runs the services, and never point a test backend at the
   live records. Retire feature worktrees with `tools/remove-worktree <path>`
   so their published Flutter previews are cleaned up.
+- Build the Mac client with `tools/publish-flutter`, which leaves nothing on
+  the Mac. Before you finish, remove anything else your session put on the Mac:
+  build folders, test apps, and the settings and data of any test app.
 - Keep machine paths, addresses and personal details out of tracked files.
   Local machine notes, when present, are in `~/.config/relay/machine.md`,
   outside the repository.
