@@ -201,9 +201,9 @@ and none of these builds has been reviewed on the Mac.
 
 Browser popups (desktop only): webview_flutter_wkwebview 3.27.2 loaded a
 page's new window into its opener, which broke sign-in popups. A forwarding UI
-delegate in the Mac runner now opens a child popup window. `npm run test:mac --
-popup_windows_test.dart` passed on the Mac with real WKWebViews, and failed with
-the delegate, its dialog forwarding or the popup blocker removed.
+delegate in the Mac runner now opens sized new windows as child popups; others
+load in the tab. `npm run test:mac -- popup_windows_test.dart` checks this with
+real WKWebViews.
 
 ## Next
 
@@ -250,6 +250,6 @@ the delegate, its dialog forwarding or the popup blocker removed.
    cover the order and the slide.
 15. In a build with popup windows, sign in to figma.com with **Continue with
    Google**: the popup shows its host, closes itself and leaves Figma signed in.
-   Also close a tab, and the main window, with a popup open.
+   Close a tab, and the main window, with a popup open. New-tab links stay in the tab.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

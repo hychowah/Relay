@@ -97,12 +97,15 @@ resize the panes, or double-click it to return to half and half. Click the
 button in the middle of the divider, drag a split tab back onto the tab strip,
 or close one, to end the split. Narrow windows show only the selected tab.
 
-On macOS only, a page in a Browser tab that opens a new window on a user action,
-such as **Continue with Google**, gets its own popup window titled with the
-site's host, beside its tab. The page and its popup can talk to each other and
-share sign-in. The popup closes when its page closes it, when the user closes
-it, or when its tab or the main window closes. Popup pages follow the Browser's
-address rule, and windows that pages open without a user action stay blocked.
+On macOS only, a page in a Browser tab that opens a sized window on a user
+action (`window.open` with a width or height), as **Continue with Google**
+does, gets its own popup window titled with the site's host, beside its tab.
+The page and its popup can talk to each other and share sign-in. The popup
+closes when its page closes it, when the user closes it, or when its tab or the
+main window closes. Popup pages follow the Browser's address rule, and windows
+that pages open without a user action stay blocked. Any other new window, such
+as a link that opens a new tab, loads in the same tab as before, so a sign-in
+that opens an unsized window loses its opener.
 App views keep sending a new window's address to the default browser. A page
 dialog raised inside a popup window is not shown.
 

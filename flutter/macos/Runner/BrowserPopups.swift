@@ -2,11 +2,12 @@ import Cocoa
 import FlutterMacOS
 import WebKit
 
-/// Desktop only. Opens a Browser tab's new windows (`window.open`, links that
-/// target a new window) as popup windows that are real children of the page.
+/// Desktop only. Opens a Browser tab's sized new windows (`window.open` with a
+/// width or height, as sign-in pages ask) as popup windows that are real
+/// children of the page.
 ///
-/// webview_flutter_wkwebview 3.27.2 loads such a request into the opener's own
-/// web view, which replaces the opener and breaks sign-in popups. This object
+/// webview_flutter_wkwebview 3.27.2 loads every new window into the opener's
+/// own web view, which replaces the opener and breaks sign-in popups. This object
 /// becomes the web view's UI delegate, answers only WebKit's create-web-view
 /// and close calls, and forwards every other call (page dialogs, permission
 /// requests) to the plugin's own delegate, which it keeps alive.
@@ -67,6 +68,13 @@ final class BrowserPopups: NSObject, WKUIDelegate {
     _ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
     for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures
   ) -> WKWebView? {
+    // Browsers show a sized new window as a popup and any other as a new tab.
+    // Relay has no new tab here, so that loads in the opener's own tab through
+    // its usual navigation checks, as the plugin did.
+    guard windowFeatures.width != nil || windowFeatures.height != nil else {
+      webView.load(navigationAction.request)
+      return nil
+    }
     let popup = Popup(configuration: configuration, opener: webView, features: windowFeatures, channel: channel)
     popup.onClosed = { [weak self, weak popup] in self?.popups.removeAll { $0 === popup } }
     popups.append(popup)
