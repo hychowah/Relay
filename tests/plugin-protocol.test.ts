@@ -241,6 +241,37 @@ test("workspace presents app-owned state without Reports and carries acknowledge
   } finally { await workspace.close(); store.close(); }
 });
 
+test("agent's current view ends once a view command is applied", async () => {
+  const store = new Store(":memory:");
+  const report = { source: { appId: "notes", resourceId: "plan", revision: "v1", title: "Plan", sourceUrl: "https://notes.test/plan" },
+    sections: [{ id: "furniture", title: "Furniture", text: "Desk and lamp" }, { id: "lamp", title: "Lamp", text: "On the desk" }] };
+  store.saveReport(report);
+  const workspace = createWorkspace(store, () => [
+    { id: "notes", name: "Notes", description: "Reports", integration: { read: async () => report } },
+    { ...manifest, protocolVersion: 2, integration: { open: async () => ({ url: "https://rooms.test/", origin: "https://rooms.test", native: true }) } },
+  ], provider);
+  harness(workspace);
+  const conversation = store.createConversation("Plan", "session");
+  const ack = (id: string, body: object) => post(workspace, `/api/commands/${id}/ack`, { deviceId: "desktop", tabId: "tab", status: "applied", ...body });
+  try {
+    const context = { source: report.source, viewToken: "view-a", sectionId: "furniture", selection: "Desk and lamp" };
+    await post(workspace, `/api/conversations/${conversation.id}/messages`, { text: "Show the lamp", deviceId: "desktop", tabId: "tab", context });
+    assert.deepEqual(workspace.agentContext("session")!.currentView, context);
+    const navigating = workspace.toolHandler("session", "app_navigate", { ...report.source, sectionId: "lamp" });
+    await until(() => store.snapshot(conversation.id)!.commands.length === 1);
+    await ack(store.snapshot(conversation.id)!.commands[0].id, { viewToken: "view-b" });
+    await navigating;
+    assert.equal(workspace.agentContext("session")!.currentView, undefined);
+    const presenting = workspace.toolHandler("session", "app_present", { appId: "rooms", intent: { viewId: "room" } });
+    await until(() => store.snapshot(conversation.id)!.commands.length === 2);
+    await ack(store.snapshot(conversation.id)!.commands[1].id, { viewToken: "view-c", context: { viewId: "room", generation: 1 } });
+    await presenting;
+    const presented = workspace.agentContext("session")!;
+    assert.equal(presented.currentView, undefined);
+    assert.equal(presented.currentApp!.appId, "rooms");
+  } finally { await workspace.close(); store.close(); }
+});
+
 test("workspace scopes discovery instructions, persists actual progress and aborts calls on Stop", async () => {
   const app = await fixture();
   app.state.delayed = true;

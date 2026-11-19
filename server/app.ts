@@ -148,9 +148,13 @@ export function createWorkspace(
     return id ? store.bot(id) : undefined;
   }
 
-  function allowedApp(conversationId: string, appId: string) {
+  function appScope(conversationId: string) {
     const bot = botFor(conversationId);
-    if (bot && !bot.appIds.includes(appId))
+    return (appId: string) => !bot || bot.appIds.includes(appId);
+  }
+
+  function allowedApp(conversationId: string, appId: string) {
+    if (!appScope(conversationId)(appId))
       throw new HTTPException(403, { message: "This app is outside the bot's scope." });
     return integration(appId);
   }
@@ -167,7 +171,9 @@ export function createWorkspace(
     if (!run) return null;
     const snapshot = store.snapshot(run.conversationId)!;
     const bot = botFor(run.conversationId);
-    const registered = apps();
+    const inScope = appScope(run.conversationId);
+    const registered = apps().filter((entry) => inScope(entry.id));
+    const view = run.navigationSurface ? undefined : run.context;
     const currentApp: AppContext | undefined = run.navigationSurface
       ? { appId: run.navigationSurface.appId, viewToken: run.navigationViewToken, surface: run.navigationSurface.context }
       : run.appContext;
@@ -181,14 +187,13 @@ export function createWorkspace(
     return {
       conversationId: run.conversationId,
       bot: bot ?? null,
-      allowedApps: registered.filter((entry) => !bot || bot.appIds.includes(entry.id))
+      allowedApps: registered
         .map(({ id, name, description, protocolVersion }) => ({ id, name, description, protocolVersion })),
       activeAppInstructions: registered.find((entry) => entry.protocolVersion !== 2 &&
-        entry.id === (currentApp?.appId ?? run.context?.source.appId) && (!bot || bot.appIds.includes(entry.id)))?.instructions,
-      currentView: run.context && (!bot || bot.appIds.includes(run.context.source.appId))
-        ? { ...run.context, selection: run.context.selection?.slice(0, 4000) } : undefined,
-      currentApp: currentApp && (!bot || bot.appIds.includes(currentApp.appId))
-        ? currentApp : undefined,
+        entry.id === (currentApp?.appId ?? view?.source.appId))?.instructions,
+      currentView: view && inScope(view.source.appId)
+        ? { ...view, selection: view.selection?.slice(0, 4000) } : undefined,
+      currentApp: currentApp && inScope(currentApp.appId) ? currentApp : undefined,
       memories,
       memoryCount: store.visibleMemories(run.conversationId).length,
       forgottenKeys: store.forgottenKeys(run.conversationId),

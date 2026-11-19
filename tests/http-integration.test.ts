@@ -178,8 +178,24 @@ test("native HTTP integration rejects incompatible manifests and unavailable or 
     fixture.state.readMode = "unavailable";
     await assert.rejects(
       adapter.view(report, "token", "https://relay.test"),
-      (error) => error instanceof AppRequestError && error.status === 409,
+      (error) => error instanceof AppRequestError && error.status === 409 &&
+        /no longer available in the live app/.test(error.message),
     );
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("a v2 app without saved-evidence capabilities is refused before any search or read request", async () => {
+  const fixture = await nativeFixture();
+  fixture.state.manifest = { ...fixture.state.manifest, version: 2, capabilities: undefined };
+  try {
+    const adapter = new HttpIntegration({ id: "garden", name: "Garden ledger", serverUrl: fixture.origin });
+    await assert.rejects(adapter.search("basil"), (error) => error instanceof AppRequestError &&
+      error.status === 400 && /does not publish saved-evidence search/.test(error.message));
+    await assert.rejects(adapter.read("seed-ledger"), (error) => error instanceof AppRequestError &&
+      error.status === 400 && /does not publish saved evidence/.test(error.message));
+    assert.deepEqual(fixture.requests.map((url) => url.pathname), ["/_relay/manifest"]);
   } finally {
     await fixture.close();
   }

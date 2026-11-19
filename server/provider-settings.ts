@@ -25,15 +25,7 @@ export class ProviderSettingsStore {
     if (existsSync(this.file)) {
       const saved = JSON.parse(readFileSync(this.file, "utf8"));
       this.mode = saved.mode;
-      if (saved.connections) this.connections = saved.connections;
-      else {
-        // The original single-provider file retained a DeepSeek key even in demo mode.
-        const { mode: previous, apiKey, ...connection } = saved;
-        this.connections[previous as ProviderMode] = connection;
-        if (apiKey) this.connections.deepseek = {
-          model: this.defaultModel("deepseek"), ...this.connections.deepseek, apiKey,
-        };
-      }
+      this.connections = saved.connections ?? {};
       chmodSync(this.file, 0o600);
     }
   }

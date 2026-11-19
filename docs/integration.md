@@ -199,6 +199,9 @@ home. Existing `app_search`, `app_read` and `app_navigate` tools remain availabl
 - Native views accept resource ID, revision, token and parent origin. For a v2
   app retaining this interface, saved-source opening adds `protocol=1`.
 
+A v2 app that keeps this interface declares `capabilities.search` and/or
+`capabilities.read`; Relay refuses the matching tool otherwise.
+
 `Source` is `{appId,resourceId,revision,title,sourceUrl}`. URLs resolve against the
 browser origin. Saved Reports retain exact evidence independently of whether
 the live app still serves its revision. Old commands without a kind are read as
@@ -208,8 +211,8 @@ The v1 bridge uses `relay.ready`, `relay.context`, `relay.navigate` and
 `relay.navigation`. Navigation supplies source, command ID, section ID, optional
 `highlightIds` and `viewState:{query?,filters?,language?}`. IDs come from the
 published Report. Applied means those targets rendered. A null source clears
-previous document context while preserving app context. V2 apps can advertise
-`capabilities.search` to retain Relay's Library control.
+previous document context while preserving app context. `capabilities.search`
+also keeps Relay's Library control for a v2 app.
 
 An app that cannot serve the protocol itself can sit behind an external adapter
 registered by address. See [Setup](../README.md#setup) for registration.
