@@ -48,13 +48,111 @@ void main() {
     offline = true;
     await updates.check();
     expect(updates.ready, isTrue);
-    expect(await updates.archive!.readAsBytes(), bytes);
+    expect(await updates.download!.readAsBytes(), bytes);
     offline = false;
-    await updates.archive!.writeAsString('corrupt');
+    await updates.download!.writeAsString('corrupt');
     await updates.check();
     expect(downloads, 2);
     expect(updates.ready, isTrue);
   });
+  test(
+    'a file list downloads only changed files and assembles the app',
+    () async {
+      final root = await Directory.systemTemp.createTemp('relay-files');
+      addTearDown(() => root.delete(recursive: true));
+      final directory = Directory('${root.path}/updates');
+      final running = Directory('${root.path}/Running/Relay Flutter.app');
+      await Directory('${running.path}/Contents/Frameworks')
+          .create(recursive: true);
+      await File('${running.path}/Contents/Frameworks/Engine')
+          .writeAsString('engine');
+      await File('${running.path}/Contents/Info.plist').writeAsString('old');
+      final stored = <String, List<int>>{};
+      Json file(String path, String text, {bool exec = false}) {
+        final bytes = utf8.encode(text), packed = gzip.encode(bytes);
+        final hash = sha256.convert(bytes).toString();
+        stored['$hash.gz'] = packed;
+        return {
+          'path': path,
+          'sha256': hash,
+          'size': bytes.length,
+          'packed': packed.length,
+          'exec': exec,
+        };
+      }
+
+      final listing = utf8.encode(
+        jsonEncode([
+          file('Contents/Frameworks/Engine', 'engine', exec: true),
+          {'path': 'Contents/Frameworks/Current', 'link': 'Engine'},
+          file('Contents/Info.plist', 'new'),
+          file('Contents/MacOS/Relay Flutter', 'binary', exec: true),
+        ]),
+      );
+      final list = file('list', utf8.decode(listing))..remove('path');
+      var version = '0.0.3', corrupt = true;
+      final binary = '${sha256.convert(utf8.encode('binary'))}.gz';
+      final requests = <String>[];
+      final updates = AppUpdates(
+        origin: Uri.parse('http://localhost'),
+        version: '0.0.2',
+        directory: directory,
+        bundle: running,
+        client: MockClient((request) async {
+          final name = request.url.pathSegments.last;
+          requests.add(name);
+          if (name == 'latest.json') {
+            return http.Response(
+              jsonEncode({
+                'version': version,
+                'file': 'Relay-Flutter-$version-macOS-arm64.zip',
+                'size': 20000000,
+                'sha256': '0' * 64,
+                'fileList': list,
+              }),
+              200,
+            );
+          }
+          if (corrupt && name == binary) {
+            return http.Response.bytes(gzip.encode(utf8.encode('bad')), 200);
+          }
+          return http.Response.bytes(stored[name]!, 200);
+        }),
+      );
+      addTearDown(updates.dispose);
+
+      await updates.check();
+      expect(updates.ready, isFalse);
+      expect(updates.status, contains('verification failed'));
+      // The feed, the list, Info.plist and the binary; the engine is reused.
+      expect(requests, hasLength(4));
+      corrupt = false;
+      requests.clear();
+      await updates.check();
+      expect(updates.ready, isTrue);
+      expect(requests, ['latest.json', binary]);
+      await updates.check();
+      expect(requests, ['latest.json', binary, 'latest.json']);
+      expect(updates.ready, isTrue);
+
+      final app = '${root.path}/Stage/Relay Flutter.app';
+      await updates.assemble(app);
+      expect(await File('$app/Contents/Info.plist').readAsString(), 'new');
+      expect(await Link('$app/Contents/Frameworks/Current').target(), 'Engine');
+      expect(
+        await File('$app/Contents/Frameworks/Current').readAsString(),
+        'engine',
+      );
+      bool executable(String path) =>
+          File('$app/$path').statSync().mode & 0x40 != 0;
+      expect(executable('Contents/MacOS/Relay Flutter'), isTrue);
+      expect(executable('Contents/Info.plist'), isFalse);
+
+      version = '0.0.2';
+      await updates.check();
+      expect(await Directory('${directory.path}/files').list().toList(), []);
+    },
+  );
   test(
     'a started build discards replaced apps, old receipts and old downloads',
     () async {
@@ -176,7 +274,7 @@ void main() {
       await current.selectPreview(selected);
       await current.check();
       expect(current.release, one);
-      expect(await current.archive!.readAsBytes(), files[one['file']]);
+      expect(await current.download!.readAsBytes(), files[one['file']]);
       final preview = app('search', '101');
       addTearDown(preview.dispose);
       await preview.check();
@@ -185,7 +283,7 @@ void main() {
       expect(preview.release, two);
       await preview.selectStable();
       expect(preview.returningToStable, isTrue);
-      expect(await preview.archive!.readAsBytes(), files[stable['file']]);
+      expect(await preview.download!.readAsBytes(), files[stable['file']]);
       final newerPreview = app('tabs', '102', version: '0.0.7');
       addTearDown(newerPreview.dispose);
       await newerPreview.selectStable();

@@ -18,6 +18,7 @@ class AppUpdates extends ChangeNotifier {
     required this.directory,
     this.previewName = '',
     this.buildNumber = '',
+    this.bundle,
     http.Client? client,
   }) : api = RelayApi(origin, client: client);
   final RelayApi api;
@@ -35,13 +36,21 @@ class AppUpdates extends ChangeNotifier {
       ? 'Stable ${data['version']}'
       : "${data['name']} · ${data['version']} · ${(data['sha256'] as String).substring(0, 8)}";
   final Directory directory;
+
+  /// The running app, whose unchanged files an update reuses.
+  final Directory? bundle;
+  Map<String, String>? _installed;
+  Directory get _store => Directory('${directory.path}/files');
+  File _stored(Json entry) => File('${_store.path}/${entry['sha256']}');
   Timer? timer;
   Json? release;
-  File? archive;
+
+  /// The verified download for [release]: its ZIP, or its list of files.
+  File? download;
   String status = 'No update checked yet';
   double? progress;
   bool working = false, installing = false, closed = false;
-  bool get ready => archive != null;
+  bool get ready => download != null;
   void changed() {
     if (!closed) notifyListeners();
   }
@@ -56,6 +65,7 @@ class AppUpdates extends ChangeNotifier {
       buildNumber: info.buildNumber,
       previewName: const String.fromEnvironment('RELAY_PREVIEW'),
       directory: Directory('${support.path}/updates'),
+      bundle: File(Platform.resolvedExecutable).parent.parent.parent,
     );
     await updates.directory.create(recursive: true);
     final identity = updates.previewName.isEmpty
@@ -63,10 +73,7 @@ class AppUpdates extends ChangeNotifier {
         : '${info.version}-${info.buildNumber}';
     final receipt = 'launched-$identity';
     await File('${updates.directory.path}/$receipt').writeAsString('ready');
-    await updates.discardInstallLeftovers(
-      receipt,
-      File(Platform.resolvedExecutable).parent.parent.parent,
-    );
+    await updates.discardInstallLeftovers(receipt, updates.bundle!);
     updates.timer = Timer.periodic(
       const Duration(hours: 1),
       (_) => updates.check(),
@@ -100,14 +107,19 @@ class AppUpdates extends ChangeNotifier {
   }
 
   // Only a download that is ready to install is worth its disk space.
-  Future<void> _discardDownloads({File? except}) async {
+  Future<void> _discardDownloads({Set<String> keep = const {}}) async {
     try {
-      await for (final entry in directory.list()) {
-        if (entry is File &&
-            entry.path != except?.path &&
-            (entry.path.endsWith('.zip') || entry.path.endsWith('.part'))) {
-          await entry.delete();
-        }
+      final stale = [
+        await for (final entry in directory.list(recursive: true))
+          if (entry is File &&
+              !keep.contains(entry.path) &&
+              (entry.path.startsWith('${_store.path}/') ||
+                  entry.path.endsWith('.zip') ||
+                  entry.path.endsWith('.part')))
+            entry,
+      ];
+      for (final file in stale) {
+        await file.delete();
       }
     } on FileSystemException {
       // A stale download that cannot be removed does not affect updating.
@@ -126,10 +138,17 @@ class AppUpdates extends ChangeNotifier {
   static Json _release(dynamic raw, {required bool preview}) {
     if (raw is! Json) throw StateError('The published update is incomplete.');
     final version = raw['version'], hash = raw['sha256'];
+    final list = raw['fileList'];
     if (version is! String ||
+        (list != null &&
+            (list is! Json ||
+                list['sha256'] is! String ||
+                !_hash.hasMatch(list['sha256'] as String) ||
+                list['size'] is! int ||
+                list['packed'] is! int)) ||
         !RegExp(r'^\d+\.\d+\.\d+$').hasMatch(version) ||
         hash is! String ||
-        !RegExp(r'^[a-f0-9]{64}$').hasMatch(hash) ||
+        !_hash.hasMatch(hash) ||
         raw['size'] is! int ||
         (raw['size'] as int) <= 0 ||
         raw['file'] !=
@@ -145,6 +164,24 @@ class AppUpdates extends ChangeNotifier {
       throw StateError('The published update is incomplete.');
     }
     return raw;
+  }
+
+  static final _hash = RegExp(r'^[a-f0-9]{64}$');
+
+  /// A release's file list: each entry is a file with its `sha256`, `size`,
+  /// compressed `packed` size and `exec` flag, or a symlink with its `link`.
+  /// Paths are relative to the app bundle.
+  static List<Json> _entries(String text) {
+    final entries = (jsonDecode(text) as List).cast<Json>();
+    for (final entry in entries) {
+      final path = entry['path'] as String, hash = entry['sha256'];
+      if (path.startsWith('/') ||
+          path.split('/').contains('..') ||
+          (hash != null && !_hash.hasMatch(hash as String))) {
+        throw StateError('The published update is incomplete.');
+      }
+    }
+    return entries;
   }
 
   Future<void> loadPreviews() async {
@@ -169,7 +206,7 @@ class AppUpdates extends ChangeNotifier {
     working = true;
     _pinned = false;
     if (explicit) {
-      archive = null;
+      download = null;
       release = null;
     }
     status = 'Checking for updates…';
@@ -187,7 +224,7 @@ class AppUpdates extends ChangeNotifier {
       final raw =
           choice ?? (followPreview ? null : await _manifest('latest.json'));
       final data = raw == null ? null : _release(raw, preview: choice != null);
-      archive = null;
+      download = null;
       release = null;
       if (data == null) {
         status = followPreview
@@ -213,47 +250,26 @@ class AppUpdates extends ChangeNotifier {
         return;
       }
       release = data;
-      final destination = File('${directory.path}/${data['file']}');
       await directory.create(recursive: true);
-      if (!await verified(destination, data)) {
-        status = 'Downloading ${label(data)}…';
-        progress = 0;
-        changed();
-        final partial = File('${destination.path}.part');
-        final download = await api.updateArchive(data['file'] as String);
-        if (download.statusCode != 200) {
-          throw StateError('The update could not be downloaded.');
+      final Set<String> keep;
+      if (data['fileList'] == null) {
+        final destination = File('${directory.path}/${data['file']}');
+        if (!await verified(destination, data)) {
+          status = 'Downloading ${label(data)}…';
+          progress = 0;
+          await _fetch(
+            data['file'] as String,
+            data,
+            destination,
+            (bytes) => progress = bytes / (data['size'] as int),
+          );
         }
-        final sink = partial.openWrite();
-        var bytes = 0;
-        try {
-          await for (final chunk in download.stream.timeout(
-            const Duration(seconds: 30),
-          )) {
-            bytes += chunk.length;
-            if (bytes > (data['size'] as int)) {
-              throw StateError('Unexpected update size.');
-            }
-            sink.add(chunk);
-            progress = bytes / (data['size'] as int);
-            changed();
-          }
-          await sink.flush();
-          await sink.close();
-          if (!await verified(partial, data)) {
-            throw StateError(
-              'Update verification failed. The installed app has not changed.',
-            );
-          }
-          await partial.rename(destination.path);
-        } catch (_) {
-          await sink.close();
-          if (await partial.exists()) await partial.delete();
-          rethrow;
-        }
+        download = destination;
+        keep = {destination.path};
+      } else {
+        keep = await _downloadFiles(data);
       }
-      archive = destination;
-      await _discardDownloads(except: destination);
+      await _discardDownloads(keep: keep);
       _pinned = explicit;
       status = '${label(data)} is ready to install';
       progress = 1;
@@ -268,6 +284,120 @@ class AppUpdates extends ChangeNotifier {
     }
   }
 
+  /// Downloads only the files of [data]'s app that neither the running app
+  /// nor an earlier download has, and returns the downloads it uses. Finished
+  /// files stay, so an interrupted download continues with the rest.
+  Future<Set<String>> _downloadFiles(Json data) async {
+    await _store.create(recursive: true);
+    final list = data['fileList'] as Json;
+    if (!await verified(_stored(list), list)) {
+      await _fetch('files/${list['sha256']}.gz', list, _stored(list), (_) {});
+    }
+    final entries = _entries(await _stored(list).readAsString());
+    _installed ??= await _hashInstalled();
+    final missing = <String, Json>{};
+    for (final entry in entries) {
+      final hash = entry['sha256'];
+      if (hash == null ||
+          _installed!.containsKey(hash) ||
+          missing.containsKey(hash)) {
+        continue;
+      }
+      if (!await verified(_stored(entry), entry)) missing[hash] = entry;
+    }
+    if (missing.isNotEmpty) {
+      final total = missing.values.fold(
+        0,
+        (sum, e) => sum + (e['packed'] as int),
+      );
+      status =
+          'Downloading ${label(data)}: ${_megabytes(total)} of the ${_megabytes(data['size'] as int)} package…';
+      progress = 0;
+      var done = 0;
+      for (final entry in missing.values) {
+        await _fetch(
+          'files/${entry['sha256']}.gz',
+          entry,
+          _stored(entry),
+          (bytes) => progress = (done + bytes) / total,
+        );
+        done += entry['packed'] as int;
+      }
+    }
+    download = _stored(list);
+    return {
+      download!.path,
+      for (final entry in entries)
+        if (entry['sha256'] != null) _stored(entry).path,
+    };
+  }
+
+  static String _megabytes(int bytes) =>
+      '${(bytes / 1e6).toStringAsFixed(1)} MB';
+
+  /// The running app's files by SHA-256.
+  Future<Map<String, String>> _hashInstalled() async {
+    final files = <String, String>{};
+    if (bundle == null || !await bundle!.exists()) return files;
+    await for (final entry in bundle!.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      if (entry is File) {
+        files[(await sha256.bind(entry.openRead()).first).toString()] =
+            entry.path;
+      }
+    }
+    return files;
+  }
+
+  /// Downloads [file] to [destination], reporting the bytes received so far,
+  /// and checks it against [data]'s size and SHA-256. A stored `.gz` file is
+  /// limited by its compressed `packed` size and checked once uncompressed.
+  Future<void> _fetch(
+    String file,
+    Json data,
+    File destination,
+    void Function(int bytes) received,
+  ) async {
+    changed();
+    final limit = (data['packed'] ?? data['size']) as int;
+    final response = await api.updateArchive(file);
+    if (response.statusCode != 200) {
+      throw StateError('The update could not be downloaded.');
+    }
+    final partial = File('${destination.path}.part');
+    final sink = partial.openWrite();
+    var bytes = 0;
+    try {
+      final stream = response.stream.timeout(const Duration(seconds: 30)).map((
+        chunk,
+      ) {
+        bytes += chunk.length;
+        if (bytes > limit) throw StateError('Unexpected update size.');
+        received(bytes);
+        changed();
+        return chunk;
+      });
+      await for (final chunk
+          in file.endsWith('.gz') ? stream.transform(gzip.decoder) : stream) {
+        sink.add(chunk);
+      }
+      await sink.flush();
+      await sink.close();
+      if (!await verified(partial, data)) {
+        throw StateError(
+          'Update verification failed. The installed app has not changed.',
+        );
+      }
+      await partial.rename(destination.path);
+    } catch (_) {
+      await sink.close();
+      if (await partial.exists()) await partial.delete();
+      rethrow;
+    }
+  }
+
   Future<bool> verified(File file, Json data) async =>
       await file.exists() &&
       await file.length() == data['size'] &&
@@ -279,18 +409,31 @@ class AppUpdates extends ChangeNotifier {
     status = 'Preparing update…';
     changed();
     try {
-      if (!await verified(archive!, release!)) {
-        throw StateError('The downloaded update changed. Download it again.');
+      final files = release!['fileList'] != null;
+      if (!await verified(
+        download!,
+        files ? release!['fileList'] as Json : release!,
+      )) {
+        throw StateError(_changed);
       }
-      final bundle = File(Platform.resolvedExecutable).parent.parent.parent;
-      if (!bundle.path.endsWith('/Relay Flutter.app')) {
+      final bundle = this.bundle;
+      if (bundle == null || !bundle.path.endsWith('/Relay Flutter.app')) {
         throw StateError(
           'Install Relay Flutter in Applications before updating.',
         );
       }
       final stage = await bundle.parent.createTemp('.relay-flutter-update-');
       final candidate = '${stage.path}/Relay Flutter.app';
-      await command('/usr/bin/ditto', ['-x', '-k', archive!.path, stage.path]);
+      if (files) {
+        await assemble(candidate);
+      } else {
+        await command('/usr/bin/ditto', [
+          '-x',
+          '-k',
+          download!.path,
+          stage.path,
+        ]);
+      }
       await command('/usr/bin/codesign', [
         '--verify',
         '--deep',
@@ -355,6 +498,35 @@ class AppUpdates extends ChangeNotifier {
       status = e.toString();
       installing = false;
       changed();
+    }
+  }
+
+  static const _changed = 'The downloaded update changed. Download it again.';
+
+  /// Builds the ready release's app at [app] from the downloaded files and the
+  /// running app's unchanged ones, checking each copy against the file list.
+  Future<void> assemble(String app) async {
+    final entries = _entries(await download!.readAsString());
+    final executables = <String>[];
+    // Files first, so that no copy can write through a symlink.
+    for (final entry in entries.where((entry) => entry['link'] == null)) {
+      final target = File('$app/${entry['path']}');
+      await target.parent.create(recursive: true);
+      final stored = _stored(entry);
+      final source = await stored.exists()
+          ? stored
+          : File(_installed?[entry['sha256']] ?? stored.path);
+      await source.openRead().pipe(target.openWrite());
+      if (!await verified(target, entry)) throw StateError(_changed);
+      if (entry['exec'] == true) executables.add(target.path);
+    }
+    for (final entry in entries.where((entry) => entry['link'] != null)) {
+      final link = Link('$app/${entry['path']}');
+      await link.parent.create(recursive: true);
+      await link.create(entry['link'] as String);
+    }
+    if (executables.isNotEmpty) {
+      await command('/bin/chmod', ['755', ...executables]);
     }
   }
 
