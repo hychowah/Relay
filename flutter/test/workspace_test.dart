@@ -1283,6 +1283,39 @@ void main() {
   });
 
   testWidgets(
+    'with newest tab first, clicking tab D of A B C D gives D A B C',
+    (tester) async {
+      final f = Fixture()
+        ..configApps = [
+          ...apps,
+          {'id': 'notes', 'name': 'Notes', 'description': 'Notes'},
+        ];
+      await f.w.start();
+      final [a, b, c, d] = [for (final app in f.w.apps) await f.w.openApp(app)];
+      f.w.select(a);
+      f.w.setNewestTabFirst(true);
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, saveDraft: (_) async {}),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(WorkspaceTabs),
+          matching: find.text('Notes'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(f.w.tabs, [d, a, b, c]);
+      expect(f.w.active, d);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
     'deleting a tab during insertion keeps the next tab interactive',
     (tester) async {
       final f = Fixture();
