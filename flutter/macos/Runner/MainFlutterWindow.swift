@@ -21,6 +21,18 @@ class MainFlutterWindow: NSWindow {
       name: "app.relay/browser", binaryMessenger: flutterViewController.engine.binaryMessenger
     )
     browser.setMethodCallHandler { [weak flutterViewController] call, result in
+      if call.method == "popups" || call.method == "closePopups" {
+        guard let registry = flutterViewController, let identifier = call.arguments as? NSNumber,
+              let view = FWFWebViewFlutterWKWebViewExternalAPI.webView(
+                forIdentifier: identifier.int64Value, withPluginRegistry: registry
+              ) else {
+          result(FlutterError(code: "popups", message: "The page has no web view.", details: nil))
+          return
+        }
+        result(call.method == "popups"
+          ? BrowserPopups.install(on: view, channel: browser) : BrowserPopups.close(on: view))
+        return
+      }
       if call.method == "snapshot" || call.method == "selection" {
         guard let registry = flutterViewController, let identifier = call.arguments as? NSNumber,
               let view = FWFWebViewFlutterWKWebViewExternalAPI.webView(
@@ -67,5 +79,13 @@ class MainFlutterWindow: NSWindow {
     }
 
     super.awakeFromNib()
+  }
+
+  // Browser popups never outlive the window whose tabs opened them.
+  override func close() {
+    for window in NSApp.windows where window.identifier == BrowserPopups.windowIdentifier {
+      window.close()
+    }
+    super.close()
   }
 }

@@ -200,6 +200,12 @@ The backend at `main` was deployed with 0.0.10 and again with 0.0.13: it offers
 and serves the bug report status routes. The native Mac workflow was not rerun,
 and none of these builds has been reviewed on the Mac.
 
+Browser popups (desktop only): webview_flutter_wkwebview 3.27.2 loaded a
+page's new window into its opener, which broke sign-in popups. A forwarding UI
+delegate in the Mac runner now opens a child popup window. `npm run test:mac --
+popup_windows_test.dart` passed on the Mac with real WKWebViews, and failed with
+the delegate, its dialog forwarding or the popup blocker removed.
+
 ## Next
 
 1. Install Stable 0.0.13 on the Mac. Check that tabs, the chat panel and the
@@ -234,9 +240,12 @@ and none of these builds has been reviewed on the Mac.
    Since 0.0.13 the transcript is an inset card with an accent border and
    muted timestamps. On the Mac, in both modes, check that it reads apart
    from the conversation and the playing paragraph is visible.
-13. Check on the Mac that Analysis Web's **Start analysis** shows its confirm
-   dialog, titled with the page's host, and that OK starts the analysis and
+13. Check on the Mac that Analysis Web, registered as trusted, shows the
+   confirm dialog of **Start analysis**, titled with the page's host, and that OK starts the analysis and
    Cancel does not. Page alert and confirm dialogs are tested only with a faked
    web view.
+14. In a build with popup windows, sign in to figma.com with **Continue with
+   Google**: the popup shows its host, closes itself and leaves Figma signed in.
+   Also close a tab, and the main window, with a popup open.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

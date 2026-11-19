@@ -95,6 +95,15 @@ resize the panes, or double-click it to return to half and half. Click the
 button in the middle of the divider, drag a split tab back onto the tab strip,
 or close one, to end the split. Narrow windows show only the selected tab.
 
+On macOS only, a page in a Browser tab that opens a new window on a user action,
+such as **Continue with Google**, gets its own popup window titled with the
+site's host, beside its tab. The page and its popup can talk to each other and
+share sign-in. The popup closes when its page closes it, when the user closes
+it, or when its tab or the main window closes. Popup pages follow the Browser's
+address rule, and windows that pages open without a user action stay blocked.
+App views keep sending a new window's address to the default browser. A page
+dialog raised inside a popup window is not shown.
+
 On macOS, select page or PDF text and ask a question with page context enabled.
 With a YouTube video open in a Browser tab, ask about the video: the agent reads
 its full transcript page by page through the page itself (`browser.transcript`,
@@ -111,6 +120,15 @@ With Reduce Motion it attaches at once. Escape or **Cancel** leaves the tab unch
 Image input currently uses Claude. The service keeps a sent screenshot with its
 message, so reopening the chat shows it again; Trash hides it and the 24-hour
 Trash cleanup deletes it with the conversation.
+
+### Mac checks
+
+`npm run test:mac -- popup_windows_test.dart`, from the repository root on WSL,
+runs that self-contained integration test on the Mac against real WKWebViews,
+with its own loopback fixture. Like the smoothness suite below, it builds a
+temporary copy under its own bundle id, `app.relay.flutterTest`, and removes
+the copy and the test app's data afterwards. It refuses `workflow_test.dart`,
+which uses the Flutter deployment's records.
 
 ### Measure UI smoothness
 
