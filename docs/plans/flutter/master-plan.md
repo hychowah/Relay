@@ -234,7 +234,8 @@ not been installed or reviewed on the Mac.
    or content. Only widget tests with fake pages cover it. A bug report on
    0.0.12 showed neither page took clicks or scrolling after a split: the
    selected pane's border took the whole pane's input on macOS. Its outline
-   is now four edge strips, not yet in Stable; check that the selected page
+   is now a 2-pixel frame around the page, with nothing drawn over it, not
+   yet in Stable; check that the selected page
    clicks and scrolls, and that one click on the dimmed pane selects it.
 12. Check night mode on the Mac in Dark and Light, with macOS both light and
    dark: tabs, chat, Markdown replies, dialogs, menus and the empty Browser
