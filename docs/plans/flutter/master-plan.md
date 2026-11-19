@@ -161,7 +161,8 @@ reports and draft conversations. The native Mac workflow was not rerun for it.
 
 On 2026-11-19 the [UI smoothness suite](../../../flutter/README.md#measure-performance)
 held 57–60 fps on the MacBook Neo (60 Hz), with waits up to 117 ms on tab
-switches; WebKit presentation is unmeasured.
+switches; WebKit presentation is unmeasured. After the transcript pane fix, its
+median frame build fell from 3.15 to 0.88 ms (one run before and one after).
 Stress runs the same day found no Relay leak (closed tabs release their web
 processes; conversation and transcript cycles stay level), but with 10,000
 messages nearly every one-second poll causes a visible frame wait. The installed
@@ -203,7 +204,7 @@ the delegate, its dialog forwarding or the popup blocker removed.
    update folders beside the app and the older downloads.
 2. Republishing a test build's name leaves its earlier ZIP in the release
    folder on WSL. Remove it at publish time if that folder grows.
-3. Review Stable 0.0.13 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`. The suite's longest waits, on tab switches and the transcript pane, are candidates for a smoothness fix. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
+3. Review Stable 0.0.13 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`. The suite's longest waits, on tab switches, are candidates for a smoothness fix. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
 4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable since 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified. The capture animation is not in Stable yet: on the Mac, check that the flash and the flight to the composer run smoothly over a real page, and that the thumbnail takes over without a jump.
 5. Try the toolbar record button and **Bug reports**, both in Stable since 0.0.9, on the Mac. Source tests cover recording,
    saving, viewing, marking solved and deleting; native screenshots and the live service's report folder are unverified. Marking solved and deleting are in Stable 0.0.13 and served by the live backend; try them on the Mac.
