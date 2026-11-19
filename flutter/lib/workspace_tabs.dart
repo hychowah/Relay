@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'split_layout.dart';
 import 'workspace.dart';
 import 'workspace_style.dart';
 
@@ -21,6 +22,8 @@ class WorkspaceTabs extends StatefulWidget {
   final List<WorkspaceTab> tabs;
   final WorkspaceTab? selected;
   final ValueChanged<WorkspaceTab> onSelect, onClose;
+
+  /// The tabs in the shown split, marked on their own chips.
   final List<WorkspaceTab>? split;
 
   /// Desktop only: chips can be dragged onto the page to split it.
@@ -223,11 +226,11 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
     final chip = _chip(
       placed,
       selected: tab.id == selectedId,
-      paired: widget.split?.contains(tab) ?? false,
+      inSplit: widget.split?.contains(tab) ?? false,
       onSelect: () => widget.onSelect(tab),
       onClose: () => widget.onClose(tab),
     );
-    if (!widget.draggable) return chip;
+    if (!widget.draggable || tab is SplitTab) return chip;
     return _TabDraggable(
       data: tab,
       dragAnchorStrategy: pointerDragAnchorStrategy,
@@ -302,7 +305,7 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
   Widget _chip(
     _Placed placed, {
     required bool selected,
-    bool paired = false,
+    bool inSplit = false,
     VoidCallback? onSelect,
     VoidCallback? onClose,
   }) {
@@ -317,7 +320,7 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
             Material(
               color: selected
                   ? colors.surface
-                  : paired
+                  : inSplit
                   ? colors.primaryContainer
                   : Colors.transparent,
               shape: RoundedRectangleBorder(
@@ -337,7 +340,9 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
                         child: Row(
                           children: [
                             Icon(
-                              tab.isBrowser
+                              tab is SplitTab
+                                  ? Icons.space_dashboard_outlined
+                                  : tab.isBrowser
                                   ? Icons.language
                                   : tab.appId == null
                                   ? Icons.add
@@ -361,7 +366,7 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
                                 ),
                               ),
                             ),
-                            if (paired)
+                            if (inSplit)
                               Padding(
                                 padding: const EdgeInsets.only(left: 4),
                                 child: Icon(

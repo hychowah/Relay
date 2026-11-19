@@ -16,6 +16,7 @@ import 'package:relay_flutter/transcript_pane.dart';
 import 'package:relay_flutter/workspace.dart';
 import 'package:relay_flutter/capture_flight.dart';
 import 'package:relay_flutter/region_capture.dart';
+import 'package:relay_flutter/split_layout.dart';
 import 'package:relay_flutter/workspace_tabs.dart';
 
 const apps = [
@@ -351,17 +352,25 @@ void main() {
       f.w.newTab();
       final blank = f.w.active!;
       expect(f.w.tabs, [blank, browser, room]);
-      f.w.dropInSplit(browser, left: false);
-      expect(f.w.tabs, [blank, browser, room], reason: 'a split keeps order');
+      f.w.dropInSplit(browser, blank, SplitSide.right);
+      final split = f.w.shownSplit!;
+      expect(f.w.tabs, [
+        split,
+        blank,
+        browser,
+        room,
+      ], reason: 'a new split tab opens on the left; the others keep order');
       f.w.select(room, opened: true);
-      expect(f.w.tabs, [room, blank, browser]);
-      // An app the agent opens, here into the blank tab, also moves left.
+      expect(f.w.tabs, [room, split, blank, browser]);
+      // An app the agent opens, here into the blank pane, also moves left.
+      f.w.select(split);
       f.w.select(blank);
       final opened = await f.w.openApp(f.w.apps[0], manual: false);
-      expect(f.w.tabs, [opened, room, browser]);
-      expect(f.w.split, [opened, browser]);
-      expect(f.w.session(), containsPair('active', 0));
-      expect(f.w.session(), containsPair('split', [0, 2]));
+      expect(f.w.tabs, [opened, room, split, browser]);
+      expect(f.w.shownSplit, split);
+      expect(split.layout.tabs, [opened, browser]);
+      expect(f.w.session(), containsPair('active', 2));
+      expect(f.w.session()['tabs'][2]['split']['panes'], [0, 3]);
 
       f.w.select(room);
       final next = Fixture(
@@ -370,13 +379,15 @@ void main() {
       );
       addTearDown(next.w.dispose);
       await next.w.start();
-      expect(next.w.tabs.map((tab) => tab.appId), [
+      final tabs = next.w.tabs;
+      expect(tabs.map((tab) => tab.appId), [
         'browser',
         'room-layout',
+        null,
         'browser',
       ]);
-      expect(next.w.active, next.w.tabs[1]);
-      expect(next.w.split, [next.w.tabs[0], next.w.tabs[2]]);
+      expect(next.w.active, tabs[1]);
+      expect((tabs[2] as SplitTab).layout.tabs, [tabs[0], tabs[3]]);
     },
   );
   test(
@@ -625,96 +636,179 @@ void main() {
       'zone': 'work',
     });
   });
-  test(
-    'a split pair replaces, swaps, hides behind other tabs and ends',
-    () async {
-      final f = Fixture();
-      addTearDown(f.w.dispose);
-      await f.w.start();
-      f.w.recorder.start();
-      final room = await f.w.openApp(f.w.apps[1]);
-      final browser = await f.w.openApp(f.w.apps[0]);
-      f.w.newTab();
-      final blank = f.w.active!;
-      f.w.select(browser);
-      expect(f.w.canSplitWith(browser), isFalse);
-      f.w.dropInSplit(room, left: true);
-      expect(f.w.split, [room, browser]);
-      expect(f.w.active, room);
-      f.w.splitWidth = .3;
-      f.w.dropInSplit(room, left: false);
-      expect(f.w.split, [browser, room]);
-      f.w.dropInSplit(blank, left: false);
-      expect(f.w.split, [browser, blank], reason: 'at most two panes');
-      expect(f.w.splitWidth, .3, reason: 'swaps keep the divider');
-      f.w.select(room);
-      expect(f.w.splitShown, isFalse);
-      f.w.select(browser);
-      expect(f.w.splitShown, isTrue);
-      f.w.leaveSplit(browser);
-      expect(f.w.split, isNull);
-      expect(f.w.active, blank);
-      expect(
-        f.w.recorder.events
-            .where((event) => event['type'] == 'action')
-            .map((event) => event['name'])
-            .where((name) => name.toString().contains('split')),
-        ['split tabs', 'split tabs', 'split tabs', 'end split'],
-      );
+  test('a split is its own tab whose panes nest, move and leave', () async {
+    final f = Fixture();
+    addTearDown(f.w.dispose);
+    await f.w.start();
+    f.w.recorder.start();
+    final room = await f.w.openApp(f.w.apps[1]);
+    final browser = await f.w.openApp(f.w.apps[0]);
+    f.w.newTab();
+    final blank = f.w.active!;
+    f.w.select(browser);
+    f.w.dropInSplit(browser, browser, SplitSide.left);
+    expect(f.w.shownSplit, isNull, reason: 'a tab cannot split its own pane');
+    f.w.dropInSplit(room, browser, SplitSide.left);
+    final split = f.w.shownSplit!;
+    expect(f.w.tabs, [room, browser, blank, split]);
+    expect(split.title, 'Room layout + Browser');
+    expect(split.layout.tabs, [room, browser]);
+    expect(split.layout.axis, Axis.horizontal);
+    expect(f.w.active, room);
 
-      f.w.dropInSplit(room, left: true);
-      expect(f.w.splitWidth, .5, reason: 'a new split starts at half');
-      f.w.select(blank);
-      final opened = await f.w.openApp(f.w.apps[0]);
-      expect(opened.id, blank.id);
-      expect(f.w.split, [room, opened], reason: 'the pane keeps its new app');
-      f.w.closeTab(opened);
-      expect(f.w.split, isNull);
-      expect(f.w.active, room, reason: 'the partner stays shown');
-    },
-  );
+    f.w.dropInSplit(blank, browser, SplitSide.bottom);
+    expect(split.layout.tabs, [room, browser, blank]);
+    final column = split.layout.second as SplitBranch;
+    expect(column.axis, Axis.vertical, reason: 'only the dropped-on pane');
+    expect(column.fraction, .5, reason: 'each new split starts at half');
+
+    split.layout.fraction = .3;
+    f.w.dropInSplit(blank, room, SplitSide.top);
+    expect(split.layout.tabs, [blank, room, browser], reason: 'a pane moves');
+    expect(split.layout.second, isA<SplitPane>());
+    expect(split.layout.fraction, .3, reason: 'moving keeps other dividers');
+
+    // A tab's own tab shows it alone; the split tab brings the split back
+    // with the pane selected last.
+    f.w.select(room, alone: true);
+    expect(f.w.shownSplit, isNull);
+    expect(f.w.active, room);
+    f.w.select(split);
+    expect(f.w.shownSplit, split);
+    expect(f.w.active, blank);
+    f.w.select(browser);
+    expect(f.w.shownSplit, split, reason: 'selecting a pane keeps the split');
+
+    f.w.leaveSplit(browser);
+    expect(split.layout.tabs, [blank, room], reason: 'its neighbour grows');
+    expect(f.w.active, blank);
+    f.w.closeTab(split);
+    expect(f.w.tabs, [room, browser, blank], reason: 'its tabs stay open');
+    expect(f.w.shownSplit, isNull);
+    expect(f.w.active, blank, reason: 'the selected tab shows alone');
+    expect(
+      f.w.recorder.events
+          .where((event) => event['type'] == 'action')
+          .map((event) => event['name'])
+          .where((name) => name.toString().contains('split')),
+      ['split tabs', 'split tabs', 'split tabs', 'leave split'],
+    );
+
+    // A tab can be in several splits; closing it leaves every one, and a
+    // split left with one pane closes.
+    f.w.dropInSplit(room, blank, SplitSide.right);
+    final first = f.w.shownSplit!;
+    f.w.select(browser, alone: true);
+    f.w.dropInSplit(blank, browser, SplitSide.left);
+    final second = f.w.shownSplit!;
+    f.w.select(blank);
+    final opened = await f.w.openApp(f.w.apps[0]);
+    expect(opened.id, blank.id);
+    expect(f.w.shownSplit, second, reason: 'the pane keeps its new app');
+    expect(first.layout.tabs, [opened, room]);
+    expect(second.layout.tabs, [opened, browser]);
+    f.w.closeTab(room);
+    expect(f.w.tabs, [browser, opened, second]);
+    f.w.closeTab(opened);
+    expect(f.w.tabs, [browser]);
+    expect(f.w.shownSplit, isNull);
+    expect(f.w.active, browser, reason: 'the remaining pane stays shown');
+  });
   test(
-    'the split pair is saved with the tabs and reopens on the next start',
+    'split tabs are saved with the tabs and reopen on the next start',
     () async {
       final first = Fixture();
       addTearDown(first.w.dispose);
       await first.w.start();
       final room = await first.w.openApp(first.w.apps[1]);
-      await first.w.openApp(first.w.apps[0]);
-      first.w.dropInSplit(room, left: false);
-      first.w
-        ..splitWidth = .3
-        ..changed();
+      final browser = await first.w.openApp(first.w.apps[0]);
+      final second = await first.w.openApp(first.w.apps[0]);
+      first.w.dropInSplit(room, second, SplitSide.right);
+      first.w.dropInSplit(browser, room, SplitSide.bottom);
+      first.w.shownSplit!.layout.fraction = .3;
+      first.w.changed();
       final saved = jsonDecode(jsonEncode(first.stored.last)) as Json;
-      expect(saved['split'], [1, 0]);
-      expect(saved['splitWidth'], .3);
+      expect(saved['active'], 3);
+      expect(saved['tabs'][3], {
+        'split': {
+          'axis': 'horizontal',
+          'fraction': .3,
+          'panes': [
+            2,
+            {
+              'axis': 'vertical',
+              'fraction': .5,
+              'panes': [0, 1],
+            },
+          ],
+        },
+        'focus': 1,
+      });
 
       final next = Fixture(session: saved);
       addTearDown(next.w.dispose);
       await next.w.start();
       final tabs = next.w.tabs;
-      expect(next.w.split, [tabs[1], tabs[0]]);
-      expect(next.w.splitWidth, .3);
-      expect(next.w.active, tabs[0]);
-      expect(next.w.splitShown, isTrue);
+      final split = tabs[3] as SplitTab;
+      expect(next.w.shownSplit, split);
+      expect(split.layout.tabs, [tabs[2], tabs[0], tabs[1]]);
+      expect(split.layout.fraction, .3);
+      expect(next.w.active, tabs[1]);
 
       final failed = Fixture(session: saved)..failRoomRestore = true;
       addTearDown(failed.w.dispose);
       await failed.w.start();
-      expect(failed.w.tabs.map((tab) => tab.appId), ['browser']);
-      expect(
-        failed.w.split,
-        isNull,
-        reason: 'a tab that failed ends the split',
-      );
-      expect(failed.stored.last.containsKey('split'), isFalse);
+      final kept = failed.w.tabs;
+      expect(kept.map((tab) => tab.appId), ['browser', 'browser', null]);
+      expect((kept[2] as SplitTab).layout.tabs, [
+        kept[1],
+        kept[0],
+      ], reason: 'a tab that failed leaves the split');
     },
   );
-  test('reconnect does not bring back a split the user ended', () async {
+  test('reconnect fills a split saved before a pane it retries', () async {
+    // Newest tab first saves a new split tab ahead of its panes.
     final f = Fixture(
       session: {
         'active': 0,
-        'split': [0, 1],
+        'tabs': [
+          {
+            'split': {
+              'axis': 'horizontal',
+              'fraction': .5,
+              'panes': [1, 2],
+            },
+            'focus': 2,
+          },
+          {
+            'appId': 'room-layout',
+            'context': {
+              'viewId': 'room',
+              'state': {'zone': 'work'},
+            },
+          },
+          {'appId': 'browser', 'url': 'https://example.com/desk'},
+        ],
+      },
+    )..configApps = [apps[1]];
+    addTearDown(f.w.dispose);
+    await f.w.start();
+    expect(f.w.tabs.map((tab) => tab.appId), ['room-layout']);
+    expect(f.w.pendingSession, isNotNull, reason: 'the Browser is retried');
+
+    f.configApps = [...apps];
+    await f.w.start();
+    expect(f.w.error, isNull);
+    expect(f.w.pendingSession, isNull);
+    final tabs = f.w.tabs;
+    expect(tabs.map((tab) => tab.appId), ['room-layout', null, 'browser']);
+    expect((tabs[1] as SplitTab).layout.tabs, [tabs[0], tabs[2]]);
+    expect(f.stored.last['tabs'][1]['split']['panes'], [0, 2]);
+  });
+  test('reconnect does not bring back a split tab the user closed', () async {
+    final f = Fixture(
+      session: {
+        'active': 3,
         'tabs': [
           {'appId': 'browser', 'url': 'about:blank'},
           {'appId': 'research', 'source': deskReport},
@@ -725,20 +819,30 @@ void main() {
               'state': {'zone': 'work'},
             },
           },
+          {
+            'split': {
+              'axis': 'horizontal',
+              'fraction': .5,
+              'panes': [0, 1],
+            },
+            'focus': 1,
+          },
         ],
       },
     )..failRoomRestore = true;
     addTearDown(f.w.dispose);
     await f.w.start();
-    expect(f.w.tabs.map((tab) => tab.appId), ['browser', 'research']);
-    expect(f.w.split, f.w.tabs);
-    // Sessions saved before the divider existed have no width: start at half.
-    expect(f.w.splitWidth, .5);
-    f.w.leaveSplit(f.w.active!);
+    expect(f.w.tabs.map((tab) => tab.appId), ['browser', 'research', null]);
+    expect(f.w.shownSplit!.layout.tabs, f.w.tabs.take(2));
+    expect(f.w.active, f.w.tabs[1]);
+    f.w.closeTab(f.w.shownSplit!);
     f.failRoomRestore = false;
     await f.w.start();
-    expect(f.w.tabs.length, 3);
-    expect(f.w.split, isNull);
+    expect(f.w.tabs.map((tab) => tab.appId), [
+      'browser',
+      'research',
+      'room-layout',
+    ]);
   });
   testWidgets('dragging tabs splits the page without recreating either view', (
     tester,
@@ -757,28 +861,40 @@ void main() {
     final browserView = find.text('View Browser', skipOffstage: false);
     final roomElement = tester.element(roomView);
     final browserElement = tester.element(browserView);
-    final page = tester.getRect(find.byKey(ValueKey('page-${browser.id}')));
-    Finder chip(String title) => find.descendant(
-      of: find.byType(WorkspaceTabs),
-      matching: find.text(title),
-    );
+    Rect page(WorkspaceTab tab) =>
+        tester.getRect(find.byKey(ValueKey('page-${tab.id}')));
+    final whole = page(browser);
+    // Both Browser tabs have the same title.
+    Finder chip(String title, [int index = 0]) => find
+        .descendant(of: find.byType(WorkspaceTabs), matching: find.text(title))
+        .at(index);
 
-    final drag = await tester.startGesture(
-      tester.getCenter(chip('Room layout')),
-      kind: PointerDeviceKind.mouse,
+    Future<void> dragTab(Finder tab, Offset to, String highlight) async {
+      final drag = await tester.startGesture(
+        tester.getCenter(tab),
+        kind: PointerDeviceKind.mouse,
+      );
+      await drag.moveBy(const Offset(0, 40));
+      await drag.moveTo(to);
+      await tester.pump();
+      expect(find.byKey(ValueKey(highlight)), findsOneWidget);
+      await drag.up();
+      await tester.pumpAndSettle();
+    }
+
+    await dragTab(
+      chip('Room layout'),
+      Offset(whole.left + 40, whole.center.dy),
+      'drop-left',
     );
-    await drag.moveBy(const Offset(0, 40));
-    await drag.moveTo(Offset(page.left + 40, page.center.dy));
-    await tester.pump();
-    expect(find.byKey(const ValueKey('drop-left')), findsOneWidget);
-    await drag.up();
-    await tester.pumpAndSettle();
-    expect(f.w.split, [room, browser]);
+    final split = f.w.shownSplit!;
+    expect(split.layout.tabs, [room, browser]);
     expect(f.w.active, room);
+    expect(chip('Room layout + Browser'), findsOneWidget);
     expect(tester.element(roomView), same(roomElement));
     expect(tester.element(browserView), same(browserElement));
-    final left = tester.getRect(find.byKey(ValueKey('page-${room.id}')));
-    final right = tester.getRect(find.byKey(ValueKey('page-${browser.id}')));
+    final left = page(room);
+    final right = page(browser);
     expect(left.right, lessThan(right.left));
     expect(left.width, closeTo(right.width, 1));
     expect(find.byIcon(Icons.vertical_split), findsNWidgets(2));
@@ -786,65 +902,94 @@ void main() {
     await tester.tapAt(right.center);
     await tester.pump();
     expect(f.w.active, browser);
+    // Browser shows its address bar once selected, which moves the pages.
+    final selected = page(browser), beside = page(room);
     // On macOS a native page gets no input wherever Flutter paints over it, so
     // nothing may overlap the selected page, edges included. Its outline is a
-    // frame around the page, in the other pane a colour that does not show.
-    final pages = find
-        .ancestor(
-          of: find.byKey(ValueKey(browser.id)),
-          matching: find.byType(Stack),
-        )
-        .first;
-    final inPage = find.descendant(
-      of: find.byKey(ValueKey('page-${browser.id}')),
-      matching: find.byWidgetPredicate((_) => true),
-    );
-    final selected = tester.getRect(find.byKey(ValueKey('page-${browser.id}')));
-    final painted = find.descendant(
-      of: pages,
-      matching: find.byWidgetPredicate(
-        (w) => w is ColoredBox || w is DecoratedBox || w is CustomPaint,
-      ),
-    );
-    // The exit button sits on the divider and reaches 11 pixels into the page
-    // on purpose, so it is the one drawing left out.
-    final inside = {
-      ...inPage.evaluate(),
-      ...find
+    // frame around the page; each other pane has a tint that one click selects.
+    void expectNothingOver(WorkspaceTab tab, List<WorkspaceTab> others) {
+      final selected = page(tab);
+      final pages = find
+          .ancestor(
+            of: find.byKey(ValueKey(tab.id)),
+            matching: find.byType(Stack),
+          )
+          .first;
+      final inPage = find
           .descendant(
-            of: find.byWidgetPredicate(
-              (w) => w is Material && w.shape is CircleBorder,
-            ),
+            of: find.byKey(ValueKey('page-${tab.id}')),
             matching: find.byWidgetPredicate((_) => true),
           )
-          .evaluate(),
-    };
-    final outline = Theme.of(tester.element(pages)).colorScheme.primary
-        .withValues(alpha: .45);
-    var outlines = 0;
-    for (final element in painted.evaluate()) {
-      if (inside.contains(element)) continue;
-      final box = element.renderObject! as RenderBox;
-      final rect = box.localToGlobal(Offset.zero) & box.size;
-      expect(
-        rect.overlaps(selected),
-        isFalse,
-        reason: '$rect ${element.widget} ${element.widget.key}',
+          .evaluate()
+          .toSet();
+      final painted = find.descendant(
+        of: pages,
+        matching: find.byWidgetPredicate(
+          (w) => w is ColoredBox || w is DecoratedBox || w is CustomPaint,
+        ),
       );
-      final widget = element.widget;
-      if (widget is ColoredBox && widget.color == outline) outlines++;
+      final outline = Theme.of(tester.element(pages)).colorScheme.primary
+          .withValues(alpha: .45);
+      var outlines = 0;
+      for (final element in painted.evaluate()) {
+        if (inPage.contains(element)) continue;
+        final box = element.renderObject! as RenderBox;
+        final rect = box.localToGlobal(Offset.zero) & box.size;
+        expect(
+          rect.overlaps(selected),
+          isFalse,
+          reason: '$rect ${element.widget} ${element.widget.key}',
+        );
+        final widget = element.widget;
+        if (widget is ColoredBox && widget.color == outline) outlines++;
+      }
+      expect(outlines, 4);
+      expect(find.byKey(ValueKey('pane-${tab.id}')), findsNothing);
+      for (final other in others) {
+        expect(find.byKey(ValueKey('pane-${other.id}')), findsOneWidget);
+      }
     }
-    expect(outlines, 4);
+
+    expectNothingOver(browser, [room]);
+
+    // A second Browser tab dropped near the bottom edge stacks under it.
+    final second = await f.w.openApp(f.w.apps[0]);
+    f.w.select(split);
+    await tester.pumpAndSettle();
+    await dragTab(
+      chip('Browser', 1),
+      Offset(selected.center.dx, selected.bottom - 30),
+      'drop-bottom',
+    );
+    expect(split.layout.tabs, [room, browser, second]);
+    expect(page(browser).bottom, lessThan(page(second).top));
+    expect(page(browser).left, selected.left);
+    expect(page(second).width, page(browser).width);
+    expect(page(room), beside, reason: 'other panes keep their place');
+    expect(tester.element(browserView.first), same(browserElement));
+    expect(f.w.active, second);
+    expectNothingOver(second, [room, browser]);
+    // One click on the dimmed top pane selects it.
+    await tester.tapAt(page(browser).center);
+    await tester.pump();
+    expect(f.w.active, browser);
+    expectNothingOver(browser, [room, second]);
+
     tester.view.physicalSize = const Size(700, 800);
     await tester.pumpAndSettle();
     expect(find.text('View Room layout'), findsNothing);
-    expect(find.text('View Browser'), findsOneWidget);
     expect(find.byIcon(Icons.vertical_split), findsNothing);
+    expect(
+      tester.widget<WorkspaceTabs>(find.byType(WorkspaceTabs)).selected,
+      browser,
+      reason: 'the strip marks the tab on screen, not the hidden split',
+    );
     tester.view.physicalSize = const Size(1400, 800);
     await tester.pumpAndSettle();
 
+    // Dragging a tab back to the tab strip takes it out of the split.
     final back = await tester.startGesture(
-      tester.getCenter(chip('Browser')),
+      tester.getCenter(chip('Browser', 1)),
       kind: PointerDeviceKind.mouse,
     );
     await back.moveBy(const Offset(0, 120));
@@ -852,21 +997,46 @@ void main() {
     await tester.pump();
     await back.up();
     await tester.pumpAndSettle();
-    expect(f.w.split, isNull);
-    expect(f.w.active, room);
+    expect(split.layout.tabs, [room, browser]);
+    expect(
+      page(browser).height,
+      page(room).height,
+      reason: 'its neighbour grows',
+    );
+
+    // Clicking an app's own tab shows it full screen; the split tab stays.
+    await tester.tap(chip('Room layout'));
+    await tester.pumpAndSettle();
+    expect(f.w.shownSplit, isNull);
+    expect(page(room).width, closeTo(whole.width, 1));
     expect(find.text('View Browser'), findsNothing);
+    await tester.tap(chip('Room layout + Browser'));
+    await tester.pumpAndSettle();
+    expect(f.w.shownSplit, split);
+    expect(f.w.active, browser, reason: 'the pane selected last');
+    expect(page(room).width, beside.width);
+    expect(page(room).left, beside.left);
+
+    // Closing the split tab keeps every app open.
+    await tester.tap(find.byTooltip('Close Room layout + Browser'));
+    await tester.pumpAndSettle();
+    expect(f.w.tabs, [room, browser, second]);
+    expect(f.w.active, browser, reason: 'the selected pane shows alone');
+    expect(page(browser).width, closeTo(whole.width, 1));
     expect(tester.element(roomView), same(roomElement));
-    expect(tester.element(browserView), same(browserElement));
+    expect(tester.element(browserView.first), same(browserElement));
     await tester.pumpWidget(const SizedBox());
   });
-  testWidgets('the split divider resizes, resets and ends the split', (
+  testWidgets('split dividers resize side by side and stacked, and reset', (
     tester,
   ) async {
     final f = Fixture();
     await f.w.start();
     final room = await f.w.openApp(f.w.apps[1]);
     final browser = await f.w.openApp(f.w.apps[0]);
-    f.w.dropInSplit(room, left: true);
+    final second = await f.w.openApp(f.w.apps[0]);
+    f.w.dropInSplit(room, second, SplitSide.left);
+    f.w.dropInSplit(browser, second, SplitSide.top);
     tester.view.physicalSize = const Size(1400, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -874,55 +1044,48 @@ void main() {
     await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
     await tester.pumpAndSettle();
     final roomView = find.text('View Room layout', skipOffstage: false);
-    final browserView = find.text('View Browser', skipOffstage: false);
     final roomElement = tester.element(roomView);
-    final browserElement = tester.element(browserView);
     Rect page(WorkspaceTab tab) =>
         tester.getRect(find.byKey(ValueKey('page-${tab.id}')));
     final width = page(browser).right - page(room).left;
-    // Above the exit button in the middle of the divider.
-    Offset grip() => tester
-        .getRect(find.byKey(const ValueKey('split-divider')))
-        .center
-        .translate(0, -150);
-    Future<void> dragDivider(double dx) async {
+    final height = page(second).bottom - page(browser).top;
+    Offset grip(int index) =>
+        tester.getRect(find.byKey(ValueKey('split-divider-$index'))).center;
+    double saved() => f.stored.last['tabs'][3]['split']['fraction'] as double;
+    Future<void> dragDivider(int index, Offset by) async {
       final drag = await tester.startGesture(
-        grip(),
+        grip(index),
         kind: PointerDeviceKind.mouse,
       );
       // The first pixels of a move only start the drag, as a mouse does.
-      await drag.moveBy(Offset(dx.sign * 2, 0));
-      await drag.moveBy(Offset(dx, 0));
+      await drag.moveBy(Offset(by.dx.sign * 2, by.dy.sign * 2));
+      await drag.moveBy(by);
       await tester.pump();
       await drag.up();
       await tester.pumpAndSettle();
     }
 
-    await dragDivider(150);
+    await dragDivider(0, const Offset(150, 0));
     expect(page(room).width, closeTo(width / 2 + 147, 2));
     expect(page(browser).width, closeTo(width / 2 - 153, 2));
-    expect(f.stored.last['splitWidth'], closeTo(.5 + 150 / width, .01));
+    expect(saved(), closeTo(.5 + 150 / width, .01));
     expect(tester.element(roomView), same(roomElement));
-    expect(tester.element(browserView), same(browserElement));
 
-    await dragDivider(-2000);
+    await dragDivider(0, const Offset(-2000, 0));
     expect(page(room).width, closeTo(max(240, width * .2) - 7, 1));
 
-    final reset = grip();
+    // The divider between the stacked panes moves up and down.
+    await dragDivider(1, const Offset(0, 100));
+    expect(page(browser).height, closeTo(height / 2 + 97, 2));
+    expect(page(second).height, closeTo(height / 2 - 103, 2));
+
+    final reset = grip(0);
     await tester.tapAt(reset, kind: PointerDeviceKind.mouse);
     await tester.pump(const Duration(milliseconds: 50));
     await tester.tapAt(reset, kind: PointerDeviceKind.mouse);
     await tester.pumpAndSettle();
     expect(page(room).width, closeTo(page(browser).width, 1));
-    expect(f.stored.last['splitWidth'], .5);
-
-    await tester.tap(find.byTooltip('Exit split view'));
-    await tester.pumpAndSettle();
-    expect(f.w.split, isNull);
-    expect(f.w.active, room, reason: 'the selected tab stays shown');
-    expect(f.w.tabs, [room, browser]);
-    expect(find.byKey(const ValueKey('split-divider')), findsNothing);
-    expect(tester.element(roomView), same(roomElement));
+    expect(saved(), .5);
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets('a click that moves a few pixels still selects the tab', (
@@ -951,7 +1114,7 @@ void main() {
     await click.up();
     await tester.pumpAndSettle();
     expect(f.w.active, room);
-    expect(f.w.split, isNull);
+    expect(f.w.shownSplit, isNull);
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets(
