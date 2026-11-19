@@ -1064,157 +1064,178 @@ class _RelayShellState extends State<RelayShell> {
     child: Text(label),
   );
 
-  Widget _chat(bool desktop) => Material(
-    color: colors.surface,
-    child: Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.fromLTRB(18, 12, 10, 12),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: colors.outline)),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      w.snapshot?.conversation?.title ?? 'Conversation',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      w.activeBot?['name'] as String? ?? 'Personal workspace',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                tooltip: 'Conversation history',
-                onPressed: w.sending
-                    ? null
-                    : () => showDialog<void>(
-                        context: context,
-                        builder: (_) => ConversationHistory(
-                          workspace: w,
-                          onSelected: _selectedConversation,
-                        ),
-                      ),
-                icon: const Icon(Icons.history_rounded),
-              ),
-              IconButton(
-                tooltip: 'New conversation',
-                onPressed: w.sending ? null : _newConversation,
-                icon: const Icon(Icons.edit_square, size: 17),
-              ),
-              MenuAnchor(
-                animated: !MediaQuery.disableAnimationsOf(context),
-                builder: (context, controller, child) => IconButton(
-                  tooltip: 'Conversation options',
-                  onPressed: () => controller.isOpen
-                      ? controller.close()
-                      : controller.open(),
-                  icon: const Icon(Icons.more_horiz),
-                ),
-                menuChildren: [
-                  _menuItem(
-                    'forward',
-                    'Forward conversation',
-                    Icons.forward_to_inbox_outlined,
-                    enabled:
-                        w.conversationId != null &&
-                        !w.busy &&
-                        w.bots.isNotEmpty,
-                  ),
-                  MenuItemButton(
-                    leadingIcon: const Icon(Icons.unfold_more, size: 17),
-                    onPressed: () => setState(() {
-                      chatOnly = !chatOnly;
-                      chatOpen = true;
-                    }),
-                    child: Text(
-                      chatOnly ? 'Show workspace' : 'Expand conversation',
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        ..._transcript(desktop),
-        Expanded(
-          child: Column(
-            children: [
-              Expanded(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 800),
-                    child: ConversationMessages(
-                      workspace: w,
-                      controller: messagesScroll,
-                      onSelected: _selectedConversation,
-                    ),
-                  ),
-                ),
-              ),
-              if (w.busy || w.status != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 4),
-                  child: Row(
+  Widget _chat(bool desktop) {
+    final transcript = _transcript(desktop);
+    return Material(
+      color: colors.surface,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(18, 12, 10, 12),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: colors.outline)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (w.busy)
-                        const SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(strokeWidth: 1.5),
-                        )
-                      else
-                        Icon(
-                          Icons.check_circle_outline,
-                          size: 14,
-                          color: colors.primary,
+                      Text(
+                        w.snapshot?.conversation?.title ?? 'Conversation',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                         ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          w.status ?? 'Working…',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: colors.onSurfaceVariant,
-                          ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        w.activeBot?['name'] as String? ?? 'Personal workspace',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: colors.onSurfaceVariant,
                         ),
                       ),
                     ],
                   ),
                 ),
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 800),
-                  child: _composer(),
+                IconButton(
+                  tooltip: 'Conversation history',
+                  onPressed: w.sending
+                      ? null
+                      : () => showDialog<void>(
+                          context: context,
+                          builder: (_) => ConversationHistory(
+                            workspace: w,
+                            onSelected: _selectedConversation,
+                          ),
+                        ),
+                  icon: const Icon(Icons.history_rounded),
                 ),
-              ),
-            ],
+                IconButton(
+                  tooltip: 'New conversation',
+                  onPressed: w.sending ? null : _newConversation,
+                  icon: const Icon(Icons.edit_square, size: 17),
+                ),
+                MenuAnchor(
+                  animated: !MediaQuery.disableAnimationsOf(context),
+                  builder: (context, controller, child) => IconButton(
+                    tooltip: 'Conversation options',
+                    onPressed: () => controller.isOpen
+                        ? controller.close()
+                        : controller.open(),
+                    icon: const Icon(Icons.more_horiz),
+                  ),
+                  menuChildren: [
+                    _menuItem(
+                      'forward',
+                      'Forward conversation',
+                      Icons.forward_to_inbox_outlined,
+                      enabled:
+                          w.conversationId != null &&
+                          !w.busy &&
+                          w.bots.isNotEmpty,
+                    ),
+                    MenuItemButton(
+                      leadingIcon: const Icon(Icons.unfold_more, size: 17),
+                      onPressed: () => setState(() {
+                        chatOnly = !chatOnly;
+                        chatOpen = true;
+                      }),
+                      child: Text(
+                        chatOnly ? 'Show workspace' : 'Expand conversation',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+          ...transcript,
+          Expanded(
+            child: Column(
+              children: [
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 800),
+                      child: _fadeTop(
+                        transcript.isNotEmpty,
+                        ConversationMessages(
+                          workspace: w,
+                          controller: messagesScroll,
+                          onSelected: _selectedConversation,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                if (w.busy || w.status != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 8, 18, 4),
+                    child: Row(
+                      children: [
+                        if (w.busy)
+                          const SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(strokeWidth: 1.5),
+                          )
+                        else
+                          Icon(
+                            Icons.check_circle_outline,
+                            size: 14,
+                            color: colors.primary,
+                          ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            w.status ?? 'Working…',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 800),
+                    child: _composer(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Under the transcript card, messages fade out at the top instead of
+  // being cut against the card's edge.
+  Widget _fadeTop(bool fade, Widget child) => !fade
+      ? child
+      : ShaderMask(
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (bounds) => LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: const [Colors.transparent, Colors.black],
+            stops: [0, (18 / bounds.height).clamp(0.0, 1.0)],
+          ).createShader(bounds),
+          child: child,
+        );
 
   // Desktop only: the transcript of a YouTube video in the active Browser tab
   // opens above the conversation, which keeps the lower half.
@@ -1233,33 +1254,39 @@ class _RelayShellState extends State<RelayShell> {
         when kept.pane != pane || (onPage.isNotEmpty && onPage != kept.page)) {
       transcriptSelection = null;
     }
-    return [
-      if (video != null)
-        TranscriptBar(
-          open: transcriptOpen,
-          onToggle: () => setState(() => transcriptOpen = !transcriptOpen),
-        ),
-      if (pane != null)
-        Expanded(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: colors.surfaceContainerHigh,
-              border: Border(
-                bottom: BorderSide(color: colors.onSurfaceVariant),
-              ),
-            ),
-            child: TranscriptPane(
-              key: ValueKey(pane),
-              browser: browser!,
-              onSelected: (text) => setState(
-                () => transcriptSelection = text == null
-                    ? null
-                    : (pane: pane, text: text, page: onPage),
-              ),
-            ),
+    if (video == null) return const [];
+    // The bar and pane form one inset card with a gap below, so the
+    // transcript reads as a separate object from the conversation's text.
+    final card = Container(
+      margin: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.outline),
+      ),
+      child: Column(
+        children: [
+          TranscriptBar(
+            open: transcriptOpen,
+            onToggle: () => setState(() => transcriptOpen = !transcriptOpen),
           ),
-        ),
-    ];
+          if (pane != null)
+            Expanded(
+              child: TranscriptPane(
+                key: ValueKey(pane),
+                browser: browser!,
+                onSelected: (text) => setState(
+                  () => transcriptSelection = text == null
+                      ? null
+                      : (pane: pane, text: text, page: onPage),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+    return [pane == null ? card : Expanded(child: card)];
   }
 
   Widget _composer() => Padding(
