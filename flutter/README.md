@@ -113,6 +113,16 @@ that opens an unsized window loses its opener.
 App views keep sending a new window's address to the default browser. A page
 dialog raised inside a popup window is not shown.
 
+On macOS only, the Browser address bar suggests pages visited before once you
+type in it, best first by how often and how recently each was visited; an
+address opened from the address bar counts more than a followed link, and
+pages the agent opens in a Browser tab count as visits too. Arrow
+keys and Enter, or a click, open a suggestion; Enter with none highlighted
+opens what was typed. The history stays on the device, one entry per address,
+and is never sent to the backend or the agent. Pages not visited for 90 days
+drop out, and the trash button beside **Browsing history** in the Workspace
+menu clears it.
+
 On macOS, select page or PDF text and ask a question with page context enabled.
 With a YouTube video open in a Browser tab, ask about the video: the agent reads
 its full transcript page by page through the page itself (`browser.transcript`,

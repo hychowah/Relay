@@ -49,6 +49,8 @@ The implemented workflows include the following.
   device. When on, a tab the user clicks or opens, or the agent opens, slides
   to the left end of the strip. Restoring, closing and split changes keep the
   order; reduced motion skips the slide.
+- Browser history (macOS only): the address bar suggests visited pages. It
+  stays on the device; the Workspace menu clears it.
 - Development bug recording: actions, server exchanges, errors, tabs and a page
   screenshot are saved on the service as a report and read in the Bug reports
   viewer, where each report is marked open or solved, or deleted (see the root
@@ -246,5 +248,9 @@ real WKWebViews.
    running `npm run perf:mem`. If it is an app page, the fix belongs in that
    app's repository. If it is an outside site, whether Relay unloads hidden tabs
    under memory pressure is a product decision for the user.
+18. Try Browser history on the Mac: a redirect (`example.com`), a YouTube
+   video changed in place and a reload each leave one titled entry; the list
+   stays shut when a page changes the address, and its rows take clicks over
+   the page. Only tests with a faked page cover it.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

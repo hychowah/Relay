@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
@@ -8,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import 'browser_connection.dart';
+import 'browser_history.dart';
 import 'browser_transcript.dart';
 import 'relay_api.dart';
 import 'web_page.dart';
@@ -34,6 +36,12 @@ Future<void> main() async {
   // Open tabs. The key keeps its first name, from when only an update restart
   // saved them, so tabs survive updating from or returning to an older build.
   final session = prefs.getString('updateSession');
+  final history = Platform.isMacOS
+      ? BrowserHistory.decode(
+          prefs.getString('browserHistory'),
+          save: (data) => prefs.setString('browserHistory', data),
+        )
+      : null;
   final workspace = Workspace(
     api: RelayApi(
       Uri.parse(
@@ -44,7 +52,7 @@ Future<void> main() async {
       ),
     ),
     deviceId: device,
-    pages: createWebPage,
+    pages: (spec, changed) => createWebPage(spec, changed, history: history),
     conversationId: prefs.getString('conversation'),
     pendingSession: session == null ? null : jsonDecode(session) as Json,
     storeSession: (session) async {
@@ -108,6 +116,7 @@ Future<void> main() async {
         await prefs.setString('themeMode', mode.name);
       },
       onClose: connection.close,
+      browserHistory: history,
     ),
   );
   unawaited(workspace.start());
@@ -127,6 +136,7 @@ class RelayApp extends StatefulWidget {
     this.saveThemeMode,
     this.onClose,
     this.updates,
+    this.browserHistory,
   });
   final Workspace workspace;
   final String initialDraft;
@@ -139,6 +149,9 @@ class RelayApp extends StatefulWidget {
   final Future<void> Function(ThemeMode)? saveThemeMode;
   final VoidCallback? onClose;
   final AppUpdates? updates;
+
+  /// Desktop only: address-bar suggestions; null leaves them off.
+  final BrowserHistory? browserHistory;
   @override
   State<RelayApp> createState() => _RelayAppState();
 }
@@ -181,6 +194,7 @@ class _RelayAppState extends State<RelayApp> {
       },
       onClose: widget.onClose,
       updates: widget.updates,
+      browserHistory: widget.browserHistory,
     ),
   );
 }
@@ -199,6 +213,7 @@ class RelayShell extends StatefulWidget {
     required this.onThemeMode,
     this.onClose,
     this.updates,
+    this.browserHistory,
   });
   final Workspace workspace;
   final String initialDraft;
@@ -211,6 +226,7 @@ class RelayShell extends StatefulWidget {
   final ValueChanged<ThemeMode> onThemeMode;
   final VoidCallback? onClose;
   final AppUpdates? updates;
+  final BrowserHistory? browserHistory;
   @override
   State<RelayShell> createState() => _RelayShellState();
 }
@@ -220,6 +236,8 @@ class _RelayShellState extends State<RelayShell> {
   Workspace get w => widget.workspace;
   late final TextEditingController draft;
   final address = TextEditingController();
+  final addressFocus = FocusNode();
+  bool pickedSuggestion = false;
   final messagesScroll = ScrollController();
   Timer? saveTimer;
   ({String appId, Uint8List bytes})? capture;
@@ -275,6 +293,7 @@ class _RelayShellState extends State<RelayShell> {
     unawaited(widget.saveDraft(draft.text));
     draft.dispose();
     address.dispose();
+    addressFocus.dispose();
     messagesScroll.dispose();
     selecting?.image.dispose();
     flight
@@ -593,23 +612,10 @@ class _RelayShellState extends State<RelayShell> {
                                 onPressed: () => w.browserAction('reload'),
                                 icon: const Icon(Icons.refresh),
                               ),
-                              Expanded(
-                                child: TextField(
-                                  controller: address,
-                                  decoration: const InputDecoration(
-                                    hintText: 'Search or enter a web address',
-                                    isDense: true,
-                                    contentPadding: EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 10,
-                                    ),
-                                  ),
-                                  onSubmitted: w.navigate,
-                                ),
-                              ),
+                              Expanded(child: _addressField()),
                               IconButton(
                                 tooltip: 'Go',
-                                onPressed: () => w.navigate(address.text),
+                                onPressed: () => _go(address.text),
                                 icon: const Icon(Icons.arrow_forward),
                               ),
                             ],
@@ -632,6 +638,104 @@ class _RelayShellState extends State<RelayShell> {
       ),
     );
   }
+
+  /// Opens [text] from the address bar; the page it lands on counts as typed.
+  Future<void> _go(String text) async {
+    final page = w.active?.page;
+    await w.navigate(text);
+    if (mounted && w.error == null && page != null) {
+      widget.browserHistory?.typed(page.url);
+    }
+  }
+
+  // Suggestions appear only once the user changes the address the app wrote.
+  // Their first option stands for the typed text and is not listed, so Enter
+  // opens what was typed until the arrow keys move to a page.
+  Widget _addressField() => RawAutocomplete<_Suggestion>(
+    textEditingController: address,
+    focusNode: addressFocus,
+    optionsBuilder: (value) {
+      final pages = value.text == lastPageUrl
+          ? const <HistoryEntry>[]
+          : widget.browserHistory?.suggest(value.text) ?? const [];
+      return [
+        if (pages.isNotEmpty) (text: value.text, page: null),
+        for (final page in pages) (text: page.url, page: page),
+      ];
+    },
+    displayStringForOption: (option) => option.text,
+    onSelected: (option) {
+      pickedSuggestion = true;
+      addressFocus.unfocus();
+      _go(option.text);
+    },
+    fieldViewBuilder: (context, controller, focus, submit) => Builder(
+      builder: (context) => TextField(
+        controller: controller,
+        focusNode: focus,
+        decoration: const InputDecoration(
+          hintText: 'Search or enter a web address',
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        ),
+        // Each change of the text returns the highlight to the typed text.
+        onChanged: (_) =>
+            Actions.maybeInvoke(context, const AutocompleteFirstOptionIntent()),
+        onSubmitted: (text) {
+          pickedSuggestion = false;
+          submit();
+          if (!pickedSuggestion) _go(text);
+        },
+      ),
+    ),
+    optionsViewBuilder: (context, select, options) {
+      final highlighted = AutocompleteHighlightedOption.of(context) - 1;
+      return Align(
+        alignment: Alignment.topLeft,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Material(
+            color: colors.surface,
+            elevation: 8,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: colors.outline),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.all(6),
+              children: [
+                for (final (index, option) in options.skip(1).indexed)
+                  ListTile(
+                    dense: true,
+                    selected: index == highlighted,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    title: Text(
+                      option.page!.title.isEmpty
+                          ? option.text
+                          : option.page!.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: option.page!.title.isEmpty
+                        ? null
+                        : Text(
+                            option.text,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                    onTap: () => select(option),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
 
   /// Every tab's page stays in one keyed slot of this stack, so showing it
   /// alone, in a split pane or hidden only changes its position and never
@@ -1117,6 +1221,28 @@ class _RelayShellState extends State<RelayShell> {
               onChanged: (value) => w.setNewestTabFirst(value!),
               child: const Text('Newest tab first'),
             ),
+            if (widget.browserHistory case final history?)
+              Padding(
+                padding: const EdgeInsets.only(left: 12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.history_rounded, size: 17),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Browsing history',
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    const Spacer(),
+                    ConfirmDeleteButton(
+                      tooltip: 'Clear browsing history',
+                      label: 'Clear',
+                      onConfirmed: history.isEmpty
+                          ? null
+                          : () => setState(history.clear),
+                    ),
+                  ],
+                ),
+              ),
             if (widget.updates != null)
               _menuItem(
                 'updates',
@@ -1764,3 +1890,6 @@ class _NewTabPageState extends State<NewTabPage> {
     );
   }
 }
+
+/// An address-bar suggestion; the one without a page is the typed text.
+typedef _Suggestion = ({String text, HistoryEntry? page});

@@ -9,6 +9,7 @@ import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'browser_comment.dart';
+import 'browser_history.dart';
 import 'browser_transcript.dart';
 import 'page_surface.dart';
 import 'relay_api.dart';
@@ -114,9 +115,14 @@ Future<Object?> browserChannelCall(MethodCall call) async {
   throw MissingPluginException(call.method);
 }
 
-PageSurface createWebPage(PageSpec spec, void Function(bool) changed) {
+/// Browser tabs record the pages they show in [history] when it is given.
+PageSurface createWebPage(
+  PageSpec spec,
+  void Function(bool) changed, {
+  BrowserHistory? history,
+}) {
   if (spec.report != null) return _ReportPage(spec, changed);
-  if (spec.browser) return _BrowserPage(spec, changed);
+  if (spec.browser) return _BrowserPage(spec, changed, history);
   return _AppPage(spec, changed);
 }
 
@@ -245,7 +251,7 @@ abstract class _WebPage extends PageSurface {
 class _BrowserPage extends _WebPage with BrowserSurface {
   // On macOS WebKit lets scripts open windows without a user action unless
   // told otherwise; Relay keeps WebKit's popup blocker on.
-  _BrowserPage(PageSpec spec, void Function(bool) changed)
+  _BrowserPage(PageSpec spec, void Function(bool) changed, this._history)
     : super(
         spec,
         changed,
@@ -261,6 +267,11 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   }
   Completer<void>? _navigation;
   String _title = '', _url = 'about:blank';
+  final BrowserHistory? _history;
+  // The address this tab last counted as a visit. While a load is under way
+  // its address may still pass through redirects; only the finished page counts.
+  String? _visited;
+  bool _loading = false;
   int _generation = 0;
   String? _comment, _presentationId;
   int _transcriptRequests = 0;
@@ -314,6 +325,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
         onPageStarted: (url) {
           _nativeSelection = null;
           _url = url;
+          _loading = true;
           if (_presentationId == null) {
             _comment = null;
             _generation++;
@@ -325,6 +337,8 @@ class _BrowserPage extends _WebPage with BrowserSurface {
           try {
             await controller.runJavaScript(_observePage);
             await read();
+            _loading = false;
+            _visit(_title);
             canGoBack = await controller.canGoBack();
             canGoForward = await controller.canGoForward();
             if (!_ready.isCompleted) _ready.complete();
@@ -341,7 +355,15 @@ class _BrowserPage extends _WebPage with BrowserSurface {
         onUrlChange: (change) async {
           final url = change.url;
           if (_disposed || url == null || url.isEmpty) return;
+          // A page can only change its own address within its origin, so
+          // another origin here is a redirect of a load still under way.
+          final before = Uri.tryParse(_url), after = Uri.tryParse(url);
+          final inPage =
+              !_loading &&
+              before?.scheme == after?.scheme &&
+              before?.authority == after?.authority;
           _url = url;
+          if (inPage) _visit();
           (_context?['state'] as Map?)?['url'] = url;
           canGoBack = await controller.canGoBack();
           canGoForward = await controller.canGoForward();
@@ -368,6 +390,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
         if (message.message.startsWith('title:')) {
           _title = message.message.substring('title:'.length);
           (_context?['state'] as Map?)?['title'] = _title;
+          _history?.retitle(_url, _title);
           changed(false);
           return;
         }
@@ -406,6 +429,18 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   void _fail(Object error) {
     super._fail(error);
     if (_navigation?.isCompleted == false) _navigation!.completeError(error);
+  }
+
+  // A reload or #fragment change of the page shown is not another visit.
+  void _visit([String? title]) {
+    final address = historyAddress(_url);
+    if (_history == null || address == null) return;
+    if (address == _visited) {
+      if (title != null) _history.retitle(address, title);
+    } else {
+      _visited = address;
+      _history.visit(address, title);
+    }
   }
 
   int get _webViewId =>

@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:relay_flutter/browser_history.dart';
 import 'package:relay_flutter/main.dart';
 import 'package:relay_flutter/page_surface.dart';
 import 'package:relay_flutter/relay_api.dart';
@@ -47,6 +48,7 @@ class FakePage extends PageSurface with BrowserSurface {
   Completer<Json>? pending;
   Completer<void>? loading;
   Uint8List? frame;
+  final navigated = <String>[];
   @override
   Widget get widget => SizedBox.expand(
     key: ValueKey('page-${spec.id}'),
@@ -93,6 +95,7 @@ class FakePage extends PageSurface with BrowserSurface {
 
   @override
   Future<void> navigate(String text) async {
+    navigated.add(text);
     changed(true);
   }
 
@@ -1385,6 +1388,105 @@ void main() {
     expect(saved, [ThemeMode.light]);
     expect(shown(), Brightness.light);
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('address bar suggests visited pages once the user types', (
+    tester,
+  ) async {
+    final f = Fixture();
+    await f.w.start();
+    await f.w.openApp(f.w.apps[0]);
+    final page = f.pages.single;
+    final history = BrowserHistory()
+      ..visit('https://example.com/desk', 'Desk')
+      ..visit('https://news.example/', 'News');
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      RelayApp(
+        workspace: f.w,
+        saveDraft: (_) async {},
+        browserHistory: history,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final address = find.byWidgetPredicate(
+      (w) =>
+          w is TextField &&
+          w.decoration?.hintText == 'Search or enter a web address',
+    );
+    Future<void> submit() async {
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+    }
+
+    // The address the app wrote opens nothing, even with the field focused.
+    await tester.tap(address);
+    await tester.pump();
+    expect(find.text('Desk'), findsNothing);
+
+    await tester.enterText(address, 'exa');
+    await tester.pump();
+    expect(find.text('Desk'), findsOneWidget);
+    expect(find.text('News'), findsOneWidget);
+    await submit();
+    expect(page.navigated, ['exa'], reason: 'nothing was highlighted');
+    expect(find.text('Desk'), findsNothing);
+    expect(history.suggest('desk').single.typed, 1);
+
+    await tester.enterText(address, 'exa');
+    await tester.pump();
+    // Below the example.com site row and its desk page.
+    for (var i = 0; i < 3; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    }
+    await submit();
+    expect(page.navigated.last, 'https://news.example/');
+
+    // Typing again returns the highlight to the typed text.
+    await tester.enterText(address, 'exa');
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.enterText(address, 'exam');
+    await tester.pump();
+    await submit();
+    expect(page.navigated.last, 'exam');
+
+    await tester.enterText(address, 'news');
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(find.text('News'), findsNothing);
+    await submit();
+    expect(page.navigated.last, 'news');
+
+    await tester.enterText(address, 'new');
+    await tester.pump();
+    await tester.tap(find.text('News'));
+    await tester.pumpAndSettle();
+    expect(page.navigated.last, 'https://news.example/');
+
+    // A new page address replaces typed text without opening suggestions.
+    await tester.enterText(address, 'new');
+    await tester.pump();
+    expect(find.text('News'), findsOneWidget);
+    page.url = 'https://example.com/';
+    f.w.changed();
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(address).controller!.text, page.url);
+    expect(find.text('Desk'), findsNothing);
+    expect(find.text('News'), findsNothing);
+
+    await tester.tap(find.byTooltip('Workspace menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Clear browsing history'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Clear'));
+    await tester.pumpAndSettle();
+    expect(history.isEmpty, isTrue);
     await tester.pumpWidget(const SizedBox());
   });
 
