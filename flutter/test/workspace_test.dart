@@ -1358,7 +1358,8 @@ void main() {
       final pane = tester.getRect(find.byType(TranscriptPane));
       final tint = Theme.of(tester.element(find.byType(TranscriptPane)))
           .colorScheme
-          .primaryContainer;
+          .primary
+          .withValues(alpha: .14);
       bool shown(int i) => pane.contains(tester.getTopLeft(part(i)));
       final scroll = tester
           .state<ScrollableState>(

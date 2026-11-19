@@ -227,7 +227,9 @@ backend did not change. It has not been installed or reviewed on the Mac.
    or content. Only widget tests with fake pages cover it.
 12. Check night mode on the Mac in Dark and Light, with macOS both light and
    dark: tabs, chat, Markdown replies, dialogs, menus and the empty Browser
-   page. Also check that System follows a live macOS switch. Only widget tests
+   page. Also check that System follows a live macOS switch, and that the
+   transcript pane stands apart from the conversation with its playing
+   paragraph visible. Only widget tests
    and WSL screenshots cover it.
 13. Check on the Mac that Analysis Web's **Start analysis** shows its confirm
    dialog, titled with the page's host, and that OK starts the analysis and
