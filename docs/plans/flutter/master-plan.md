@@ -153,9 +153,9 @@ folder. A test with a stand-in Mac covers test builds, Stable's recorded commit,
 the refusals and retiring contained test builds. A real Stable build through it,
 into a throwaway release folder, recorded its commit and left nothing on the Mac.
 
-Updates download only changed files: `small-updates` needs 7.3 MB from Stable
-0.0.14, not its 20.4 MB ZIP. A bundle rebuilt from its list passed the strict
-signature check on the Mac; the app's own assembly there is unverified.
+Updates download only changed files, about 7.3 MB instead of the 20.4 MB ZIP.
+On 2026-11-19 the Mac updated one `small-updates` build to the next through its
+file list: it passed the signature check, restarted and left no downloads.
 
 Stable 0.0.9 (build 9), published with that tool, added everyday restoration,
 the updater's leftover removal, inline region capture, saved screenshots, bug
@@ -253,7 +253,5 @@ real WKWebViews.
    running `npm run perf:mem`. If it is an app page, the fix belongs in that
    app's repository. If it is an outside site, whether Relay unloads hidden tabs
    under memory pressure is a product decision for the user.
-18. Install `small-updates` (older updaters fetch the ZIP), republish it, and
-   check that Updates downloads about 7 MB, installs and restarts.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.
