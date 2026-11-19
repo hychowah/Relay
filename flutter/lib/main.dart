@@ -646,6 +646,8 @@ class _RelayShellState extends State<RelayShell> {
       );
     }
 
+    final outline = ColoredBox(color: colors.primary.withValues(alpha: .45));
+
     Widget dropZone(bool left) => Positioned.fill(
       left: left ? 0 : width / 2,
       right: left ? width / 2 : 0,
@@ -722,21 +724,48 @@ class _RelayShellState extends State<RelayShell> {
               key: ValueKey('loading-${tab.id}'),
               const Center(child: CircularProgressIndicator()),
             ),
-          // Native views take clicks before Flutter sees them, so the painted
-          // tint on the other pane is what lets a click there select it.
+          // On macOS a native page loses the mouse wherever Flutter paints
+          // over it, judged by each drawing's bounding box. The tint on the
+          // other pane relies on this so a click there selects it. The
+          // selected pane's outline is four edge strips, because one border
+          // drawing would take every click and scroll from its page.
           if (pair != null)
             pane(
               tab,
               key: ValueKey('pane-${tab.id}'),
               w.active == tab
                   ? IgnorePointer(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: colors.primary.withValues(alpha: .45),
-                            width: 2,
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            top: 0,
+                            height: 2,
+                            child: outline,
                           ),
-                        ),
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            height: 2,
+                            child: outline,
+                          ),
+                          Positioned(
+                            left: 0,
+                            top: 2,
+                            bottom: 2,
+                            width: 2,
+                            child: outline,
+                          ),
+                          Positioned(
+                            right: 0,
+                            top: 2,
+                            bottom: 2,
+                            width: 2,
+                            child: outline,
+                          ),
+                        ],
                       ),
                     )
                   : GestureDetector(

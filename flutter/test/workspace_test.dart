@@ -736,6 +736,20 @@ void main() {
     await tester.tapAt(right.center);
     await tester.pump();
     expect(f.w.active, browser);
+    // On macOS a page gets no input wherever Flutter paints over it, judged
+    // by bounding boxes, so the selected pane's outline leaves its middle clear.
+    final painted = find.descendant(
+      of: find.byKey(ValueKey('pane-${browser.id}')),
+      matching: find.byWidgetPredicate(
+        (w) => w is ColoredBox || w is DecoratedBox || w is CustomPaint,
+      ),
+    );
+    expect(painted, findsWidgets);
+    for (final element in painted.evaluate()) {
+      final box = element.renderObject! as RenderBox;
+      final rect = box.localToGlobal(Offset.zero) & box.size;
+      expect(rect.contains(right.center), isFalse);
+    }
 
     tester.view.physicalSize = const Size(700, 800);
     await tester.pumpAndSettle();
