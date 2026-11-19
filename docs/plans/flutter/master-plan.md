@@ -126,16 +126,16 @@ reduced motion.
 Everyday restoration passed analysis and 32 Flutter tests on WSL. They cover
 saving tabs as they change, an offline start, a failed tab retried by Reconnect,
 an unused Browser tab and the chat panel state. The Mac release build compiles
-with the window frame change. No build with these changes has been run on the
-Mac, so restoring real tabs and the window frame there are unverified. On the
-Mac, the installed app's cookie file and WebKit website data exist on disk; a
-website sign-in surviving a restart was not checked.
+with the window frame change. The user installed the `restore-state` preview of
+this source on the Mac and confirmed that it works. The separate cases were not
+reported one by one: a tab whose app is stopped and a website sign-in surviving
+a restart remain unconfirmed. The installed app's cookie file and WebKit website
+data exist on disk.
 
 ## Next
 
-1. Publish a preview of everyday restoration and review it on the Mac: quit and
-   reopen with app, Browser and saved-report tabs open, a moved and resized
-   window and chat closed. Check a tab whose app is stopped and a website sign-in.
+1. Everyday restoration is on `main` and in the `restore-state` preview only.
+   Publish it as Stable when requested.
 2. Review Stable 0.0.8 on the Mac: the panel, tab and menu transitions, text selection and region capture. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
 3. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 
