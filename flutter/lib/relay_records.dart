@@ -32,14 +32,15 @@ class Conversation {
 
 class ChatMessage {
   ChatMessage.fromJson(Json json)
-    : role = json['role'],
+    : id = json['id'],
+      role = json['role'],
       text = json['text'] ?? '',
       createdAt = json['createdAt'],
       hasCapture = json['hasCapture'] == true,
       context = json['context'];
   final String role, text;
   final bool hasCapture;
-  final String? createdAt;
+  final String? id, createdAt;
   final Json? context;
 }
 

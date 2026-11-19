@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
 
-import 'package:flutter/widgets.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -10,6 +11,7 @@ import 'package:relay_flutter/main.dart';
 import 'package:relay_flutter/page_surface.dart';
 import 'package:relay_flutter/relay_api.dart';
 import 'package:relay_flutter/workspace.dart';
+import 'package:relay_flutter/region_capture.dart';
 
 const apps = [
   {'id': 'browser', 'name': 'Browser', 'description': 'Web pages'},
@@ -31,6 +33,7 @@ class FakePage extends PageSurface with BrowserSurface {
   Json? lastCommand, result;
   Completer<Json>? pending;
   Completer<void>? loading;
+  Uint8List? frame;
   @override
   Widget get widget => SizedBox.expand(
     key: ValueKey('page-${spec.id}'),
@@ -51,6 +54,10 @@ class FakePage extends PageSurface with BrowserSurface {
   };
   @override
   Future<void> get ready => loading?.future ?? Future.value();
+  @override
+  bool get canCapture => frame != null;
+  @override
+  Future<Uint8List> snapshot() async => frame!;
   @override
   Future<Json> read() async => {'text': 'Desk: 150 by 80 cm', 'url': url};
   @override
@@ -75,7 +82,7 @@ class FakePage extends PageSurface with BrowserSurface {
 }
 
 class Fixture {
-  Fixture({Json? session, Future<void> Function()? sessionRestored}) {
+  Fixture({Json? session}) {
     w = Workspace(
       api: RelayApi(
         Uri.parse('http://localhost:3250'),
@@ -121,7 +128,7 @@ class Fixture {
       ),
       deviceId: 'device',
       pendingSession: session,
-      sessionRestored: sessionRestored,
+      storeSession: (session) async => stored.add(session),
       pages: (spec, changed) {
         final page = FakePage(spec, changed);
         if (failRoomRestore && spec.appId == 'room-layout') {
@@ -137,6 +144,7 @@ class Fixture {
   late Workspace w;
   final pages = <FakePage>[];
   final acks = <Json>[];
+  final stored = <Json>[];
   List<Json> commands = [], messages = [], runs = [];
   Completer<void>? holdSnapshot;
   Json? sent, bugReport;
@@ -160,13 +168,22 @@ class Fixture {
 
 void main() {
   test(
-    'reconnect retains update sessions through offline and partial restoration',
+    'saved tabs survive an offline start and reconnect retries a failed tab',
     () async {
-      var cleared = 0;
+      List<Object?> storedApps(Fixture f) => [
+        for (final tab in f.stored.last['tabs'] as List) tab['appId'],
+      ];
       final saved = <String, dynamic>{
         'active': 1,
         'tabs': [
-          {'appId': 'browser', 'url': 'https://example.com/desk'},
+          {
+            'appId': 'browser',
+            'url': 'about:blank',
+            'context': {
+              'viewId': 'browser',
+              'state': {'url': 'about:blank'},
+            },
+          },
           {
             'appId': 'room-layout',
             'context': {
@@ -176,30 +193,32 @@ void main() {
           },
         ],
       };
-      final f = Fixture(
-        session: saved,
-        sessionRestored: () async {
-          cleared++;
-        },
-      );
+      final f = Fixture(session: saved);
       addTearDown(f.w.dispose);
       f.offline = true;
       await f.w.start();
-      expect(cleared, 0);
+      f.w.newTab();
+      f.w.closeTab(f.w.active!);
+      expect(f.stored, isEmpty);
       expect(f.w.pendingSession, saved);
-      expect(f.w.tabs, isEmpty);
       f.offline = false;
       f.failRoomRestore = true;
       await f.w.start();
-      expect(cleared, 0);
+      expect(f.w.pendingSession, saved);
       expect(f.w.tabs.map((tab) => tab.appId), ['browser']);
+      expect(storedApps(f), ['browser']);
       final browser = f.w.tabs.single;
+      expect(
+        (browser.page as FakePage).lastCommand,
+        isNull,
+        reason: 'an unused Browser tab reopens on its start page',
+      );
       f.w.newTab();
       final userTab = f.w.active;
       f.failRoomRestore = false;
       await f.w.start();
-      expect(cleared, 1);
       expect(f.w.pendingSession, isNull);
+      expect(storedApps(f), ['browser', null, 'room-layout']);
       expect(
         f.w.tabs.where((tab) => tab.appId == 'browser').single,
         same(browser),
@@ -207,7 +226,6 @@ void main() {
       expect(f.w.active, same(userTab));
       expect(f.w.tabs.where((tab) => tab.appId == 'room-layout').length, 1);
       await f.w.start();
-      expect(cleared, 1);
       expect(f.w.tabs.length, 3);
     },
   );
@@ -257,6 +275,27 @@ void main() {
       expect(f.w.recorder.events.length, events.length);
     },
   );
+  test('tabs are saved as they change and reopen on the next start', () async {
+    final first = Fixture();
+    addTearDown(first.w.dispose);
+    await first.w.start();
+    final room = await first.w.openApp(first.w.apps[1]);
+    first.w.newTab();
+    await first.w.openApp(first.w.apps[0]);
+    first.w.select(room);
+    expect(first.stored.last['tabs'][0]['context'], {
+      'viewId': 'room',
+      'state': {'zone': 'work'},
+    });
+    final next = Fixture(
+      session: jsonDecode(jsonEncode(first.stored.last)) as Json,
+    );
+    addTearDown(next.w.dispose);
+    await next.w.start();
+    expect(next.w.tabs.map((tab) => tab.appId), ['room-layout', 'browser']);
+    expect(next.w.active!.appId, 'room-layout');
+    expect(next.w.pendingSession, isNull);
+  });
   test('empty tabs fill in place, existing apps retain their page, closing releases it', () async {
     final f = Fixture();
     addTearDown(f.w.dispose);
@@ -420,7 +459,7 @@ void main() {
     expect(f.acks.last['status'], 'stale');
     expect(f.w.active!.appId, isNull);
   });
-  test('bot scope excludes disallowed page context and update sessions restore tabs', () async {
+  test('bot scope excludes disallowed page context and saved sessions restore tabs', () async {
     final f = Fixture();
     addTearDown(f.w.dispose);
     await f.w.start();
@@ -613,6 +652,31 @@ void main() {
     },
   );
 
+  testWidgets('chat reopens closed when it was left closed', (tester) async {
+    final f = Fixture();
+    final saved = <bool>[];
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      RelayApp(
+        workspace: f.w,
+        initialChatOpen: false,
+        saveChatOpen: (open) async => saved.add(open),
+        saveDraft: (_) async {},
+      ),
+    );
+    await tester.pumpAndSettle();
+    final panel = find.byKey(const ValueKey('conversation-panel'));
+    expect(panel, findsNothing);
+    await tester.tap(find.byTooltip('Toggle chat'));
+    await tester.pumpAndSettle();
+    expect(panel, findsOneWidget);
+    expect(saved, [true]);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
     'deleting a tab during insertion keeps the next tab interactive',
     (tester) async {
@@ -675,6 +739,92 @@ void main() {
     await tester.tap(find.text('Room layout').last);
     await tester.pumpAndSettle();
     expect(f.w.tabs.length, 1);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('screenshot selection opens inside the active tab beside chat', (
+    tester,
+  ) async {
+    final f = Fixture();
+    await f.w.start();
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await f.w.openApp(f.w.apps[1]);
+    f.pages.last.frame = await tester.runAsync(() async {
+      final recorder = ui.PictureRecorder();
+      Canvas(recorder).drawColor(Colors.blue, BlendMode.src);
+      final image = await recorder.endRecording().toImage(80, 60);
+      final png = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      return png!.buffer.asUint8List();
+    });
+    await tester.pumpWidget(
+      RelayApp(workspace: f.w, initialDraft: '', saveDraft: (_) async {}),
+    );
+    await tester.pumpAndSettle();
+    final page = tester.getRect(find.text('View Room layout'));
+    final panel = tester.getRect(
+      find.byKey(const ValueKey('conversation-panel')),
+    );
+
+    Future<void> settle(Finder until) async {
+      for (var i = 0; i < 30 && until.evaluate().isEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+      }
+    }
+
+    await tester.tap(find.byTooltip('Capture an area'));
+    await settle(find.text('Drag over the area to attach'));
+    expect(find.byType(Dialog), findsNothing);
+    expect(tester.getRect(find.byType(RegionCapture)), page);
+    expect(
+      tester.getRect(find.byKey(const ValueKey('conversation-panel'))),
+      panel,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(find.byType(RegionCapture), findsNothing);
+
+    await tester.tap(find.byTooltip('Capture an area'));
+    await settle(find.byType(RegionCapture));
+    await tester.dragFrom(
+      page.topLeft + const Offset(20, 20),
+      const Offset(200, 120),
+    );
+    await settle(find.byTooltip('Remove screenshot'));
+    expect(find.byType(RegionCapture), findsNothing);
+    expect(find.text('Screenshot · room-layout'), findsOneWidget);
+    f.w.provider = {'supportsImageInput': true};
+    await tester.enterText(find.byType(EditableText).first, 'What is this?');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect((f.sent!['capture'] as Json)['appId'], 'room-layout');
+
+    // The reopened conversation loads the screenshot the server kept.
+    f.messages = [
+      {
+        'id': 'sent',
+        'role': 'user',
+        'text': 'What is this?',
+        'hasCapture': true,
+      },
+    ];
+    await f.w.refresh();
+    await tester.pump();
+    final shown = tester.widget<Image>(
+      find.byWidgetPredicate((w) => w is Image && w.image is NetworkImage),
+    );
+    expect(
+      (shown.image as NetworkImage).url,
+      'http://localhost:3250/api/conversations/conversation/messages/sent/capture',
+    );
+    await settle(find.text('Screenshot attached'));
+    expect(find.text('Screenshot attached'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 }

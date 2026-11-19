@@ -624,6 +624,12 @@ export function createWorkspace(
     return c.json(snapshot);
   });
 
+  app.get("/api/conversations/:id/messages/:messageId/capture", (c) => {
+    const png = store.capture(c.req.param("id"), c.req.param("messageId"));
+    if (!png) throw new HTTPException(404, { message: "Screenshot not found." });
+    return c.body(png, 200, { "Content-Type": "image/png" });
+  });
+
   app.delete("/api/conversations/:id", (c) => {
     const id = c.req.param("id");
     if (store.activeRun(id))
@@ -709,7 +715,8 @@ export function createWorkspace(
       });
     if (!store.snapshot(id)!.messages.length)
       store.renameConversation(id, text.slice(0, 80));
-    const run = store.startRun(id, text, deviceId, tabId, context, appContext, !!image);
+    const run = store.startRun(id, text, deviceId, tabId, context, appContext,
+      image ? Buffer.from(image, "base64") : undefined);
     controllers.set(run.id, new AbortController());
     const task = execute(run.id, sessionId, text, context, appContext, image);
     tasks.add(task);

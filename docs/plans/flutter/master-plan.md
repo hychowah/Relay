@@ -28,8 +28,10 @@ The implemented workflows include the following.
 - Markdown, citations, saved revisions/highlights, activity, checkpoints and app search.
 - Browser back/forward/reload, context inclusion, desktop width persistence,
   phone progress/Stop controls and chat-only mode.
-- Background update downloads with progress, verified caches, manual install/restart,
-  and draft/tab restoration. Flutter has its own release channel.
+- Background update downloads with progress, verified caches and manual
+  install/restart. Flutter has its own release channel.
+- Every start restores the previous tabs and views, the draft, the chat panel
+  state and the Mac window frame. Tabs are saved as they change.
 - Development bug recording: actions, server exchanges, errors, tabs and a page
   screenshot are saved on the service as a report and read in the Bug reports
   viewer (see the root README).
@@ -124,12 +126,23 @@ was occluded, so this did not measure perceived smoothness. Chromium verified
 Room comment placement and dismissal at desktop and compact sizes, including
 reduced motion.
 
+Everyday restoration passed analysis and 32 Flutter tests on WSL. They cover
+saving tabs as they change, an offline start, a failed tab retried by Reconnect,
+an unused Browser tab and the chat panel state. The Mac release build compiles
+with the window frame change. The user installed the `restore-state` preview of
+this source on the Mac and confirmed that it works. The separate cases were not
+reported one by one: a tab whose app is stopped and a website sign-in surviving
+a restart remain unconfirmed. The installed app's cookie file and WebKit website
+data exist on disk.
+
 ## Next
 
-1. Review Stable 0.0.8 on the Mac: the panel, tab and menu transitions, text selection and region capture. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
-2. Try **Record a bug** and **Bug reports** on the Mac after the next deploy. Source tests
-   cover recording, saving and viewing; native screenshots and the live service's report
-   folder are unverified.
-3. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
+1. Everyday restoration is on `main` and in the `restore-state` preview only.
+   Publish it as Stable when requested.
+2. Review Stable 0.0.8 on the Mac: the panel, tab and menu transitions and text selection. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
+3. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are unreleased in the Mac app. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified.
+4. Try **Record a bug** and **Bug reports** on the Mac. Source tests cover recording,
+   saving and viewing; native screenshots and the live service's report folder are unverified.
+5. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

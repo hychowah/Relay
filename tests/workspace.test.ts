@@ -103,7 +103,11 @@ test("a screenshot is admitted only with image input and recorded with its quest
       });
       assert.equal(response.status, mode === "fixture" ? 400 : 202);
       if (mode === "anthropic") {
-        assert.equal(store.snapshot(id)!.messages[0].hasCapture, true);
+        const message = store.snapshot(id)!.messages[0];
+        assert.equal(message.hasCapture, true);
+        const saved = await workspace.app.request(`/api/conversations/${id}/messages/${message.id}/capture`);
+        assert.equal(saved.headers.get("Content-Type"), "image/png");
+        assert.deepEqual(Buffer.from(await saved.arrayBuffer()), Buffer.from("iVBORw0KGgo=", "base64"));
         complete();
       } else {
         assert.equal(store.snapshot(id)!.messages.length, 0);

@@ -78,12 +78,19 @@ against the Flutter deployment's records without making a model request for thos
 Chat supports history/Trash, provider/model selection, conversation thinking effort,
 bots with app scopes, memory editing, forwarding, Markdown, saved sources and activity.
 Desktop chat width is saved; phones use an overlay with a compact progress/Stop bar.
-Browser and app tabs retain their views until closed. Update restart restores tabs
-and the draft; ordinary restarts retain the conversation and draft.
+Browser and app tabs retain their views until closed. Every start, including an
+update restart, reopens the previous tabs and their views, the conversation, the
+draft and the chat panel as it was left; the Mac window keeps its size and position.
+A tab that cannot be restored is reported; **Reconnect** retries it during that run.
+All pages share WebKit's persistent website data, which keeps cookies between starts.
 
 On macOS, select page or PDF text and ask a question with page context enabled.
-Use **Capture an area** beside the model picker to crop the active tab, preview the
-attachment and send it with a question. Image input currently uses Claude.
+Use **Capture an area** beside the model picker, then drag over the active tab
+itself; chat stays open on desktop. Releasing the drag attaches the area to the
+composer for the next question, and Escape or **Cancel** leaves the tab unchanged.
+Image input currently uses Claude. The service keeps a sent screenshot with its
+message, so reopening the chat shows it again; Trash hides it and the 24-hour
+Trash cleanup deletes it with the conversation.
 
 ## Mac updates
 

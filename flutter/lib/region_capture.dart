@@ -1,21 +1,47 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// Select against a frozen frame so the crop matches what the user saw.
+Future<ui.Image> decodeFrame(Uint8List bytes) async {
+  final codec = await ui.instantiateImageCodec(bytes);
+  try {
+    return (await codec.getNextFrame()).image;
+  } finally {
+    codec.dispose();
+  }
+}
+
+/// Fills the tab with a frozen frame so the crop matches what the user saw.
+/// Releasing a drag reports the selected pixels as a PNG; null means cancelled.
 class RegionCapture extends StatefulWidget {
-  const RegionCapture({super.key, required this.image});
+  const RegionCapture({super.key, required this.image, required this.onDone});
   final ui.Image image;
+  final ValueChanged<Uint8List?> onDone;
 
   @override
   State<RegionCapture> createState() => _RegionCaptureState();
 }
 
 class _RegionCaptureState extends State<RegionCapture> {
+  final focus = FocusNode(debugLabel: 'region capture');
   Offset? start;
   Rect? selection;
   bool cropping = false;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    // Escape must reach this tool even when the chat draft had the keyboard.
+    focus.requestFocus();
+  }
+
+  @override
+  void dispose() {
+    focus.dispose();
+    super.dispose();
+  }
 
   Future<void> attach(Size display) async {
     final bounds = selection!;
@@ -43,19 +69,20 @@ class _RegionCaptureState extends State<RegionCapture> {
         final data = await crop.toByteData(format: ui.ImageByteFormat.png);
         if (data == null) throw StateError('Could not encode the screenshot.');
         if (mounted) {
-          Navigator.pop(
-            context,
+          widget.onDone(
             data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
           );
         }
       } finally {
         crop.dispose();
       }
-    } catch (error) {
+    } catch (failure) {
       if (mounted) {
-        setState(() => cropping = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+        setState(() {
+          cropping = false;
+          selection = null;
+          error = failure.toString();
+        });
       }
     } finally {
       picture.dispose();
@@ -63,111 +90,131 @@ class _RegionCaptureState extends State<RegionCapture> {
   }
 
   @override
-  Widget build(BuildContext context) => Dialog(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: LayoutBuilder(
-        builder: (context, space) {
-          final size = applyBoxFit(
-            BoxFit.contain,
-            Size(widget.image.width.toDouble(), widget.image.height.toDouble()),
-            Size(
-              space.maxWidth,
-              (space.maxHeight - 56).clamp(1, double.infinity),
-            ),
-          ).destination;
-          final area = Offset.zero & size;
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              MouseRegion(
-                cursor: SystemMouseCursors.precise,
-                child: GestureDetector(
-                  onPanDown: (e) => setState(() {
-                    start = e.localPosition;
-                    selection = null;
-                  }),
-                  onPanUpdate: (e) => setState(
-                    () => selection = Rect.fromPoints(
-                      start!,
-                      e.localPosition,
-                    ).intersect(area),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, space) {
+      final size = space.biggest;
+      final area = Offset.zero & size;
+      return Focus(
+        focusNode: focus,
+        onKeyEvent: (_, event) {
+          if (event is! KeyDownEvent ||
+              event.logicalKey != LogicalKeyboardKey.escape) {
+            return KeyEventResult.ignored;
+          }
+          widget.onDone(null);
+          return KeyEventResult.handled;
+        },
+        child: MouseRegion(
+          cursor: SystemMouseCursors.precise,
+          child: AbsorbPointer(
+            absorbing: cropping,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onPanDown: (e) => setState(() {
+                start = e.localPosition;
+                selection = null;
+              }),
+              onPanUpdate: (e) => setState(
+                () => selection = Rect.fromPoints(
+                  start!,
+                  e.localPosition,
+                ).intersect(area),
+              ),
+              onPanEnd: (_) {
+                if ((selection?.shortestSide ?? 0) >= 4) {
+                  attach(size);
+                } else {
+                  setState(() => selection = null);
+                }
+              },
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  RawImage(
+                    image: widget.image,
+                    fit: BoxFit.fill,
+                    filterQuality: FilterQuality.medium,
                   ),
-                  child: SizedBox.fromSize(
-                    size: size,
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: RawImage(
-                            image: widget.image,
-                            fit: BoxFit.fill,
-                          ),
-                        ),
-                        if (selection case final rect? when !rect.isEmpty)
-                          Positioned.fromRect(
-                            rect: rect,
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: Colors.lightBlueAccent,
-                                  width: 2,
+                  CustomPaint(painter: _Shade(selection)),
+                  if (selection == null)
+                    Align(
+                      alignment: Alignment.topCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Material(
+                          elevation: 7,
+                          color: const Color(0xff20342e),
+                          shadowColor: const Color(0x66102820),
+                          borderRadius: BorderRadius.circular(18),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 2, 6, 2),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    error ?? 'Drag over the area to attach',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                                 ),
-                                color: Colors.blue.withValues(alpha: 0.12),
-                              ),
+                                const SizedBox(width: 6),
+                                TextButton(
+                                  onPressed: () => widget.onDone(null),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.white70,
+                                  ),
+                                  child: const Text('Cancel'),
+                                ),
+                              ],
                             ),
                           ),
-                      ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ),
-              Row(
-                children: [
-                  const Expanded(child: Text('Drag over the area to attach.')),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  FilledButton(
-                    onPressed: !cropping && (selection?.shortestSide ?? 0) >= 2
-                        ? () => attach(size)
-                        : null,
-                    child: const Text('Attach'),
-                  ),
                 ],
               ),
-            ],
-          );
-        },
-      ),
-    ),
+            ),
+          ),
+        ),
+      );
+    },
   );
 }
 
-Future<Uint8List?> selectRegion(BuildContext context, Uint8List bytes) async {
-  final codec = await ui.instantiateImageCodec(bytes);
-  final ui.Image image;
-  try {
-    image = (await codec.getNextFrame()).image;
-  } finally {
-    codec.dispose();
-  }
-  if (!context.mounted) {
-    image.dispose();
-    return null;
-  }
-  try {
-    final route = DialogRoute<Uint8List>(
-      context: context,
-      builder: (_) => RegionCapture(image: image),
+/// Dims the frame outside the selection so the chosen area stands out.
+class _Shade extends CustomPainter {
+  const _Shade(this.selection);
+  final Rect? selection;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final page = Offset.zero & size;
+    final rect = selection;
+    if (rect == null) {
+      canvas.drawRect(page, Paint()..color = const Color(0x2e102820));
+      return;
+    }
+    canvas.drawPath(
+      Path()
+        ..fillType = PathFillType.evenOdd
+        ..addRect(page)
+        ..addRect(rect),
+      Paint()..color = const Color(0x73102820),
     );
-    final selection = await Navigator.of(
-      context,
-      rootNavigator: true,
-    ).push(route);
-    await route.completed;
-    return selection;
-  } finally {
-    image.dispose();
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..color = Colors.white,
+    );
   }
+
+  @override
+  bool shouldRepaint(_Shade old) => old.selection != selection;
 }

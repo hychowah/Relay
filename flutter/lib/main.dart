@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
@@ -25,6 +26,9 @@ Future<void> main() async {
   final prefs = await SharedPreferences.getInstance();
   final device = prefs.getString('device') ?? const Uuid().v4();
   await prefs.setString('device', device);
+  // Open tabs. The key keeps its first name, from when only an update restart
+  // saved them, so tabs survive updating from or returning to an older build.
+  final session = prefs.getString('updateSession');
   final workspace = Workspace(
     api: RelayApi(
       Uri.parse(
@@ -37,11 +41,9 @@ Future<void> main() async {
     deviceId: device,
     pages: createWebPage,
     conversationId: prefs.getString('conversation'),
-    pendingSession: prefs.getString('updateSession') == null
-        ? null
-        : jsonDecode(prefs.getString('updateSession')!) as Json,
-    sessionRestored: () async {
-      await prefs.remove('updateSession');
+    pendingSession: session == null ? null : jsonDecode(session) as Json,
+    storeSession: (session) async {
+      await prefs.setString('updateSession', jsonEncode(session));
     },
     saveConversation: (id) async {
       if (id == null) {
@@ -78,18 +80,14 @@ Future<void> main() async {
     RelayApp(
       workspace: workspace,
       updates: updates,
-      saveSession: () async {
-        if (workspace.pendingSession == null) {
-          await prefs.setString(
-            'updateSession',
-            jsonEncode(workspace.session()),
-          );
-        }
-      },
       initialDraft: prefs.getString('draft') ?? '',
       initialChatWidth: prefs.getDouble('chatWidth') ?? .30,
       saveChatWidth: (width) async {
         await prefs.setDouble('chatWidth', width);
+      },
+      initialChatOpen: prefs.getBool('chatOpen') ?? true,
+      saveChatOpen: (open) async {
+        await prefs.setBool('chatOpen', open);
       },
       saveDraft: (text) async {
         await prefs.setString('draft', text);
@@ -107,19 +105,21 @@ class RelayApp extends StatelessWidget {
     this.initialDraft = '',
     this.initialChatWidth = .30,
     this.saveChatWidth,
+    this.initialChatOpen = true,
+    this.saveChatOpen,
     required this.saveDraft,
     this.onClose,
     this.updates,
-    this.saveSession,
   });
   final Workspace workspace;
   final String initialDraft;
   final double initialChatWidth;
   final Future<void> Function(double)? saveChatWidth;
+  final bool initialChatOpen;
+  final Future<void> Function(bool)? saveChatOpen;
   final Future<void> Function(String) saveDraft;
   final VoidCallback? onClose;
   final AppUpdates? updates;
-  final Future<void> Function()? saveSession;
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Relay Flutter — experiment',
@@ -144,10 +144,11 @@ class RelayApp extends StatelessWidget {
       initialDraft: initialDraft,
       initialChatWidth: initialChatWidth,
       saveChatWidth: saveChatWidth,
+      initialChatOpen: initialChatOpen,
+      saveChatOpen: saveChatOpen,
       saveDraft: saveDraft,
       onClose: onClose,
       updates: updates,
-      saveSession: saveSession,
     ),
   );
 }
@@ -159,19 +160,21 @@ class RelayShell extends StatefulWidget {
     required this.initialDraft,
     this.initialChatWidth = .30,
     this.saveChatWidth,
+    this.initialChatOpen = true,
+    this.saveChatOpen,
     required this.saveDraft,
     this.onClose,
     this.updates,
-    this.saveSession,
   });
   final Workspace workspace;
   final String initialDraft;
   final double initialChatWidth;
   final Future<void> Function(double)? saveChatWidth;
+  final bool initialChatOpen;
+  final Future<void> Function(bool)? saveChatOpen;
   final Future<void> Function(String) saveDraft;
   final VoidCallback? onClose;
   final AppUpdates? updates;
-  final Future<void> Function()? saveSession;
   @override
   State<RelayShell> createState() => _RelayShellState();
 }
@@ -184,7 +187,9 @@ class _RelayShellState extends State<RelayShell> {
   Timer? saveTimer;
   ({String appId, Uint8List bytes})? capture;
   bool capturing = false;
-  bool chatOpen = true, chatOnly = false;
+  ({WorkspaceTab tab, ui.Image image, bool reopenChat})? selecting;
+  late bool chatOpen = widget.initialChatOpen, savedChatOpen = chatOpen;
+  bool chatOnly = false;
   late double chatWidth = widget.initialChatWidth;
   int lastPresentation = 0;
   String? lastPageUrl;
@@ -208,6 +213,7 @@ class _RelayShellState extends State<RelayShell> {
 
   void _changed() {
     if (mounted) {
+      if (selecting != null && w.active != selecting!.tab) _finishCapture(null);
       setState(() {
         if (lastPresentation != w.presentations) {
           chatOnly = false;
@@ -225,6 +231,7 @@ class _RelayShellState extends State<RelayShell> {
     draft.dispose();
     address.dispose();
     messagesScroll.dispose();
+    selecting?.image.dispose();
     w.removeListener(_changed);
     w.recorder.removeListener(_changed);
     widget.updates?.removeListener(_changed);
@@ -253,21 +260,43 @@ class _RelayShellState extends State<RelayShell> {
   Future<void> _capture() async {
     final tab = w.active;
     final page = tab?.page;
-    if (tab?.appId == null || page == null || capturing) return;
+    if (tab?.appId == null || page == null || capturing || selecting != null) {
+      return;
+    }
     setState(() => capturing = true);
     try {
-      final snapshot = await page.snapshot();
-      if (!mounted || w.active != tab) return;
-      final bytes = await selectRegion(context, snapshot);
-      if (mounted && bytes != null) {
-        setState(() => capture = (appId: tab!.appId!, bytes: bytes));
+      final image = await decodeFrame(await page.snapshot());
+      if (!mounted || w.active != tab) {
+        image.dispose();
+        return;
       }
+      // A phone's chat sheet covers the page, so step it aside while selecting.
+      final phone = MediaQuery.sizeOf(context).width < 900;
+      setState(() {
+        selecting = (tab: tab!, image: image, reopenChat: phone && chatOpen);
+        chatOnly = false;
+        if (phone) chatOpen = false;
+      });
     } catch (error) {
       w.error = error.toString();
       w.changed();
     } finally {
       if (mounted) setState(() => capturing = false);
     }
+  }
+
+  void _finishCapture(Uint8List? bytes) {
+    final current = selecting;
+    if (current == null) return;
+    setState(() {
+      selecting = null;
+      if (current.reopenChat) chatOpen = true;
+      if (bytes != null) capture = (appId: current.tab.appId!, bytes: bytes);
+    });
+    // Let the overlay leave the tree before its frame is released.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => current.image.dispose(),
+    );
   }
 
   Future<void> _send() async {
@@ -399,7 +428,7 @@ class _RelayShellState extends State<RelayShell> {
                     );
                     saveTimer?.cancel();
                     await widget.saveDraft(draft.text);
-                    await widget.saveSession?.call();
+                    await w.saveSession();
                   });
                 },
               ),
@@ -425,6 +454,11 @@ class _RelayShellState extends State<RelayShell> {
     if (url != lastPageUrl) {
       lastPageUrl = url;
       address.text = url == 'about:blank' ? '' : url ?? '';
+    }
+    // Several controls open or close chat; the panel reopens as it was left.
+    if (chatOpen != savedChatOpen) {
+      savedChatOpen = chatOpen;
+      widget.saveChatOpen?.call(chatOpen);
     }
     return Scaffold(
       body: SafeArea(
@@ -513,6 +547,14 @@ class _RelayShellState extends State<RelayShell> {
                                     child: tab.page!.widget,
                                   ),
                                 ),
+                            if (selecting case final s? when s.tab == w.active)
+                              Positioned.fill(
+                                child: RegionCapture(
+                                  key: ValueKey(s.image),
+                                  image: s.image,
+                                  onDone: _finishCapture,
+                                ),
+                              ),
                             if (w.active == null || w.active?.appId == null)
                               Positioned.fill(
                                 child: NewTabPage(
@@ -989,25 +1031,28 @@ class _RelayShellState extends State<RelayShell> {
               ),
             ),
           if (capture case final attachment?)
-            ListTile(
-              dense: true,
-              leading: Image.memory(
-                attachment.bytes,
-                width: 52,
-                height: 38,
-                fit: BoxFit.contain,
-              ),
-              subtitle: w.provider['supportsImageInput'] == true
-                  ? null
-                  : const Text('Choose Claude to send this image.'),
-              title: Text(
-                'Screenshot · ${attachment.appId}',
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: IconButton(
-                tooltip: 'Remove screenshot',
-                icon: const Icon(Icons.close),
-                onPressed: () => setState(() => capture = null),
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                dense: true,
+                leading: Image.memory(
+                  attachment.bytes,
+                  width: 52,
+                  height: 38,
+                  fit: BoxFit.contain,
+                ),
+                subtitle: w.provider['supportsImageInput'] == true
+                    ? null
+                    : const Text('Choose Claude to send this image.'),
+                title: Text(
+                  'Screenshot · ${attachment.appId}',
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: IconButton(
+                  tooltip: 'Remove screenshot',
+                  icon: const Icon(Icons.close),
+                  onPressed: () => setState(() => capture = null),
+                ),
               ),
             ),
           Focus(
@@ -1070,7 +1115,9 @@ class _RelayShellState extends State<RelayShell> {
                   IconButton(
                     tooltip: 'Capture an area',
                     icon: const Icon(Icons.crop_free, size: 18),
-                    onPressed: capturing || w.busy ? null : _capture,
+                    onPressed: capturing || selecting != null || w.busy
+                        ? null
+                        : _capture,
                   ),
                 if (w.provider['supportsReasoningEffort'] == true)
                   MenuAnchor(

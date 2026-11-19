@@ -498,6 +498,30 @@ class ConversationMessages extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
+          if (m.hasCapture)
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 22, bottom: 6),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 220),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: switch ((workspace.conversationId, m.id)) {
+                      (final conversation?, final message?) => Image.network(
+                        workspace.api
+                            .captureUrl(conversation, message)
+                            .toString(),
+                        semanticLabel: 'Attached screenshot',
+                        // Messages sent before screenshots were saved have none.
+                        errorBuilder: (_, _, _) => const _CaptureNote(),
+                      ),
+                      _ => const _CaptureNote(),
+                    },
+                  ),
+                ),
+              ),
+            ),
           if (user)
             Align(
               alignment: Alignment.centerRight,
@@ -607,8 +631,6 @@ class ConversationMessages extends StatelessWidget {
                 if (href != null) link(href, citations, commands);
               },
             ),
-          if (m.hasCapture)
-            const Text('Screenshot attached', style: TextStyle(fontSize: 12)),
           if (m.context?['source'] != null)
             Padding(
               padding: const EdgeInsets.only(top: 7),
@@ -622,6 +644,15 @@ class ConversationMessages extends StatelessWidget {
       ),
     );
   }
+}
+
+class _CaptureNote extends StatelessWidget {
+  const _CaptureNote();
+  @override
+  Widget build(BuildContext context) => const Text(
+    'Screenshot attached',
+    style: TextStyle(fontSize: 12, color: muted),
+  );
 }
 
 class SavedReport extends StatelessWidget {
