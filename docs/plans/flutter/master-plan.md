@@ -47,6 +47,11 @@ The implemented workflows include the following.
 - Night mode: Workspace menu → Appearance offers System, Light and Dark,
   saved per device. Relay's own screens follow it; app and website pages keep
   their own look, and the Mac title bar follows macOS.
+- Newest tab first: a Workspace menu setting, off by default and saved per
+  device. When on, a tab the user or agent opens (a new tab, an app or Browser,
+  also one already open, or a source) slides to the left end of the strip.
+  Clicking a tab, restoring, closing and split changes keep the order; reduced
+  motion skips the slide.
 - Development bug recording: actions, server exchanges, errors, tabs and a page
   screenshot are saved on the service as a report and read in the Bug reports
   viewer, where each report is marked open or solved, or deleted (see the root
@@ -238,5 +243,10 @@ and none of these builds has been reviewed on the Mac.
    dialog, titled with the page's host, and that OK starts the analysis and
    Cancel does not. Page alert and confirm dialogs are tested only with a faked
    web view.
+14. Try **Newest tab first** on the Mac with real pages open: a new tab,
+   opening an app that already has a tab and an agent opening a tab should each
+   slide that tab smoothly to the left end while the others move right, also when the
+   strip is scrolled, and clicking a tab should not move it. Only widget tests
+   cover the order and the slide.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.
