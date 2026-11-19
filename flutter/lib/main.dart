@@ -21,6 +21,7 @@ import 'app_updates.dart';
 import 'conversation_view.dart';
 import 'workspace_style.dart';
 import 'workspace_tabs.dart';
+import 'page_surface.dart';
 import 'region_capture.dart';
 import 'split_layout.dart';
 import 'bug_reports.dart';
@@ -253,6 +254,9 @@ class _RelayShellState extends State<RelayShell> {
   late double chatWidth = widget.initialChatWidth;
   int lastPresentation = 0;
   String? lastPageUrl;
+
+  /// The page shown on the whole screen.
+  BrowserSurface? onScreen;
   @override
   void initState() {
     super.initState();
@@ -556,12 +560,25 @@ class _RelayShellState extends State<RelayShell> {
       savedChatOpen = chatOpen;
       widget.saveChatOpen?.call(chatOpen);
     }
+    // A fullscreen page takes the whole screen when its tab shows alone; in
+    // split view it fills only its own pane. Leaving the screen for any other
+    // reason, such as another tab opening, also ends the page's fullscreen.
+    final inSplit =
+        MediaQuery.sizeOf(context).width >= 900 && w.shownSplit != null;
+    final active = w.active?.page?.browser;
+    final full = active?.fullScreen == true && !inSplit ? active : null;
+    if (full != onScreen) {
+      unawaited(onScreen?.fillScreen(false));
+      unawaited(full?.fillScreen(true));
+      onScreen = full;
+    }
+    final screen = full != null;
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            _toolbar(),
-            if (w.error != null)
+            if (!screen) _toolbar(),
+            if (w.error != null && !screen)
               MaterialBanner(
                 content: Text(w.error!, maxLines: 3),
                 actions: [
@@ -579,7 +596,7 @@ class _RelayShellState extends State<RelayShell> {
                 builder: (context, size) {
                   final page = Column(
                     children: [
-                      if (w.active?.isBrowser == true)
+                      if (w.active?.isBrowser == true && !screen)
                         Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
@@ -626,7 +643,7 @@ class _RelayShellState extends State<RelayShell> {
                       ),
                     ],
                   );
-                  return _panels(size, page);
+                  return _panels(size, page, screen);
                 },
               ),
             ),
@@ -991,7 +1008,8 @@ class _RelayShellState extends State<RelayShell> {
     );
   }
 
-  Widget _panels(BoxConstraints size, Widget page) {
+  /// Chat stays built but hidden while a page fills the [screen].
+  Widget _panels(BoxConstraints size, Widget page, bool screen) {
     final desktop = size.maxWidth >= 900;
     final minFraction = (320 / size.maxWidth).clamp(.2, .5);
     final fraction = chatWidth.clamp(minFraction, .5);
@@ -1030,13 +1048,13 @@ class _RelayShellState extends State<RelayShell> {
         return Stack(
           children: [
             Positioned.fill(
-              right: desktop ? (panelWidth + 6) * reveal : 0,
+              right: desktop && !screen ? (panelWidth + 6) * reveal : 0,
               child: Offstage(
-                offstage: expand == 1,
+                offstage: expand == 1 && !screen,
                 child: ExcludeFocus(excluding: chatOnly, child: page),
               ),
             ),
-            if (!desktop && reveal < 1)
+            if (!desktop && reveal < 1 && !screen)
               Positioned(
                 left: 12,
                 right: 12,
@@ -1056,25 +1074,32 @@ class _RelayShellState extends State<RelayShell> {
                 bottom: desktop ? 0 : -height * (1 - reveal),
                 width: width + gutter,
                 height: height,
-                child: IgnorePointer(
-                  ignoring: !chatOpen,
-                  child: Row(
-                    children: [
-                      if (desktop)
-                        SizedBox(width: gutter, height: height, child: divider),
-                      Expanded(
-                        child: Material(
-                          elevation: desktop ? 0 : 12 * (1 - expand),
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(
-                              desktop ? 0 : 18 * (1 - expand),
-                            ),
+                child: Offstage(
+                  offstage: screen,
+                  child: IgnorePointer(
+                    ignoring: !chatOpen,
+                    child: Row(
+                      children: [
+                        if (desktop)
+                          SizedBox(
+                            width: gutter,
+                            height: height,
+                            child: divider,
                           ),
-                          clipBehavior: Clip.antiAlias,
-                          child: chat,
+                        Expanded(
+                          child: Material(
+                            elevation: desktop ? 0 : 12 * (1 - expand),
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(
+                                desktop ? 0 : 18 * (1 - expand),
+                              ),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: chat,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

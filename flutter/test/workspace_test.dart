@@ -99,6 +99,15 @@ class FakePage extends PageSurface with BrowserSurface {
   }
 
   @override
+  bool fullScreen = false;
+  final screenFills = <bool>[];
+  @override
+  Future<void> fillScreen(bool on) async {
+    screenFills.add(on);
+    if (!on) fullScreen = false;
+  }
+
+  @override
   Future<Json> present(Json command) async {
     lastCommand = command;
     return pending == null
@@ -1132,6 +1141,75 @@ void main() {
     expect(saved(), .5);
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets(
+    'a fullscreen video takes the whole screen alone and its pane in split',
+    (tester) async {
+      final f = Fixture();
+      await f.w.start();
+      final room = await f.w.openApp(f.w.apps[1]);
+      final browser = await f.w.openApp(f.w.apps[0]);
+      final video = browser.page! as FakePage;
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        RelayApp(
+          workspace: f.w,
+          initialDraft: 'Keep this draft',
+          saveDraft: (_) async {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      final view = find.byKey(ValueKey('page-${browser.id}'));
+      final element = tester.element(view);
+      final alone = tester.getRect(view);
+      final menu = find.byTooltip('Workspace menu');
+      final address = find.text('Search or enter a web address');
+      final chat = find.text('Keep this draft');
+      Future<void> pageFullScreen(bool on) async {
+        video.fullScreen = on;
+        video.changed(false);
+        await tester.pumpAndSettle();
+      }
+
+      await pageFullScreen(true);
+      expect(tester.getRect(view), const Rect.fromLTWH(0, 0, 1400, 800));
+      expect(video.screenFills, [true]);
+      expect(menu, findsNothing);
+      expect(address, findsNothing);
+      // Chat stays built, with its draft, but hidden.
+      expect(chat, findsNothing);
+      expect(find.text('Keep this draft', skipOffstage: false), findsOneWidget);
+      expect(tester.element(view), same(element));
+
+      // Escape in the page ends its fullscreen.
+      await pageFullScreen(false);
+      expect(tester.getRect(view), alone);
+      expect(video.screenFills, [true, false]);
+      expect(menu, findsOneWidget);
+      expect(chat, findsOneWidget);
+
+      // Another tab taking the screen ends the page's fullscreen.
+      await pageFullScreen(true);
+      f.w.select(room);
+      await tester.pumpAndSettle();
+      expect(video.screenFills, [true, false, true, false]);
+      expect(video.fullScreen, isFalse);
+      expect(menu, findsOneWidget);
+
+      // In split view the video fills only its own pane.
+      f.w.dropInSplit(browser, room, SplitSide.right);
+      await tester.pumpAndSettle();
+      final pane = tester.getRect(view);
+      await pageFullScreen(true);
+      expect(tester.getRect(view), pane);
+      expect(video.screenFills, [true, false, true, false]);
+      expect(menu, findsOneWidget);
+      expect(chat, findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
   testWidgets('a click that moves a few pixels still selects the tab', (
     tester,
   ) async {

@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
 
 import 'browser_comment.dart';
 import 'browser_transcript.dart';
@@ -105,11 +106,21 @@ Future<bool> publicPageAllowed(String url) async {
 
 const _browserChannel = MethodChannel('app.relay/browser');
 
+/// The Browser page filling the screen (desktop only).
+_BrowserPage? _onScreen;
+
 /// Answers the Mac runner's calls on the browser channel (desktop only):
-/// a Browser popup window asks before each main-frame load.
+/// a Browser popup window asks before each main-frame load, and the window
+/// says when the user left macOS fullscreen.
 Future<Object?> browserChannelCall(MethodCall call) async {
   if (call.method == 'allowPopupPage') {
     return publicPageAllowed(call.arguments as String);
+  }
+  if (call.method == 'leftScreen') {
+    final page = _onScreen;
+    await page?.fillScreen(false);
+    if (page != null && !page._disposed) page.changed(false);
+    return null;
   }
   throw MissingPluginException(call.method);
 }
@@ -315,6 +326,11 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       // New windows open as popup windows, checked by the address rule.
       _browserChannel.setMethodCallHandler(browserChannelCall);
       await _browserChannel.invokeMethod<int>('popups', _webViewId);
+      final script = await rootBundle.loadString('assets/page_fullscreen.js');
+      await _browserChannel.invokeMethod<void>('documentStartScript', {
+        'view': _webViewId,
+        'source': script.replaceFirst('RELAY_KEY', jsonEncode(_fullScreenKey)),
+      });
     }
     await controller.setNavigationDelegate(
       NavigationDelegate(
@@ -326,10 +342,14 @@ class _BrowserPage extends _WebPage with BrowserSurface {
           _nativeSelection = null;
           _url = url;
           _loading = true;
+          final wasFullScreen = fullScreen;
+          fullScreen = false;
           if (_presentationId == null) {
             _comment = null;
             _generation++;
             changed(true);
+          } else if (wasFullScreen) {
+            changed(false);
           }
         },
         onPageFinished: (_) async {
@@ -384,6 +404,17 @@ class _BrowserPage extends _WebPage with BrowserSurface {
             pending?.completeError(StateError('${reply['error']}'));
           } else {
             pending?.complete(Map<String, dynamic>.from(reply['data'] as Map));
+          }
+          return;
+        }
+        if (message.message.startsWith('fullscreen:')) {
+          final on = message.message == 'fullscreen:enter:$_fullScreenKey';
+          if (!on && message.message != 'fullscreen:exit:$_fullScreenKey') {
+            return;
+          }
+          if (on != fullScreen) {
+            fullScreen = on;
+            changed(false);
           }
           return;
         }
@@ -450,6 +481,32 @@ class _BrowserPage extends _WebPage with BrowserSurface {
 
   int get _webViewId =>
       (controller.platform as WebKitWebViewController).webViewIdentifier;
+
+  @override
+  bool fullScreen = false;
+  final _fullScreenKey = const Uuid().v4();
+
+  @override
+  Future<void> fillScreen(bool on) async {
+    if (!Platform.isMacOS) return;
+    if (on) {
+      _onScreen = this;
+    } else if (_onScreen == this) {
+      _onScreen = null;
+    }
+    try {
+      if (!on && fullScreen && !_disposed) {
+        fullScreen = false;
+        await controller.runJavaScript('window.__relayExitFullscreen?.()');
+      }
+      await _browserChannel.invokeMethod<void>('fillScreen', {
+        'view': _webViewId,
+        'on': on,
+      });
+    } catch (_) {
+      // A closed tab has nothing left to show or end.
+    }
+  }
 
   @override
   void dispose() {
