@@ -40,8 +40,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Delete'), findsNothing);
 
-    await tester.tap(find.byTooltip('Delete item'));
+    final icon = tester.getCenter(find.byTooltip('Delete item'));
+    await tester.tapAt(icon);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tapAt(icon);
     await tester.pumpAndSettle();
+    expect(deleted, 0, reason: 'A double-click does not delete');
+    expect(find.text('Delete'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
     expect(deleted, 1);

@@ -124,6 +124,7 @@ void main() {
 
     await tester.tap(find.byTooltip('Delete bug report').last);
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
     expect(saved.keys, ['a']);

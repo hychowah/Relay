@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -309,7 +311,8 @@ Duration workspaceMotion(BuildContext context) =>
 
 /// A trash button that asks for a second click instead of opening a dialog.
 /// The first click turns it into a red button that grows to the left, so the
-/// pointer is still on it for the second click. A tap elsewhere or Escape
+/// pointer is still on it for the second click. A click soon after arming is
+/// ignored, so a double-click does not delete. A tap elsewhere or Escape
 /// cancels.
 class ConfirmDeleteButton extends StatefulWidget {
   const ConfirmDeleteButton({
@@ -327,9 +330,11 @@ class ConfirmDeleteButton extends StatefulWidget {
 class _ConfirmDeleteButtonState extends State<ConfirmDeleteButton> {
   final focus = FocusNode();
   bool armed = false;
+  Timer? settling;
 
   @override
   void dispose() {
+    settling?.cancel();
     focus.dispose();
     super.dispose();
   }
@@ -364,6 +369,7 @@ class _ConfirmDeleteButtonState extends State<ConfirmDeleteButton> {
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                   ),
                   onPressed: () {
+                    if (settling?.isActive ?? false) return;
                     setState(() => armed = false);
                     onConfirmed();
                   },
@@ -376,6 +382,11 @@ class _ConfirmDeleteButtonState extends State<ConfirmDeleteButton> {
                       ? null
                       : () {
                           setState(() => armed = true);
+                          settling?.cancel();
+                          settling = Timer(
+                            const Duration(milliseconds: 400),
+                            () {},
+                          );
                           focus.requestFocus();
                         },
                   icon: const Icon(Icons.delete_outline),
