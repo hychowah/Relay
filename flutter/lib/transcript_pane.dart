@@ -75,6 +75,9 @@ class _TranscriptPaneState extends State<TranscriptPane> {
   List<String> paragraphs = const [];
   List<int> starts = const [];
   List<GlobalKey> keys = const [];
+  // One flag per paragraph, so a highlight change rebuilds only the two
+  // paragraphs whose highlight changes.
+  List<ValueNotifier<bool>> lit = const [];
   int playing = -1;
   bool following = true, _reading = false;
   Timer? _clock;
@@ -94,6 +97,7 @@ class _TranscriptPaneState extends State<TranscriptPane> {
         paragraphs = '${result['text']}'.split('\n');
         starts = paragraphStarts(paragraphs);
         keys = [for (final _ in paragraphs) GlobalKey()];
+        lit = [for (final _ in paragraphs) ValueNotifier(false)];
       });
       _clock = Timer.periodic(
         const Duration(milliseconds: 500),
@@ -116,7 +120,9 @@ class _TranscriptPaneState extends State<TranscriptPane> {
     if (!mounted || seconds == null) return;
     final index = starts.lastIndexWhere((start) => start <= seconds);
     if (index == playing) return;
-    setState(() => playing = index);
+    if (playing >= 0) lit[playing].value = false;
+    if (index >= 0) lit[index].value = true;
+    playing = index;
     if (following) _reveal();
   }
 
@@ -173,6 +179,9 @@ class _TranscriptPaneState extends State<TranscriptPane> {
   void dispose() {
     _clock?.cancel();
     focus.dispose();
+    for (final flag in lit) {
+      flag.dispose();
+    }
     super.dispose();
   }
 
@@ -246,22 +255,31 @@ class _TranscriptPaneState extends State<TranscriptPane> {
                       Padding(
                         key: keys[i],
                         padding: const EdgeInsets.only(top: 4),
-                        // The same widgets with only a changed colour keep a
-                        // selection inside the paragraph. The highlight is a
-                        // faint accent: primaryContainer matches the pane.
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: i == playing
-                                ? colors.primary.withValues(alpha: .14)
-                                : null,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
+                        // Every paragraph is built, not only the visible ones,
+                        // and a highlight changes only its colour, so a
+                        // selection survives scrolling and highlight changes.
+                        // Each paragraph paints once into its own layer, which
+                        // scrolling only moves.
+                        child: RepaintBoundary(
+                          child: ValueListenableBuilder(
+                            valueListenable: lit[i],
+                            // A faint accent: primaryContainer matches the pane.
+                            builder: (context, on, text) => DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: on
+                                    ? colors.primary.withValues(alpha: .14)
+                                    : null,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: text,
                             ),
-                            child: _paragraph(paragraphs[i]),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              child: _paragraph(paragraphs[i]),
+                            ),
                           ),
                         ),
                       ),
