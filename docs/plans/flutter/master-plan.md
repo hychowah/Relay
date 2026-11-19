@@ -36,22 +36,19 @@ The implemented workflows include the following.
   install/restart. Flutter has its own release channel.
 - Every start restores the previous tabs and views, the draft, the chat panel
   state and the Mac window frame. Tabs are saved as they change.
-- Split view (desktop only): drag a tab onto the left or right half of the
-  page to show it beside the current tab. At most two panes; the pair and its
-  divider position are saved and restored with the tabs. Drag the divider to
-  resize the panes (each keeps at least 240 pixels or a fifth of the page,
-  whichever is larger), double-click it to return to half and half, or click
-  its middle button to end the split and keep the selected tab. Each new split
-  starts at half. The clicked pane is the selected tab for context and agent
-  navigation. Narrow windows show only the selected pane.
+- Split view (desktop only): dropping a tab on a page opens a split tab; the
+  nearest edge places it, and panes nest both ways. Clicking an app's tab
+  shows it full screen; closing the split tab keeps its apps open. Split tabs
+  and divider positions are restored with the tabs. The clicked pane is the
+  selected tab for context and agent navigation. The Flutter README has the
+  details.
 - Night mode: Workspace menu → Appearance offers System, Light and Dark,
   saved per device. Relay's own screens follow it; app and website pages keep
   their own look, and the Mac title bar follows macOS.
 - Newest tab first: a Workspace menu setting, off by default and saved per
-  device. When on, a tab the user or agent opens (a new tab, an app or Browser,
-  also one already open, or a source) slides to the left end of the strip.
-  Clicking a tab, restoring, closing and split changes keep the order; reduced
-  motion skips the slide.
+  device. When on, a tab the user clicks or opens, or the agent opens, slides
+  to the left end of the strip. Restoring, closing and split changes keep the
+  order; reduced motion skips the slide.
 - Development bug recording: actions, server exchanges, errors, tabs and a page
   screenshot are saved on the service as a report and read in the Bug reports
   viewer, where each report is marked open or solved, or deleted (see the root
@@ -221,17 +218,14 @@ real WKWebViews.
 8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.
 9. Restart Stable 0.0.13 on the Mac with a Browser tab and two or more app tabs open. Check that the last active tab shows first, the hidden tabs finish loading (none closed by the 20 s limit), and the chat history appears without waiting for them.
 10. Check `browser.transcript` in WKWebView on the Mac with a short and an hour-long YouTube video, note how long each page takes against the 7-second limit, then ask about one through the real agent. Its page script passed against live YouTube only in headless Chromium with a Safari user agent. In the transcript pane, check on the Mac: opening it loads the hour-long transcript and scrolls smoothly; a drag selection survives clicking into the composer and reaches the question; moving to another video reloads it; a newer selection on the page replaces the transcript's; it stays hidden for other pages and narrow windows, and still loads in chat-only mode. For following, check that the highlight moves while the video plays, moves within a second of a seek, stays still while paused and during an ad, and still follows after moving to another video in the same tab; that scrolling the pane by hand or selecting there stops the scrolling while the highlight keeps moving; and that **Follow video** resumes it without losing the kept selection. An earlier draft of the play-time script, with an extra in-page navigation check, passed live in headless Chromium (play, seek, pause, in-page navigation; no ad appeared); the committed shorter script was not run live, and only a fake page tests the pane.
-11. Try the split view on the Mac with real WKWebViews: dragging a tab over a
-   page, the drop highlight, clicking the dimmed pane to select it, pages
-   keeping their state as they move in and out of the split, dragging the
-   divider (also when the pointer passes over a page), double-clicking it, and
-   its exit button, which must not get in the way of the left page's scrollbar
-   or content. Only widget tests with fake pages cover it. A bug report on
-   0.0.12 showed neither page took clicks or scrolling after a split: the
-   selected pane's border took the whole pane's input on macOS. Its outline
-   is now a 2-pixel frame around the page, with nothing drawn over it, in
-   Stable 0.0.13; check that the selected page
-   clicks and scrolls, and that one click on the dimmed pane selects it.
+11. Try the split tab on the Mac with real WKWebViews: the drop highlight at
+   each edge, three or more panes both ways, one click selecting a dimmed
+   pane, pages keeping their state, dragging and double-clicking both kinds of
+   divider (also over a page), switching between an app's tab and the split
+   tab, and closing it. Check that the selected page clicks and scrolls:
+   nothing may be drawn over it (the 0.0.12 bug; its outline has been a
+   2-pixel frame since 0.0.13). Not in Stable yet; 64 Flutter tests pass on
+   WSL with fake pages. Splits saved by 0.0.13 are not restored.
 12. Check night mode on the Mac in Dark and Light, with macOS both light and
    dark: tabs, chat, Markdown replies, dialogs, menus and the empty Browser
    page. Also check that System follows a live macOS switch. Only widget tests
@@ -243,11 +237,10 @@ real WKWebViews.
    confirm dialog of **Start analysis**, titled with the page's host, and that OK starts the analysis and
    Cancel does not. Page alert and confirm dialogs are tested only with a faked
    web view.
-14. Try **Newest tab first** on the Mac with real pages open: a new tab,
-   opening an app that already has a tab and an agent opening a tab should each
-   slide that tab smoothly to the left end while the others move right, also when the
-   strip is scrolled, and clicking a tab should not move it. Only widget tests
-   cover the order and the slide.
+14. Try **Newest tab first** on the Mac with real pages open: clicking a tab,
+   a new tab, an app opening and an agent opening a tab should each slide that
+   tab smoothly to the left end while the others move right, also when the
+   strip is scrolled. Only widget tests cover the order and the slide.
 15. In a build with popup windows, sign in to figma.com with **Continue with
    Google**: the popup shows its host, closes itself and leaves Figma signed in.
    Close a tab, and the main window, with a popup open. New-tab links stay in the tab.

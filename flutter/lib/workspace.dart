@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import 'page_surface.dart';
 import 'relay_api.dart';
+import 'split_layout.dart';
 
 const _uuid = Uuid();
 
@@ -87,13 +88,8 @@ class Workspace extends ChangeNotifier {
             .toList();
   WorkspaceTab? active;
 
-  /// Desktop only: two tabs shown side by side as [left, right]. The pair is
-  /// shown while one of them is active; other tabs still show alone.
-  List<WorkspaceTab>? split;
-
-  /// The left pane's share of the page width; each new pair starts at half.
-  double splitWidth = .5;
-  bool get splitShown => split?.contains(active) ?? false;
+  /// Desktop only: the split tab being shown, whose panes include [active].
+  SplitTab? shownSplit;
   String? conversationId, error, status, _commandId;
   bool sending = false, _polling = false, _disposed = false;
   int _manualRevision = 0;
@@ -232,11 +228,25 @@ class Workspace extends ChangeNotifier {
     changed();
   }
 
-  /// [opened] marks a tab the user or agent opened, which moves to the left
-  /// end with [newestTabFirst]. Clicking a tab, restoring, closing and split
-  /// changes keep the order, so tabs do not move under the mouse.
-  void select(WorkspaceTab tab, {bool manual = true, bool opened = false}) {
+  /// Shows [tab]. A split tab shows its panes and selects the one selected
+  /// last. A tab in the shown split stays in it unless [alone], as when its
+  /// own tab is clicked. [opened] marks a tab the user or agent opened, which
+  /// moves to the left end with [newestTabFirst]; restoring, closing and
+  /// split changes do not.
+  void select(
+    WorkspaceTab tab, {
+    bool manual = true,
+    bool alone = false,
+    bool opened = false,
+  }) {
     if (opened && newestTabFirst && tabs.remove(tab)) tabs.insert(0, tab);
+    if (tab is SplitTab) {
+      shownSplit = tab;
+      tab = tab.focus;
+    } else if (alone || shownSplit?.layout.contains(tab) != true) {
+      shownSplit = null;
+    }
+    shownSplit?.focus = tab;
     if (manual) _manual();
     final token = active?.token ?? tab.token;
     active = tab;
@@ -244,44 +254,73 @@ class Workspace extends ChangeNotifier {
     changed();
   }
 
-  bool canSplitWith(WorkspaceTab tab) =>
-      splitShown || (active != null && active != tab);
-
-  /// Shows [tab] on one side: beside the current tab, in place of that side's
-  /// tab, or swapped with its partner.
-  void dropInSplit(WorkspaceTab tab, {required bool left}) {
-    if (!canSplitWith(tab)) return;
+  /// Shows [tab] on [side] of [target]'s pane, moving it there when it
+  /// already has a pane. Without a shown split, this opens a new split tab
+  /// with [target].
+  void dropInSplit(WorkspaceTab tab, WorkspaceTab target, SplitSide side) {
+    if (tab == target || tab is SplitTab) return;
     recorder.action('split tabs', {
       'tab': tab.title,
-      'side': left ? 'left' : 'right',
+      'target': target.title,
+      'side': side.name,
     });
-    if (!splitShown) splitWidth = .5;
-    final pair = splitShown ? split! : [active!, active!];
-    final side = left ? 0 : 1;
-    final other = pair[1 - side] == tab ? pair[side] : pair[1 - side];
-    split = left ? [tab, other] : [other, tab];
+    final shown = shownSplit;
+    final layout = (shown?.layout ?? SplitPane(target)).split(
+      target,
+      tab,
+      side,
+    );
+    if (shown != null) {
+      shown.layout = layout as SplitBranch;
+    } else {
+      final split = SplitTab()
+        ..layout = layout as SplitBranch
+        ..focus = tab;
+      // A new split tab opens where a new tab would.
+      newestTabFirst ? tabs.insert(0, split) : tabs.add(split);
+      shownSplit = split;
+    }
     select(tab);
   }
 
-  /// Ends the split; the partner stays shown alone.
+  /// Takes [tab] out of the shown split; its neighbour takes the space.
   void leaveSplit(WorkspaceTab tab) {
-    final pair = split;
-    if (pair == null || !pair.contains(tab)) return;
-    recorder.action('end split', {'tab': tab.title});
-    split = null;
-    if (active == tab) {
-      select(pair.firstWhere((other) => other != tab));
+    final split = shownSplit;
+    if (split == null || !split.layout.contains(tab)) return;
+    recorder.action('leave split', {'tab': tab.title});
+    final rest = _leave(split, tab)!;
+    if (active == tab || shownSplit == null) {
+      select(shownSplit ?? rest.tabs.first);
     } else {
       changed();
     }
   }
 
+  /// Takes [tab] out of [split] and returns what is left; a split left with
+  /// one pane closes.
+  SplitLayout? _leave(SplitTab split, WorkspaceTab tab) {
+    final rest = split.layout.without(tab);
+    if (rest is SplitBranch) {
+      split.layout = rest;
+      if (split.focus == tab) split.focus = rest.tabs.first;
+    } else {
+      tabs.remove(split);
+      if (shownSplit == split) shownSplit = null;
+    }
+    return rest;
+  }
+
   void _replaceInSplit(WorkspaceTab old, WorkspaceTab tab) {
-    final pair = split;
-    if (pair == null || !pair.contains(old)) return;
-    split = pair.contains(tab)
-        ? null
-        : [for (final item in pair) item == old ? tab : item];
+    for (final split in tabs.whereType<SplitTab>().toList()) {
+      if (!split.layout.contains(old)) continue;
+      if (split.layout.contains(tab)) {
+        _leave(split, old);
+      } else {
+        split.layout =
+            split.layout.replaced(old, SplitPane(tab)) as SplitBranch;
+        if (split.focus == old) split.focus = tab;
+      }
+    }
   }
 
   void newTab() {
@@ -293,11 +332,21 @@ class Workspace extends ChangeNotifier {
 
   void closeTab(WorkspaceTab tab) {
     recorder.action('close tab', {'tab': tab.title});
-    final index = tabs.indexOf(tab);
-    final partner = split?.contains(tab) == true
-        ? split!.firstWhere((other) => other != tab)
+    if (tab is SplitTab) {
+      // Its tabs stay open; the selected one shows alone.
+      tabs.remove(tab);
+      if (shownSplit == tab) shownSplit = null;
+      changed();
+      return;
+    }
+    final shown = shownSplit;
+    final partner = shown != null && shown.layout.contains(tab)
+        ? shown.layout.without(tab)!.tabs.first
         : null;
-    if (partner != null) split = null;
+    for (final split in tabs.whereType<SplitTab>().toList()) {
+      if (split.layout.contains(tab)) _leave(split, tab);
+    }
+    final index = tabs.indexOf(tab);
     if (active == tab) {
       _manual();
       active = null;
@@ -305,7 +354,9 @@ class Workspace extends ChangeNotifier {
     tabs.remove(tab);
     tab.page?.dispose();
     if (active == null && tabs.isNotEmpty) {
-      select(partner ?? tabs[(index - 1).clamp(0, tabs.length - 1)]);
+      select(
+        shownSplit ?? partner ?? tabs[(index - 1).clamp(0, tabs.length - 1)],
+      );
     }
     changed();
   }
@@ -798,21 +849,25 @@ class Workspace extends ChangeNotifier {
   }
 
   Json session() => {
-    'active': active == null ? -1 : tabs.indexOf(active!),
-    if (split != null) ...{
-      'split': [for (final tab in split!) tabs.indexOf(tab)],
-      'splitWidth': splitWidth,
+    'active': switch (shownSplit ?? active) {
+      final tab? => tabs.indexOf(tab),
+      null => -1,
     },
-    'tabs': tabs
-        .map(
-          (tab) => {
+    'tabs': [
+      for (final tab in tabs)
+        if (tab is SplitTab)
+          {
+            'split': tab.layout.toJson(tabs.indexOf),
+            'focus': tabs.indexOf(tab.focus),
+          }
+        else
+          {
             'appId': tab.appId,
             'url': tab.page?.url,
             'source': tab.report?['source'],
             'context': _viewIntent(tab.page?.context),
           },
-        )
-        .toList(),
+    ],
   };
 
   // The parts of a page's context that reopen its view. The rest, such as
@@ -829,17 +884,22 @@ class Workspace extends ChangeNotifier {
   /// keeps whatever tab they choose meanwhile.
   Future<bool> restoreSession(Json saved) async {
     final items = (saved['tabs'] as List).cast<Json>();
-    final loads = <Future<bool>>[];
+    // Pages load only once every split has its panes: loading saves the
+    // session, which reads each split's layout.
+    final loads = <(int, Json, WorkspaceTab)>[];
     var complete = true;
-    final savedSplit = saved['split'] as List? ?? const [];
-    // Once both tabs of the saved pair are back, a reconnect leaves the split
-    // as the user has it, including ended.
-    final splitRestored =
-        savedSplit.isNotEmpty && savedSplit.every(_restoredTabs.containsKey);
+    final splits = <(int, SplitTab, Json)>[];
     for (var index = 0; index < items.length; index++) {
       // A reconnect retries only unfinished tabs, preserving later user changes.
       if (_restoredTabs.containsKey(index)) continue;
       final item = items[index];
+      if (item['split'] != null) {
+        // Its panes are found once every tab is added.
+        final split = SplitTab();
+        tabs.add(_restoredTabs[index] = split);
+        splits.add((index, split, item));
+        continue;
+      }
       final appId = item['appId'] as String?;
       if (appId == null) {
         tabs.add(_restoredTabs[index] = WorkspaceTab());
@@ -867,25 +927,39 @@ class Workspace extends ChangeNotifier {
         isBrowser: app.isBrowser,
       );
       tabs.add(_restoredTabs[index] = tab);
-      loads.add(_restoreTab(index, item, tab));
+      loads.add((index, item, tab));
     }
-    // A tab that is unavailable leaves no pair; one that fails to load later
-    // is closed, which ends the split.
-    final pair = [for (final index in savedSplit) ?_restoredTabs[index]];
-    if (!splitRestored &&
-        split == null &&
-        pair.length == 2 &&
-        pair.first != pair.last &&
-        pair.every(tabs.contains)) {
-      split = pair;
-      splitWidth = (saved['splitWidth'] as num?)?.toDouble() ?? .5;
+    // An unavailable tab leaves no pane, and a split left with fewer than two
+    // is retried on reconnect. A tab that fails to load later is closed,
+    // which takes it out of its splits.
+    for (final (index, split, item) in splits) {
+      final placed = <WorkspaceTab>{};
+      final layout = SplitLayout.fromJson(item['split'], (index) {
+        final tab = _restoredTabs[index];
+        return tab is! SplitTab && tabs.contains(tab) && placed.add(tab!)
+            ? tab
+            : null;
+      });
+      if (layout is SplitBranch) {
+        split
+          ..layout = layout
+          ..focus = switch (_restoredTabs[item['focus']]) {
+            final tab? when layout.contains(tab) => tab,
+            _ => layout.tabs.first,
+          };
+      } else {
+        tabs.remove(split);
+        _restoredTabs.remove(index);
+      }
     }
     final selected = _restoredTabs[saved['active']] ?? tabs.lastOrNull;
     if (active == null && selected != null && tabs.contains(selected)) {
       select(selected);
     }
     changed();
-    final restored = await Future.wait(loads);
+    final restored = await Future.wait([
+      for (final (index, item, tab) in loads) _restoreTab(index, item, tab),
+    ]);
     return complete && !restored.contains(false);
   }
 
