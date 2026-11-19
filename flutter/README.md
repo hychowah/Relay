@@ -82,7 +82,9 @@ Desktop chat width is saved; phones use an overlay with a compact progress/Stop 
 **Workspace menu → Appearance** sets Relay's own screens to System (the default),
 Light or Dark, saved per device. System follows the device's appearance as it
 changes. Pages from apps and websites keep their own look, and the Mac title bar
-follows macOS.
+follows macOS. **Newest tab first**, in the same menu, off by default and saved per device,
+slides each tab you or the agent open, new or already open, to the left end of the
+strip. Clicking a tab only switches to it.
 Browser and app tabs retain their views until closed. Every start, including an
 update restart, reopens the previous tabs and their views, the conversation, the
 draft and the chat panel as it was left; the Mac window keeps its size and position.

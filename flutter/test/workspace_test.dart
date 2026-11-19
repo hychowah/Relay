@@ -112,7 +112,7 @@ class FakePage extends PageSurface with BrowserSurface {
 }
 
 class Fixture {
-  Fixture({Json? session}) {
+  Fixture({Json? session, bool newestTabFirst = false}) {
     w = Workspace(
       api: RelayApi(
         Uri.parse('http://localhost:3250'),
@@ -170,8 +170,11 @@ class Fixture {
         return page;
       },
       saveConversation: (_) async {},
+      newestTabFirst: newestTabFirst,
+      saveNewestTabFirst: (value) async => savedNewestFirst.add(value),
     );
   }
+  final savedNewestFirst = <bool>[];
   bool offline = false, failRoomRestore = false;
   List<Json> configApps = [...apps];
   late Workspace w;
@@ -329,6 +332,54 @@ void main() {
     expect(next.w.active!.appId, 'room-layout');
     expect(next.w.pendingSession, isNull);
   });
+  test(
+    'newest tab first moves opened tabs left and restores saved order',
+    () async {
+      final off = Fixture();
+      addTearDown(off.w.dispose);
+      await off.w.start();
+      final offRoom = await off.w.openApp(off.w.apps[1]);
+      await off.w.openApp(off.w.apps[0]);
+      expect(await off.w.openApp(off.w.apps[1]), offRoom);
+      expect(off.w.tabs.map((tab) => tab.appId), ['room-layout', 'browser']);
+
+      final f = Fixture(newestTabFirst: true);
+      addTearDown(f.w.dispose);
+      await f.w.start();
+      final room = await f.w.openApp(f.w.apps[1]);
+      final browser = await f.w.openApp(f.w.apps[0]);
+      f.w.newTab();
+      final blank = f.w.active!;
+      expect(f.w.tabs, [blank, browser, room]);
+      f.w.dropInSplit(browser, left: false);
+      expect(f.w.tabs, [blank, browser, room], reason: 'a split keeps order');
+      await f.w.openApp(f.w.apps[1]);
+      expect(f.w.active, room);
+      expect(f.w.tabs, [room, blank, browser]);
+      // An app the agent opens, here into the blank tab, also moves left.
+      f.w.select(blank);
+      final opened = await f.w.openApp(f.w.apps[0], manual: false);
+      expect(f.w.tabs, [opened, room, browser]);
+      expect(f.w.split, [opened, browser]);
+      expect(f.w.session(), containsPair('active', 0));
+      expect(f.w.session(), containsPair('split', [0, 2]));
+
+      f.w.select(room);
+      final next = Fixture(
+        session: jsonDecode(jsonEncode(f.stored.last)) as Json,
+        newestTabFirst: true,
+      );
+      addTearDown(next.w.dispose);
+      await next.w.start();
+      expect(next.w.tabs.map((tab) => tab.appId), [
+        'browser',
+        'room-layout',
+        'browser',
+      ]);
+      expect(next.w.active, next.w.tabs[1]);
+      expect(next.w.split, [next.w.tabs[0], next.w.tabs[2]]);
+    },
+  );
   test(
     'saved tabs open at once on the saved active tab and load together',
     () async {
@@ -1172,6 +1223,68 @@ void main() {
     expect(saved, [ThemeMode.light]);
     expect(shown(), Brightness.light);
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('newest tab first is a saved setting and slides the tab left', (
+    tester,
+  ) async {
+    final f = Fixture();
+    await f.w.start();
+    final room = await f.w.openApp(f.w.apps[1]);
+    await f.w.openApp(f.w.apps[2]);
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Workspace menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Newest tab first'));
+    await tester.pumpAndSettle();
+    expect(f.w.newestTabFirst, isTrue);
+    expect(f.savedNewestFirst, [true]);
+
+    Finder chip(String title) => find.descendant(
+      of: find.byType(WorkspaceTabs),
+      matching: find.text(title),
+    );
+    double left(String title) => tester.getTopLeft(chip(title)).dx;
+    final start = left('Research'), end = left('Room layout');
+    await tester.tap(chip('Research'));
+    await tester.pumpAndSettle();
+    expect(f.w.active!.appId, 'research');
+    expect(f.w.tabs.first, room, reason: 'clicking a tab keeps the order');
+    expect(left('Research'), start);
+    await f.w.openApp(f.w.apps[2]);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(f.w.tabs.last, room);
+    expect(left('Research'), allOf(lessThan(start), greaterThan(end)));
+    await tester.pumpAndSettle();
+    expect(left('Research'), end);
+    expect(left('Room layout'), start);
+
+    // A tab moved from the far end of a scrolled strip is scrolled into view.
+    for (var i = 0; i < 6; i++) {
+      f.w.newTab();
+    }
+    await tester.pumpAndSettle();
+    final strip = tester.state<ScrollableState>(
+      find.descendant(
+        of: find.byType(WorkspaceTabs),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    strip.position.jumpTo(strip.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(strip.position.pixels, greaterThan(0));
+    await f.w.openApp(f.w.apps[1]);
+    await tester.pumpAndSettle();
+    expect(f.w.tabs.first, room);
+    expect(strip.position.pixels, 0);
+    expect(left('Room layout'), end);
     await tester.pumpWidget(const SizedBox());
   });
 
