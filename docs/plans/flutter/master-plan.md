@@ -155,6 +155,10 @@ folder. A test with a stand-in Mac covers test builds, Stable's recorded commit,
 the refusals and retiring contained test builds. A real Stable build through it,
 into a throwaway release folder, recorded its commit and left nothing on the Mac.
 
+Updates download only changed files, about 7.3 MB instead of the 20.4 MB ZIP.
+On 2026-11-19 the Mac updated one `small-updates` build to the next through its
+file list: it passed the signature check, restarted and left no downloads.
+
 Stable 0.0.9 (build 9), published with that tool, added everyday restoration,
 the updater's leftover removal, inline region capture, saved screenshots, bug
 reports and draft conversations. The native Mac workflow was not rerun for it.

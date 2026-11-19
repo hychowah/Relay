@@ -27,6 +27,10 @@ export function flutterReleases(directory: string) {
     if (file === 'latest.json') c.header('Cache-Control', 'no-store');
     await next();
   });
-  app.get(`${route}:file`, serveStatic({root: directory, rewriteRequestPath: path => path.replace(route, '/')}));
+  // Stored app files and file lists, named by the SHA-256 of their content.
+  app.use(`${route}files/:file`, async (c, next) => /^[a-f0-9]{64}\.gz$/.test(c.req.param('file') || '') ? next() : c.notFound());
+  const files = serveStatic({root: directory, rewriteRequestPath: path => path.replace(route, '/')});
+  app.get(`${route}:file`, files);
+  app.get(`${route}files/:file`, files);
   return app;
 }
