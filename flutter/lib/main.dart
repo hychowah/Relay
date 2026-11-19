@@ -1153,7 +1153,10 @@ class _RelayShellState extends State<RelayShell> {
         Expanded(
           child: DecoratedBox(
             decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: colors.outline)),
+              color: colors.surfaceContainerHigh,
+              border: Border(
+                bottom: BorderSide(color: colors.onSurfaceVariant),
+              ),
             ),
             child: TranscriptPane(
               key: ValueKey(pane),

@@ -221,7 +221,9 @@ backend did not change. It has not been installed or reviewed on the Mac.
    with fake pages cover it.
 12. Check night mode on the Mac in Dark and Light, with macOS both light and
    dark: tabs, chat, Markdown replies, dialogs, menus and the empty Browser
-   page. Also check that System follows a live macOS switch. Only widget tests
+   page. Also check that System follows a live macOS switch, and that the
+   transcript pane stands apart from the conversation with its playing
+   paragraph visible. Only widget tests
    and WSL screenshots cover it.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.
