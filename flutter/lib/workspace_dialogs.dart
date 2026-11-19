@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'relay_api.dart';
 import 'workspace.dart';
+import 'workspace_style.dart';
 
 class WorkspaceDialog extends StatelessWidget {
   const WorkspaceDialog({
@@ -321,10 +322,10 @@ class _MemoryDialogState extends State<MemoryDialog> {
                 title: Text(entry['key'] as String),
                 subtitle: Text(entry['content'] as String),
                 onTap: () => edit(entry),
-                trailing: IconButton(
+                trailing: ConfirmDeleteButton(
                   tooltip: 'Forget memory',
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => forget(entry),
+                  label: 'Forget',
+                  onConfirmed: () => forget(entry),
                 ),
               ),
               if (entry['sourceConversationId'] != null)

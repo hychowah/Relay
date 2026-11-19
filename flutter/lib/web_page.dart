@@ -91,6 +91,29 @@ Future<Uri> browserUrl(String text) async {
   return uri;
 }
 
+/// Whether a Browser tab or popup may load [url] in its main frame.
+Future<bool> publicPageAllowed(String url) async {
+  if (url == 'about:blank') return true;
+  if (!['https', 'http'].contains(Uri.tryParse(url)?.scheme)) return false;
+  try {
+    await browserUrl(url);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+const _browserChannel = MethodChannel('app.relay/browser');
+
+/// Answers the Mac runner's calls on the browser channel (desktop only):
+/// a Browser popup window asks before each main-frame load.
+Future<Object?> browserChannelCall(MethodCall call) async {
+  if (call.method == 'allowPopupPage') {
+    return publicPageAllowed(call.arguments as String);
+  }
+  throw MissingPluginException(call.method);
+}
+
 PageSurface createWebPage(PageSpec spec, void Function(bool) changed) {
   if (spec.report != null) return _ReportPage(spec, changed);
   if (spec.browser) return _BrowserPage(spec, changed);
@@ -98,10 +121,11 @@ PageSurface createWebPage(PageSpec spec, void Function(bool) changed) {
 }
 
 abstract class _WebPage extends PageSurface {
-  _WebPage(this.spec, this.changed);
+  _WebPage(this.spec, this.changed, [WebViewController? controller])
+    : controller = controller ?? WebViewController();
   final PageSpec spec;
   final void Function(bool) changed;
-  final controller = WebViewController();
+  final WebViewController controller;
   final _ready = Completer<void>();
   bool _disposed = false;
   Json? _context;
@@ -112,8 +136,10 @@ abstract class _WebPage extends PageSurface {
   Future<void> refreshSelection() async {
     if (!Platform.isMacOS || _disposed) return;
     final webKit = controller.platform as WebKitWebViewController;
-    _nativeSelection = await const MethodChannel('app.relay/browser')
-        .invokeMethod<String>('selection', webKit.webViewIdentifier);
+    _nativeSelection = await _browserChannel.invokeMethod<String>(
+      'selection',
+      webKit.webViewIdentifier,
+    );
   }
 
   // The Builder keeps a context for the page's JavaScript dialogs.
@@ -191,8 +217,10 @@ abstract class _WebPage extends PageSurface {
   @override
   Future<Uint8List> snapshot() async {
     final webKit = controller.platform as WebKitWebViewController;
-    final bytes = await const MethodChannel('app.relay/browser')
-        .invokeMethod<Uint8List>('snapshot', webKit.webViewIdentifier);
+    final bytes = await _browserChannel.invokeMethod<Uint8List>(
+      'snapshot',
+      webKit.webViewIdentifier,
+    );
     if (bytes == null) throw StateError('The page could not be captured.');
     return bytes;
   }
@@ -215,7 +243,20 @@ abstract class _WebPage extends PageSurface {
 }
 
 class _BrowserPage extends _WebPage with BrowserSurface {
-  _BrowserPage(super.spec, super.changed) {
+  // On macOS WebKit lets scripts open windows without a user action unless
+  // told otherwise; Relay keeps WebKit's popup blocker on.
+  _BrowserPage(PageSpec spec, void Function(bool) changed)
+    : super(
+        spec,
+        changed,
+        Platform.isMacOS
+            ? WebViewController.fromPlatformCreationParams(
+                WebKitWebViewControllerCreationParams(
+                  javaScriptCanOpenWindowsAutomatically: false,
+                ),
+              )
+            : null,
+      ) {
     _initialize();
   }
   Completer<void>? _navigation;
@@ -255,27 +296,21 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   @override
   Future<void> _load() async {
     if (Platform.isMacOS) {
-      final version = await const MethodChannel('app.relay/browser')
-          .invokeMethod<String>('safariVersion');
+      final version = await _browserChannel.invokeMethod<String>(
+        'safariVersion',
+      );
       final agent = safariUserAgent(await controller.getUserAgent(), version);
       if (agent != null) await controller.setUserAgent(agent);
+      // New windows open as popup windows, checked by the address rule.
+      _browserChannel.setMethodCallHandler(browserChannelCall);
+      await _browserChannel.invokeMethod<int>('popups', _webViewId);
     }
     await controller.setNavigationDelegate(
       NavigationDelegate(
-        onNavigationRequest: (request) async {
-          if (!request.isMainFrame || request.url == 'about:blank') {
-            return NavigationDecision.navigate;
-          }
-          try {
-            if (!['https', 'http'].contains(Uri.parse(request.url).scheme)) {
-              return NavigationDecision.prevent;
-            }
-            await browserUrl(request.url);
-            return NavigationDecision.navigate;
-          } catch (_) {
-            return NavigationDecision.prevent;
-          }
-        },
+        onNavigationRequest: (request) async =>
+            !request.isMainFrame || await publicPageAllowed(request.url)
+            ? NavigationDecision.navigate
+            : NavigationDecision.prevent,
         onPageStarted: (url) {
           _nativeSelection = null;
           _url = url;
@@ -371,6 +406,20 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   void _fail(Object error) {
     super._fail(error);
     if (_navigation?.isCompleted == false) _navigation!.completeError(error);
+  }
+
+  int get _webViewId =>
+      (controller.platform as WebKitWebViewController).webViewIdentifier;
+
+  @override
+  void dispose() {
+    super.dispose();
+    // Closing the tab closes its popup windows.
+    if (Platform.isMacOS) {
+      _browserChannel
+          .invokeMethod<int>('closePopups', _webViewId)
+          .catchError((_) => 0);
+    }
   }
 
   @override

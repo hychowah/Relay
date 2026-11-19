@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'relay_api.dart';
 import 'workspace.dart';
+import 'workspace_style.dart';
 
 class ConversationHistory extends StatefulWidget {
   const ConversationHistory({
@@ -90,24 +91,6 @@ class _ConversationHistoryState extends State<ConversationHistory> {
   }
 
   Future<void> remove(Conversation conversation) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Move to Trash?'),
-        content: const Text('You can restore this conversation for 24 hours.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Move to Trash'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
     final selected = conversation.id == widget.workspace.conversationId;
     await act(() async {
       await widget.workspace.trashConversation(conversation.id);
@@ -259,22 +242,24 @@ class _ConversationHistoryState extends State<ConversationHistory> {
                                   ),
                                   select: true,
                                 ),
-                          trailing: IconButton(
-                            tooltip: trash
-                                ? 'Restore conversation'
-                                : 'Move conversation to Trash',
-                            icon: Icon(
-                              trash ? Icons.restore : Icons.delete_outline,
-                            ),
-                            onPressed: working
-                                ? null
-                                : () => trash
-                                      ? act(
+                          trailing: trash
+                              ? IconButton(
+                                  tooltip: 'Restore conversation',
+                                  icon: const Icon(Icons.restore),
+                                  onPressed: working
+                                      ? null
+                                      : () => act(
                                           () => widget.workspace
                                               .restoreConversation(item.id),
-                                        )
-                                      : remove(item),
-                          ),
+                                        ),
+                                )
+                              : ConfirmDeleteButton(
+                                  tooltip: 'Move conversation to Trash',
+                                  label: 'Move to Trash',
+                                  onConfirmed: working
+                                      ? null
+                                      : () => remove(item),
+                                ),
                         );
                       },
                     ),

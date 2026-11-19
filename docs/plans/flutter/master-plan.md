@@ -36,22 +36,19 @@ The implemented workflows include the following.
   install/restart. Flutter has its own release channel.
 - Every start restores the previous tabs and views, the draft, the chat panel
   state and the Mac window frame. Tabs are saved as they change.
-- Split view (desktop only), without a preset grid: dropping a tab on a page
-  opens a split tab; the edge nearest the pointer decides where it goes,
-  beside or above or below that pane. Any number of panes, nested both ways; a
-  tab already in the split moves. App tabs stay in the strip: clicking one
-  shows it full screen, and the split tab returns to the split. Closing the
-  split tab ends only the split. A tab can be in several split tabs; closing
-  it takes it out of each, and a split left with one pane closes. Split tabs,
-  their panes and divider positions are saved and restored with the tabs.
-  Drag a divider to resize its two sides (each keeps at least 240 pixels or a
-  fifth of that split, whichever is larger) or double-click it to return to
-  half. Each new split starts at half. The clicked pane is the selected tab
-  for context and agent navigation. Narrow windows show only the selected
-  pane.
+- Split view (desktop only): dropping a tab on a page opens a split tab; the
+  nearest edge places it, and panes nest both ways. Clicking an app's tab
+  shows it full screen; closing the split tab keeps its apps open. Split tabs
+  and divider positions are restored with the tabs. The clicked pane is the
+  selected tab for context and agent navigation. The Flutter README has the
+  details.
 - Night mode: Workspace menu → Appearance offers System, Light and Dark,
   saved per device. Relay's own screens follow it; app and website pages keep
   their own look, and the Mac title bar follows macOS.
+- Newest tab first: a Workspace menu setting, off by default and saved per
+  device. When on, a tab the user clicks or opens, or the agent opens, slides
+  to the left end of the strip. Restoring, closing and split changes keep the
+  order; reduced motion skips the slide.
 - Development bug recording: actions, server exchanges, errors, tabs and a page
   screenshot are saved on the service as a report and read in the Bug reports
   viewer, where each report is marked open or solved, or deleted (see the root
@@ -132,11 +129,9 @@ channel access from sandboxed subframes, PDF rendering in WKWebView and behavior
 on physical Android devices remain unverified. The [platform decision](../prototype/phases/phase-01/decisions/0002-client-platform.md)
 records supported platforms and the Windows constraint.
 
-Pre-commit review fixed update-session loss when the backend is unavailable:
-Reconnect retries unfinished tabs and clears the saved session only on success.
-It also fixed the first snapshot interaction being mistaken for native initial
-context. Focused regressions cover both; they are included in release 0.0.4.
-Native interaction tests were not rerun for this packaging pass.
+Since 0.0.4, Reconnect retries unfinished tabs and clears the saved session
+only on success, and the first snapshot interaction is no longer mistaken for
+native initial context. Focused regressions cover both.
 
 The motion and comment changes passed analysis, 27 Flutter tests,
 nine bridge tests and five Browser tests. An isolated Mac test exercised chat
@@ -168,13 +163,9 @@ Stable retiring the test builds it contains. A real Stable build through the
 tool, into a throwaway release folder, compiled on the Mac without the settings
 copy, recorded its commit, refused a second run and left no folder on the Mac.
 
-Stable 0.0.9 (build 9) is published from `main` with that tool. Beyond 0.0.8 it
-carries everyday restoration, the updater's leftover removal, inline region
-capture, saved screenshots, bug reports and draft conversations. Analysis, 38
-Flutter tests and 82 backend tests passed on its commit. The feed serves the
-release with its commit, the download matches its hash, and publishing retired
-the one listed test build that Stable contains. The native Mac workflow was not
-rerun for 0.0.9, and it has not been installed or reviewed on the Mac.
+Stable 0.0.9 (build 9), published with that tool, added everyday restoration,
+the updater's leftover removal, inline region capture, saved screenshots, bug
+reports and draft conversations. The native Mac workflow was not rerun for it.
 
 On 2026-11-19 four runs of the [UI smoothness suite](../../../flutter/README.md#measure-ui-smoothness)
 on the MacBook Neo (Mac17,5, 60 Hz) held 57–60 fps in every scenario, with at
@@ -205,6 +196,12 @@ The backend at `main` was deployed with 0.0.10 and again with 0.0.13: it offers
 and serves the bug report status routes. The native Mac workflow was not rerun,
 and none of these builds has been reviewed on the Mac.
 
+Browser popups (desktop only): webview_flutter_wkwebview 3.27.2 loaded a
+page's new window into its opener, which broke sign-in popups. A forwarding UI
+delegate in the Mac runner now opens a child popup window. `npm run test:mac --
+popup_windows_test.dart` passed on the Mac with real WKWebViews, and failed with
+the delegate, its dialog forwarding or the popup blocker removed.
+
 ## Next
 
 1. Install Stable 0.0.13 on the Mac. Check that tabs, the chat panel and the
@@ -221,21 +218,14 @@ and none of these builds has been reviewed on the Mac.
 8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.
 9. Restart Stable 0.0.13 on the Mac with a Browser tab and two or more app tabs open. Check that the last active tab shows first, the hidden tabs finish loading (none closed by the 20 s limit), and the chat history appears without waiting for them.
 10. Check `browser.transcript` in WKWebView on the Mac with a short and an hour-long YouTube video, note how long each page takes against the 7-second limit, then ask about one through the real agent. Its page script passed against live YouTube only in headless Chromium with a Safari user agent. In the transcript pane, check on the Mac: opening it loads the hour-long transcript and scrolls smoothly; a drag selection survives clicking into the composer and reaches the question; moving to another video reloads it; a newer selection on the page replaces the transcript's; it stays hidden for other pages and narrow windows, and still loads in chat-only mode. For following, check that the highlight moves while the video plays, moves within a second of a seek, stays still while paused and during an ad, and still follows after moving to another video in the same tab; that scrolling the pane by hand or selecting there stops the scrolling while the highlight keeps moving; and that **Follow video** resumes it without losing the kept selection. An earlier draft of the play-time script, with an extra in-page navigation check, passed live in headless Chromium (play, seek, pause, in-page navigation; no ad appeared); the committed shorter script was not run live, and only a fake page tests the pane.
-11. Try the split view on the Mac with real WKWebViews: dragging a tab over a
-   page, the drop highlight following the nearest edge, three or more panes
-   split both ways, clicking a dimmed pane to select it, pages keeping their
-   state as they move in and out of the split, dragging the side-by-side and
-   stacked dividers (also when the pointer passes over a page),
-   double-clicking them, switching between an app's tab and the split tab,
-   and closing the split tab. The multi-pane split tab is not in
-   Stable yet; analysis and 58 Flutter tests passed on WSL, and only widget
-   tests with fake pages cover it. Sessions saved by 0.0.13 or earlier come
-   back unsplit once, since the saved form changed. A bug report on
-   0.0.12 showed neither page took clicks or scrolling after a split: the
-   selected pane's border took the whole pane's input on macOS. Its outline
-   is now a 2-pixel frame around the page, with nothing drawn over it, in
-   Stable 0.0.13; check that the selected page
-   clicks and scrolls, and that one click on the dimmed pane selects it.
+11. Try the split tab on the Mac with real WKWebViews: the drop highlight at
+   each edge, three or more panes both ways, one click selecting a dimmed
+   pane, pages keeping their state, dragging and double-clicking both kinds of
+   divider (also over a page), switching between an app's tab and the split
+   tab, and closing it. Check that the selected page clicks and scrolls:
+   nothing may be drawn over it (the 0.0.12 bug; its outline has been a
+   2-pixel frame since 0.0.13). Not in Stable yet; 63 Flutter tests pass on
+   WSL with fake pages. Splits saved by 0.0.13 are not restored.
 12. Check night mode on the Mac in Dark and Light, with macOS both light and
    dark: tabs, chat, Markdown replies, dialogs, menus and the empty Browser
    page. Also check that System follows a live macOS switch. Only widget tests
@@ -243,9 +233,16 @@ and none of these builds has been reviewed on the Mac.
    Since 0.0.13 the transcript is an inset card with an accent border and
    muted timestamps. On the Mac, in both modes, check that it reads apart
    from the conversation and the playing paragraph is visible.
-13. Check on the Mac that Analysis Web's **Start analysis** shows its confirm
-   dialog, titled with the page's host, and that OK starts the analysis and
+13. Check on the Mac that Analysis Web, registered as trusted, shows the
+   confirm dialog of **Start analysis**, titled with the page's host, and that OK starts the analysis and
    Cancel does not. Page alert and confirm dialogs are tested only with a faked
    web view.
+14. Try **Newest tab first** on the Mac with real pages open: clicking a tab,
+   a new tab, an app opening and an agent opening a tab should each slide that
+   tab smoothly to the left end while the others move right, also when the
+   strip is scrolled. Only widget tests cover the order and the slide.
+15. In a build with popup windows, sign in to figma.com with **Continue with
+   Google**: the popup shows its host, closes itself and leaves Figma signed in.
+   Also close a tab, and the main window, with a popup open.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.
