@@ -119,10 +119,12 @@ type in it, best first by how often and how recently each was visited; an
 address opened from the address bar counts more than a followed link, and
 pages the agent opens in a Browser tab count as visits too. Arrow
 keys and Enter, or a click, open a suggestion; Enter with none highlighted
-opens what was typed. The history stays on the device, one entry per address,
-and is never sent to the backend or the agent. Pages not visited for 90 days
-drop out, and the trash button beside **Browsing history** in the Workspace
-menu clears it.
+opens what was typed. The history is kept on the Relay server, one entry per
+address, so every Mac using that server shares it. The agent and app
+integrations never get it, and history requests are left out of bug recordings
+(the addresses you type are still recorded as navigation). Pages not visited
+for 90 days drop out, and the trash button beside **Browsing history** in the
+Workspace menu clears it on the server.
 
 On macOS, select page or PDF text and ask a question with page context enabled.
 With a YouTube video open in a Browser tab, ask about the video: the agent reads

@@ -9,7 +9,6 @@ import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'browser_comment.dart';
-import 'browser_history.dart';
 import 'browser_transcript.dart';
 import 'page_surface.dart';
 import 'relay_api.dart';
@@ -115,11 +114,12 @@ Future<Object?> browserChannelCall(MethodCall call) async {
   throw MissingPluginException(call.method);
 }
 
-/// Browser tabs record the pages they show in [history] when it is given.
+/// Browser tabs record the pages they show in the server's browsing
+/// [history] when it is given.
 PageSurface createWebPage(
   PageSpec spec,
   void Function(bool) changed, {
-  BrowserHistory? history,
+  RelayApi? history,
 }) {
   if (spec.report != null) return _ReportPage(spec, changed);
   if (spec.browser) return _BrowserPage(spec, changed, history);
@@ -267,7 +267,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   }
   Completer<void>? _navigation;
   String _title = '', _url = 'about:blank';
-  final BrowserHistory? _history;
+  final RelayApi? _history;
   // The address this tab last counted as a visit. While a load is under way
   // its address may still pass through redirects; only the finished page counts.
   String? _visited;
@@ -390,7 +390,12 @@ class _BrowserPage extends _WebPage with BrowserSurface {
         if (message.message.startsWith('title:')) {
           _title = message.message.substring('title:'.length);
           (_context?['state'] as Map?)?['title'] = _title;
-          _history?.retitle(_url, _title);
+          final visited = _visited;
+          if (visited != null &&
+              _title.isNotEmpty &&
+              _historyAddress(_url) == visited) {
+            _history?.browserTitle(visited, _title);
+          }
           changed(false);
           return;
         }
@@ -433,13 +438,13 @@ class _BrowserPage extends _WebPage with BrowserSurface {
 
   // A reload or #fragment change of the page shown is not another visit.
   void _visit([String? title]) {
-    final address = historyAddress(_url);
+    final address = _historyAddress(_url);
     if (_history == null || address == null) return;
-    if (address == _visited) {
-      if (title != null) _history.retitle(address, title);
-    } else {
+    if (address != _visited) {
       _visited = address;
-      _history.visit(address, title);
+      _history.browserVisit(address, title);
+    } else if (title != null && title.isNotEmpty) {
+      _history.browserTitle(address, title);
     }
   }
 
@@ -760,4 +765,13 @@ class _ReportPage extends _HostedPage {
     'highlightIds': command['highlightIds'] ?? [],
     'viewState': command['viewState'],
   };
+}
+
+/// The address history keeps for [url], without its #fragment, or null for
+/// pages it skips: anything but an HTTP or HTTPS website.
+String? _historyAddress(String url) {
+  final uri = Uri.tryParse(url);
+  if (uri == null || !['http', 'https'].contains(uri.scheme)) return null;
+  if (uri.host.isEmpty) return null;
+  return uri.removeFragment().toString();
 }

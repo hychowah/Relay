@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { Store } from "./store.ts";
 import { createWorkspace, type RegisteredApp } from "./app.ts";
 import { addBugReports } from "./bug-reports.ts";
+import { addBrowserHistory } from "./browser-history.ts";
 import { startProviderGateway } from "./provider-gateway.ts";
 import { liveProviders } from "../shared/provider.ts";
 import { Harness } from "./harness.ts";
@@ -36,6 +37,7 @@ export async function startWorkspace(dataDir: string, apps: () => RegisteredApp[
     },
   );
   addBugReports(workspace.app, resolve(dataDir, "bug-reports"), store);
+  addBrowserHistory(workspace.app, store);
 
   async function startAgent({ mode, model, reasoningEffort, apiKey }: ProviderUpdate) {
     const gateway = mode === "fixture" ? undefined : await startProviderGateway(liveProviders[mode], apiKey!);

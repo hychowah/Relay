@@ -9,7 +9,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:relay_flutter/browser_history.dart';
 import 'package:relay_flutter/main.dart';
 import 'package:relay_flutter/page_surface.dart';
 import 'package:relay_flutter/relay_api.dart';
@@ -146,6 +145,24 @@ class Fixture {
           if (path == '/api/conversations') {
             return reply({'id': 'conversation'});
           }
+          if (path.startsWith('/api/browser-history')) {
+            if (request.method != 'GET') {
+              history.add('${request.method} $path ${request.body}'.trim());
+              return http.Response('', 204);
+            }
+            final q = request.url.queryParameters['q']!;
+            history.add('suggest $q');
+            await holdHistory[q]?.future;
+            final pages = historyPages;
+            if (pages == null) return http.Response('Not found', 404);
+            return reply([
+              for (final page in pages)
+                if ('${page['url']} ${page['title']}'.toLowerCase().contains(
+                  q.toLowerCase(),
+                ))
+                  page,
+            ]);
+          }
           if (path == '/api/bug-reports') {
             if (offline) return http.Response('Offline', 503);
             bugReport = jsonDecode(request.body) as Json;
@@ -188,6 +205,11 @@ class Fixture {
   List<Json> commands = [], messages = [], runs = [];
   Completer<void>? holdSnapshot, holdPages;
   Json? sent, bugReport;
+  // The server's browsing history: its calls, and pages already ranked;
+  // null pages stand for an older backend without history.
+  final history = <String>[];
+  final holdHistory = <String, Completer<void>>{};
+  List<Json>? historyPages;
   http.Response reply(Object data) => http.Response(jsonEncode(data), 200);
   Json command(String id, String target, {String? token}) => {
     'id': id,
@@ -1410,104 +1432,137 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('address bar suggests visited pages once the user types', (
-    tester,
-  ) async {
-    final f = Fixture();
-    await f.w.start();
-    await f.w.openApp(f.w.apps[0]);
-    final page = f.pages.single;
-    final history = BrowserHistory()
-      ..visit('https://example.com/desk', 'Desk')
-      ..visit('https://news.example/', 'News');
-    tester.view.physicalSize = const Size(1400, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(
-      RelayApp(
-        workspace: f.w,
-        saveDraft: (_) async {},
-        browserHistory: history,
-      ),
-    );
-    await tester.pumpAndSettle();
-    final address = find.byWidgetPredicate(
-      (w) =>
-          w is TextField &&
-          w.decoration?.hintText == 'Search or enter a web address',
-    );
-    Future<void> submit() async {
-      await tester.testTextInput.receiveAction(TextInputAction.done);
+  testWidgets(
+    'address bar asks the server for visited pages as the user types',
+    (tester) async {
+      final f = Fixture()
+        ..historyPages = [
+          {'url': 'https://example.com/', 'title': ''},
+          {'url': 'https://example.com/desk', 'title': 'Desk'},
+          {'url': 'https://news.example/', 'title': 'News'},
+        ];
+      await f.w.start();
+      await f.w.openApp(f.w.apps[0]);
+      final page = f.pages.single;
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, saveDraft: (_) async {}, browserHistory: true),
+      );
       await tester.pumpAndSettle();
-    }
+      final address = find.byWidgetPredicate(
+        (w) =>
+            w is TextField &&
+            w.decoration?.hintText == 'Search or enter a web address',
+      );
+      Future<void> type(String text) async {
+        await tester.enterText(address, text);
+        await tester.pumpAndSettle();
+      }
 
-    // The address the app wrote opens nothing, even with the field focused.
-    await tester.tap(address);
-    await tester.pump();
-    expect(find.text('Desk'), findsNothing);
+      Future<void> submit() async {
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+      }
 
-    await tester.enterText(address, 'exa');
-    await tester.pump();
-    expect(find.text('Desk'), findsOneWidget);
-    expect(find.text('News'), findsOneWidget);
-    await submit();
-    expect(page.navigated, ['exa'], reason: 'nothing was highlighted');
-    expect(find.text('Desk'), findsNothing);
-    expect(history.suggest('desk').single.typed, 1);
+      // The address the app wrote asks for nothing, even with the field focused.
+      await tester.tap(address);
+      await tester.pumpAndSettle();
+      expect(f.history, isEmpty);
+      expect(find.text('Desk'), findsNothing);
 
-    await tester.enterText(address, 'exa');
-    await tester.pump();
-    // Below the example.com site row and its desk page.
-    for (var i = 0; i < 3; i++) {
+      // Browsing history stays out of bug recordings.
+      f.w.recorder.start();
+      await type('exa');
+      expect(f.history, ['suggest exa']);
+      expect(find.text('Desk'), findsOneWidget);
+      expect(find.text('News'), findsOneWidget);
+      await submit();
+      expect(page.navigated, ['exa'], reason: 'nothing was highlighted');
+      expect(find.text('Desk'), findsNothing);
+      expect(
+        f.history.last,
+        'POST /api/browser-history/typed {"url":"https://example.com/desk"}',
+      );
+
+      await type('exa');
+      // Below the example.com site row and its desk page.
+      for (var i = 0; i < 3; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      }
+      await submit();
+      expect(page.navigated.last, 'https://news.example/');
+
+      // Typing again returns the highlight to the typed text.
+      await type('exa');
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    }
-    await submit();
-    expect(page.navigated.last, 'https://news.example/');
+      await type('exam');
+      await submit();
+      expect(page.navigated.last, 'exam');
 
-    // Typing again returns the highlight to the typed text.
-    await tester.enterText(address, 'exa');
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.enterText(address, 'exam');
-    await tester.pump();
-    await submit();
-    expect(page.navigated.last, 'exam');
+      // A slow answer for older text never replaces the newer one, and Enter
+      // opens the text in the field while the earlier list is still shown.
+      f.holdHistory['e'] = Completer();
+      await type('e');
+      await type('ne');
+      expect(find.text('News'), findsOneWidget);
+      f.holdHistory['e']!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Desk'), findsNothing);
+      f.holdHistory['new'] = Completer();
+      await type('new');
+      await submit();
+      expect(page.navigated.last, 'new');
+      f.holdHistory['new']!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('News'), findsNothing);
 
-    await tester.enterText(address, 'news');
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pump();
-    expect(find.text('News'), findsNothing);
-    await submit();
-    expect(page.navigated.last, 'news');
+      await type('news');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(find.text('News'), findsNothing);
+      await submit();
+      expect(page.navigated.last, 'news');
 
-    await tester.enterText(address, 'new');
-    await tester.pump();
-    await tester.tap(find.text('News'));
-    await tester.pumpAndSettle();
-    expect(page.navigated.last, 'https://news.example/');
+      await type('ne');
+      await tester.tap(find.text('News'));
+      await tester.pumpAndSettle();
+      expect(page.navigated.last, 'https://news.example/');
 
-    // A new page address replaces typed text without opening suggestions.
-    await tester.enterText(address, 'new');
-    await tester.pump();
-    expect(find.text('News'), findsOneWidget);
-    page.url = 'https://example.com/';
-    f.w.changed();
-    await tester.pumpAndSettle();
-    expect(tester.widget<TextField>(address).controller!.text, page.url);
-    expect(find.text('Desk'), findsNothing);
-    expect(find.text('News'), findsNothing);
+      // A new page address replaces typed text without opening suggestions.
+      await type('ne');
+      expect(find.text('News'), findsOneWidget);
+      final asked = f.history.length;
+      page.url = 'https://example.com/';
+      f.w.changed();
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(address).controller!.text, page.url);
+      expect(find.text('Desk'), findsNothing);
+      expect(find.text('News'), findsNothing);
+      expect(f.history, hasLength(asked));
 
-    await tester.tap(find.byTooltip('Workspace menu'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Clear browsing history'));
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text('Clear'));
-    await tester.pumpAndSettle();
-    expect(history.isEmpty, isTrue);
-    await tester.pumpWidget(const SizedBox());
-  });
+      // An older backend without history shows no suggestions.
+      f.historyPages = null;
+      await type('desk');
+      expect(find.text('Desk'), findsNothing);
+
+      await tester.tap(find.byTooltip('Workspace menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Clear browsing history'));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.text('Clear'));
+      await tester.pumpAndSettle();
+      expect(f.history.last, 'DELETE /api/browser-history');
+      expect(
+        f.w.recorder.events.where((e) => '${e['path']}'.contains('history')),
+        isEmpty,
+      );
+      f.w.recorder.stop();
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets('newest tab first is a saved setting and slides the tab left', (
     tester,

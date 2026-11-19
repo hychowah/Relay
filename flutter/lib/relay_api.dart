@@ -25,7 +25,13 @@ class RelayApi {
   final Uri origin;
   final http.Client _client;
   BugRecorder? recorder;
-  Future<T> _request<T>(String path, [Json? body, String? method]) async {
+  Future<T> _request<T>(
+    String path, [
+    Json? body,
+    String? method,
+    bool private = false,
+  ]) async {
+    final recorder = private ? null : this.recorder;
     final url = origin.resolve(path);
     final request = http.Request(
       method ?? (body == null ? 'GET' : 'POST'),
@@ -212,6 +218,41 @@ class RelayApi {
     }
     return response.bodyBytes;
   }
+
+  // Per-keystroke history calls would flood bug recordings; recordings leave
+  // them out. Recording never holds up or breaks browsing, so failures are
+  // ignored.
+  void browserVisit(String url, String? title) =>
+      _quietly('visit', {'url': url, 'title': ?title});
+  void browserTyped(String url) => _quietly('typed', {'url': url});
+  void browserTitle(String url, String title) =>
+      _quietly('title', {'url': url, 'title': title});
+  void _quietly(String kind, Json body) =>
+      _request<void>('/api/browser-history/$kind', body, 'POST', true).ignore();
+
+  /// The visited pages that best match [text]; none when the request fails.
+  Future<List<({String url, String title})>> browserSuggestions(
+    String text,
+  ) async {
+    final params = Uri(queryParameters: {'q': text});
+    try {
+      final pages = await _request<List>(
+        '/api/browser-history?${params.query}',
+        null,
+        null,
+        true,
+      );
+      return [
+        for (final page in pages.cast<Json>())
+          (url: page['url'] as String, title: page['title'] as String),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> clearBrowserHistory() =>
+      _request('/api/browser-history', null, 'DELETE', true);
 
   Future<void> checkIdleBeforeRestart(
     String deviceId,

@@ -40,6 +40,15 @@ export interface SavedRun extends Run {
   navigationSurface?: { appId: string; context?: SurfaceContext };
 }
 
+/** A Browser page address with its counts; lastVisit is in epoch milliseconds. */
+export interface BrowserPage {
+  url: string;
+  title: string;
+  visits: number;
+  typed: number;
+  lastVisit: number;
+}
+
 export class Store {
   private db: DatabaseSync;
 
@@ -85,6 +94,10 @@ export class Store {
       );
       CREATE TABLE IF NOT EXISTS checkpoints (
         conversation_id TEXT PRIMARY KEY REFERENCES conversations(id), data TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS browser_pages (
+        url TEXT PRIMARY KEY, title TEXT NOT NULL, visits INTEGER NOT NULL, typed INTEGER NOT NULL,
+        last_visit INTEGER NOT NULL
       );
     `);
     const columns = this.db.prepare("PRAGMA table_info(conversations)").all();
@@ -295,6 +308,42 @@ export class Store {
     try {
       this.db.prepare("INSERT OR IGNORE INTO forgotten_memories VALUES (?, ?)").run(row.bot_id ?? "", row.key);
       this.db.prepare("DELETE FROM memories WHERE id = ?").run(id);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  /** Adds one visit, or one address-bar open, to the page's row. Either may arrive first. */
+  countBrowserPage(url: string, at: number, kind: "visit" | "typed", title = "") {
+    const visit = kind === "visit" ? 1 : 0;
+    this.db.prepare(`INSERT INTO browser_pages VALUES (?, ?, ?, ?, ?) ON CONFLICT(url) DO UPDATE SET
+      visits = visits + excluded.visits, typed = typed + excluded.typed,
+      title = CASE excluded.title WHEN '' THEN title ELSE excluded.title END,
+      last_visit = CASE excluded.visits WHEN 0 THEN last_visit ELSE excluded.last_visit END`)
+      .run(url, title, visit, 1 - visit, at);
+  }
+
+  retitleBrowserPage(url: string, title: string) {
+    this.db.prepare("UPDATE browser_pages SET title = ? WHERE url = ?").run(title, url);
+  }
+
+  browserPages(): BrowserPage[] {
+    return this.db.prepare("SELECT url, title, visits, typed, last_visit AS lastVisit FROM browser_pages ORDER BY rowid")
+      .all() as unknown as BrowserPage[];
+  }
+
+  /** Forgets the given pages, or every page. */
+  forgetBrowserPages(urls?: string[]) {
+    if (!urls) {
+      this.db.exec("DELETE FROM browser_pages");
+      return;
+    }
+    const forget = this.db.prepare("DELETE FROM browser_pages WHERE url = ?");
+    this.db.exec("BEGIN");
+    try {
+      for (const url of urls) forget.run(url);
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");

@@ -9,7 +9,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import 'browser_connection.dart';
-import 'browser_history.dart';
 import 'browser_transcript.dart';
 import 'relay_api.dart';
 import 'web_page.dart';
@@ -36,23 +35,20 @@ Future<void> main() async {
   // Open tabs. The key keeps its first name, from when only an update restart
   // saved them, so tabs survive updating from or returning to an older build.
   final session = prefs.getString('updateSession');
-  final history = Platform.isMacOS
-      ? BrowserHistory.decode(
-          prefs.getString('browserHistory'),
-          save: (data) => prefs.setString('browserHistory', data),
-        )
-      : null;
-  final workspace = Workspace(
-    api: RelayApi(
-      Uri.parse(
-        const String.fromEnvironment(
-          'RELAY_URL',
-          defaultValue: 'http://127.0.0.1:3250',
-        ),
+  final api = RelayApi(
+    Uri.parse(
+      const String.fromEnvironment(
+        'RELAY_URL',
+        defaultValue: 'http://127.0.0.1:3250',
       ),
     ),
+  );
+  final browserHistory = Platform.isMacOS;
+  final workspace = Workspace(
+    api: api,
     deviceId: device,
-    pages: (spec, changed) => createWebPage(spec, changed, history: history),
+    pages: (spec, changed) =>
+        createWebPage(spec, changed, history: browserHistory ? api : null),
     conversationId: prefs.getString('conversation'),
     pendingSession: session == null ? null : jsonDecode(session) as Json,
     storeSession: (session) async {
@@ -116,7 +112,7 @@ Future<void> main() async {
         await prefs.setString('themeMode', mode.name);
       },
       onClose: connection.close,
-      browserHistory: history,
+      browserHistory: browserHistory,
     ),
   );
   unawaited(workspace.start());
@@ -136,7 +132,7 @@ class RelayApp extends StatefulWidget {
     this.saveThemeMode,
     this.onClose,
     this.updates,
-    this.browserHistory,
+    this.browserHistory = false,
   });
   final Workspace workspace;
   final String initialDraft;
@@ -150,8 +146,9 @@ class RelayApp extends StatefulWidget {
   final VoidCallback? onClose;
   final AppUpdates? updates;
 
-  /// Desktop only: address-bar suggestions; null leaves them off.
-  final BrowserHistory? browserHistory;
+  /// Desktop only: Browser tabs keep the server's browsing history, and the
+  /// address bar suggests pages from it.
+  final bool browserHistory;
   @override
   State<RelayApp> createState() => _RelayAppState();
 }
@@ -213,7 +210,7 @@ class RelayShell extends StatefulWidget {
     required this.onThemeMode,
     this.onClose,
     this.updates,
-    this.browserHistory,
+    this.browserHistory = false,
   });
   final Workspace workspace;
   final String initialDraft;
@@ -226,7 +223,7 @@ class RelayShell extends StatefulWidget {
   final ValueChanged<ThemeMode> onThemeMode;
   final VoidCallback? onClose;
   final AppUpdates? updates;
-  final BrowserHistory? browserHistory;
+  final bool browserHistory;
   @override
   State<RelayShell> createState() => _RelayShellState();
 }
@@ -643,31 +640,44 @@ class _RelayShellState extends State<RelayShell> {
   Future<void> _go(String text) async {
     final page = w.active?.page;
     await w.navigate(text);
-    if (mounted && w.error == null && page != null) {
-      widget.browserHistory?.typed(page.url);
+    if (mounted && w.error == null && page != null && widget.browserHistory) {
+      w.api.browserTyped(page.url);
+    }
+  }
+
+  Future<void> _clearBrowserHistory() async {
+    try {
+      await w.api.clearBrowserHistory();
+    } catch (e) {
+      w.error = 'Browsing history was not cleared: $e';
+      w.changed();
     }
   }
 
   // Suggestions appear only once the user changes the address the app wrote.
   // Their first option stands for the typed text and is not listed, so Enter
-  // opens what was typed until the arrow keys move to a page.
+  // opens what was typed until the arrow keys move to a page. The server
+  // answers as the user types; RawAutocomplete drops an answer once the text
+  // has changed again, and until then the earlier list stays, so the typed
+  // text option always reads the field rather than the text it was made for.
   Widget _addressField() => RawAutocomplete<_Suggestion>(
     textEditingController: address,
     focusNode: addressFocus,
-    optionsBuilder: (value) {
-      final pages = value.text == lastPageUrl
-          ? const <HistoryEntry>[]
-          : widget.browserHistory?.suggest(value.text) ?? const [];
-      return [
-        if (pages.isNotEmpty) (text: value.text, page: null),
-        for (final page in pages) (text: page.url, page: page),
-      ];
+    optionsBuilder: (value) async {
+      if (!widget.browserHistory ||
+          value.text == lastPageUrl ||
+          value.text.trim().isEmpty) {
+        return const [];
+      }
+      final pages = await w.api.browserSuggestions(value.text);
+      return [if (pages.isNotEmpty) _typedText, ...pages];
     },
-    displayStringForOption: (option) => option.text,
+    displayStringForOption: (option) =>
+        option == _typedText ? address.text : option.url,
     onSelected: (option) {
       pickedSuggestion = true;
       addressFocus.unfocus();
-      _go(option.text);
+      _go(option == _typedText ? address.text : option.url);
     },
     fieldViewBuilder: (context, controller, focus, submit) => Builder(
       builder: (context) => TextField(
@@ -714,16 +724,14 @@ class _RelayShellState extends State<RelayShell> {
                       borderRadius: BorderRadius.circular(7),
                     ),
                     title: Text(
-                      option.page!.title.isEmpty
-                          ? option.text
-                          : option.page!.title,
+                      option.title.isEmpty ? option.url : option.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    subtitle: option.page!.title.isEmpty
+                    subtitle: option.title.isEmpty
                         ? null
                         : Text(
-                            option.text,
+                            option.url,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -1221,7 +1229,7 @@ class _RelayShellState extends State<RelayShell> {
               onChanged: (value) => w.setNewestTabFirst(value!),
               child: const Text('Newest tab first'),
             ),
-            if (widget.browserHistory case final history?)
+            if (widget.browserHistory)
               Padding(
                 padding: const EdgeInsets.only(left: 12),
                 child: Row(
@@ -1236,9 +1244,7 @@ class _RelayShellState extends State<RelayShell> {
                     ConfirmDeleteButton(
                       tooltip: 'Clear browsing history',
                       label: 'Clear',
-                      onConfirmed: history.isEmpty
-                          ? null
-                          : () => setState(history.clear),
+                      onConfirmed: _clearBrowserHistory,
                     ),
                   ],
                 ),
@@ -1891,5 +1897,6 @@ class _NewTabPageState extends State<NewTabPage> {
   }
 }
 
-/// An address-bar suggestion; the one without a page is the typed text.
-typedef _Suggestion = ({String text, HistoryEntry? page});
+/// An address-bar suggestion: a visited page, or [_typedText].
+typedef _Suggestion = ({String url, String title});
+const _Suggestion _typedText = (url: '', title: '');
