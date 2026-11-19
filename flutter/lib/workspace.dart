@@ -34,11 +34,18 @@ class Workspace extends ChangeNotifier {
     required this.pages,
     this.conversationId,
     this.pendingSession,
-    this.sessionRestored,
+    this.storeSession,
     required this.saveConversation,
   });
   Json? pendingSession;
-  final Future<void> Function()? sessionRestored;
+  final Future<void> Function(Json)? storeSession;
+  // Saving waits for the first restore attempt, so a start that is offline or
+  // still opening tabs cannot replace the previous run's tabs. After that the
+  // open tabs are the record: a tab that failed to restore is retried by
+  // Reconnect in this run and is not kept for the next one.
+  late bool _sessionLoaded = pendingSession == null;
+  String? _savedSession;
+  Future<void> _sessionWrite = Future.value();
   final _restoredTabs = <int, WorkspaceTab>{};
   bool _starting = false;
   final RelayApi api;
@@ -76,7 +83,23 @@ class Workspace extends ChangeNotifier {
       snapshot?.runs.where((run) => run.status == 'running').firstOrNull;
   bool get busy => sending || running != null;
   void changed() {
-    if (!_disposed) notifyListeners();
+    if (_disposed) return;
+    unawaited(saveSession());
+    notifyListeners();
+  }
+
+  /// Stores the open tabs when they differ from the last save, and completes
+  /// when the latest save has been written.
+  Future<void> saveSession() {
+    if (_sessionLoaded && storeSession != null) {
+      final current = session();
+      final encoded = jsonEncode(current);
+      if (encoded != _savedSession) {
+        _savedSession = encoded;
+        _sessionWrite = storeSession!(current);
+      }
+    }
+    return _sessionWrite;
   }
 
   Future<void> start() async {
@@ -86,10 +109,13 @@ class Workspace extends ChangeNotifier {
     try {
       error = null;
       await loadConfig();
-      if (pendingSession != null && await restoreSession(pendingSession!)) {
-        await sessionRestored?.call();
-        pendingSession = null;
-        _restoredTabs.clear();
+      if (pendingSession != null) {
+        if (await restoreSession(pendingSession!)) {
+          pendingSession = null;
+          _restoredTabs.clear();
+        }
+        _sessionLoaded = true;
+        await saveSession();
       }
       await refresh();
       _poll = Timer.periodic(
@@ -591,11 +617,20 @@ class Workspace extends ChangeNotifier {
             'appId': tab.appId,
             'url': tab.page?.url,
             'source': tab.report?['source'],
-            'context': tab.page?.context,
+            'context': _viewIntent(tab.page?.context),
           },
         )
         .toList(),
   };
+
+  // The parts of a page's context that reopen its view. The rest, such as
+  // selected text, is not kept.
+  static Json? _viewIntent(Json? context) => context == null
+      ? null
+      : {
+          for (final key in ['viewId', 'state', 'targetIds', 'source'])
+            if (context[key] != null) key: context[key],
+        };
 
   Future<bool> restoreSession(Json saved) async {
     final previousActive = active;
@@ -629,19 +664,16 @@ class Workspace extends ChangeNotifier {
             ? await openSource(item['source'] as Json)
             : await openApp(app);
         if (tab.error != null) throw StateError(tab.error!);
-        if (tab.isBrowser &&
-            item['url'] != null &&
-            item['url'] != 'about:blank') {
-          await tab.page!.browser!.navigate(item['url'] as String);
+        if (tab.isBrowser) {
+          // A Browser tab that never left its start page has nothing to reopen.
+          if (item['url'] != null && item['url'] != 'about:blank') {
+            await tab.page!.browser!.navigate(item['url'] as String);
+          }
         } else if (tab.report == null && item['context'] != null) {
-          final context = item['context'] as Json;
           final result = await tab.page!.presentOnCurrentView({
             'id': _uuid.v4(),
             'kind': 'present',
-            'intent': {
-              for (final key in ['viewId', 'state', 'targetIds', 'source'])
-                if (context[key] != null) key: context[key],
-            },
+            'intent': _viewIntent(item['context'] as Json),
           });
           if (result['status'] != 'applied') {
             throw StateError(
