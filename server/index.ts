@@ -1,16 +1,11 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { resolve } from "node:path";
-import { readFileSync } from "node:fs";
 import { startWorkspace } from "./runtime.ts";
-import { HttpIntegration, type AppRegistration } from "./integrations/http.ts";
-import type { RegisteredApp } from "./app.ts";
+import { appRegistry } from "./app-registry.ts";
 
 const dataDir = resolve(process.env.RELAY_DATA_DIR ?? "runtime");
-const apps: RegisteredApp[] = process.env.RELAY_APPS_FILE
-  ? (JSON.parse(readFileSync(process.env.RELAY_APPS_FILE, "utf8")) as AppRegistration[])
-      .map(HttpIntegration.register)
-  : [];
+const apps = appRegistry(process.env.RELAY_APPS_FILE);
 const workspace = await startWorkspace(dataDir, apps);
 workspace.app.use("/*", serveStatic({ root: "./dist" }));
 workspace.app.get("/", serveStatic({ path: "./dist/index.html" }));

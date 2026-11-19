@@ -14,9 +14,18 @@ are HTTP(S) origins. `serverUrl` is reachable from the service; `browserUrl`
 defaults to it and must be reachable from the browser. App and Relay origins must
 differ. Each app permits its configured Relay parent origins.
 
-An app that is down when Relay starts is treated as v2 and works when next
-opened or used. Clients read app details once at startup, so its Library control
-appears after the client reloads; a v1-only app also needs that reload.
+The service reads the file again whenever it needs the app list, so added,
+changed and removed entries apply without a restart, including the app list
+the agent sees on its next step. Unchanged entries keep running. If the file
+cannot be read or has an invalid entry, the previous list stays in use and the
+service log says why. A tab already open on an app whose entry changes keeps
+its old view until the tab is reopened. Flutter refreshes its app list when the app picker, App
+library or Bots dialog opens; open tabs stay. The browser page reads apps when
+it loads.
+
+An app that is down when it is registered is treated as v2 and works when next
+opened or used. A v1-only app, and its Library control, appear once its
+manifest has loaded and the client next reads the app list.
 
 Native apps use an iframe sandbox by default. An operator can set
 `trustedNative: true` for their trusted app to omit that sandbox and retain native

@@ -90,7 +90,7 @@ class Fixture {
           final path = request.url.path;
           if (path == '/api/config') {
             if (offline) return http.Response('Offline', 503);
-            return reply({'apps': apps});
+            return reply({'apps': configApps});
           }
           if (path == '/api/bots') return reply([]);
           if (path.contains('/view')) {
@@ -141,6 +141,7 @@ class Fixture {
     );
   }
   bool offline = false, failRoomRestore = false;
+  List<Json> configApps = [...apps];
   late Workspace w;
   final pages = <FakePage>[];
   final acks = <Json>[];
@@ -550,6 +551,33 @@ void main() {
       await f.w.start();
       await tester.pump();
       expect(find.text('Room layout'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets(
+    'the app picker shows current registrations and keeps open tabs',
+    (tester) async {
+      final f = Fixture();
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, saveDraft: (_) async {}),
+      );
+      await f.w.start();
+      final room = await f.w.openApp(f.w.apps[1]);
+      f.configApps = [
+        apps[0],
+        {'id': 'garden', 'name': 'Garden', 'protocolVersion': 2},
+      ];
+      f.w.newTab();
+      await tester.pump();
+      await tester.pump();
+      Finder picker(String name) => find.descendant(
+        of: find.byType(NewTabPage),
+        matching: find.text(name),
+      );
+      expect(picker('Garden'), findsOneWidget);
+      expect(picker('Room layout'), findsNothing);
+      expect(f.w.tabs, contains(room));
+      expect((room.page as FakePage).disposed, isFalse);
       await tester.pumpWidget(const SizedBox());
     },
   );

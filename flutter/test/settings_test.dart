@@ -75,6 +75,58 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  testWidgets('bot editor saves only apps that are still registered', (
+    tester,
+  ) async {
+    Json? saved;
+    final w = Workspace(
+      api: RelayApi(
+        Uri.parse('http://localhost'),
+        client: MockClient((request) async {
+          final path = request.url.path;
+          if (path == '/api/config') {
+            return http.Response(
+              jsonEncode({
+                'apps': [
+                  {'id': 'notes', 'name': 'Notes'},
+                ],
+                'provider': {},
+              }),
+              200,
+            );
+          }
+          if (request.method == 'POST') {
+            saved = jsonDecode(request.body) as Json;
+          }
+          return http.Response(path == '/api/bots' ? '[]' : '{}', 200);
+        }),
+      ),
+      deviceId: 'test',
+      pages: (_, _) => throw UnimplementedError(),
+      saveConversation: (_) async {},
+    );
+    addTearDown(w.dispose);
+    await w.refreshApps();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: BotEditor(
+            workspace: w,
+            bot: {
+              'id': 'helper',
+              'name': 'Helper',
+              'objective': 'Summarize',
+              'scope': '',
+              'appIds': ['notes', 'removed'],
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Save bot'));
+    await tester.pumpAndSettle();
+    expect(saved?['appIds'], ['notes']);
+  });
   testWidgets('memory editor keeps scope and saves an edited entry', (
     tester,
   ) async {

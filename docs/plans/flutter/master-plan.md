@@ -180,5 +180,6 @@ covers the Flutter shell. Final screen presentation and real pages remain unmeas
    saving and viewing; native screenshots and the live service's report folder are unverified.
 7. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 8. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
+9. Deploy the backend and a client build with apps-file reloading, then check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this; the Mac and the live service are unverified.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

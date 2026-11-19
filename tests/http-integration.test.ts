@@ -200,7 +200,7 @@ test("a fourth unrelated native app works through registration and generic works
     description: "Registered fixture",
     integration: adapter,
   }));
-  const workspace = createWorkspace(store, apps, {
+  const workspace = createWorkspace(store, () => apps, {
     mode: "fixture",
     model: "scripted",
     configured: true,
@@ -256,7 +256,7 @@ test("v2 home views and saved v1 evidence use their respective browser bridges",
   fixture.state.manifest.version = 2;
   const store = new Store(":memory:");
   const adapter = new HttpIntegration({ id: "garden", name: "Garden ledger", serverUrl: fixture.origin, browserUrl: "https://garden.test" });
-  const workspace = createWorkspace(store, [{ id: "garden", name: "Garden", description: "Seeds", protocolVersion: 2, capabilities: { search: true }, integration: adapter }], {
+  const workspace = createWorkspace(store, () => [{ id: "garden", name: "Garden", description: "Seeds", protocolVersion: 2, capabilities: { search: true }, integration: adapter }], {
     mode: "fixture", model: "scripted", configured: true,
   });
   try {

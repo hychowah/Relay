@@ -10,7 +10,7 @@ import { Store } from "../server/store.ts";
 test("bug reports save the recording with the server's conversation and without API keys, then list and open", async () => {
   const dir = await mkdtemp(join(tmpdir(), "relay-bug-reports-"));
   const store = new Store(":memory:");
-  const workspace = createWorkspace(store, [], { mode: "fixture", model: "fixture", configured: true });
+  const workspace = createWorkspace(store, () => [], { mode: "fixture", model: "fixture", configured: true });
   addBugReports(workspace.app, dir, store);
   const conversation = store.createConversation("Desk question", "session-1", null);
   const post = (body: unknown) => workspace.app.request("/api/bug-reports", {

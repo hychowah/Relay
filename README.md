@@ -49,7 +49,8 @@ Choose **+ → Room layout** and send a message.
 
 **Connect your own app.** Implement the [protocol](docs/integration.md) in the
 app, copy `apps.example.json`, set the app's address, and start Relay with
-`RELAY_APPS_FILE` pointing at your copy.
+`RELAY_APPS_FILE` pointing at your copy. Later edits to that file apply
+without a restart; reload the page to see them.
 
 **Use a real model.** Open **Model connection** in the page and add a Claude or
 DeepSeek key, or set a key file as shown in `.env.example`. By default live

@@ -16,8 +16,8 @@ async function until(condition: () => boolean) {
 
 function setup(t: TestContext) {
   const store = new Store(":memory:");
-  const apps = ["notes", "research"].map((appId) => ({
-    id: appId, name: appId, description: "Synthetic app",
+  const app = (appId: string) => ({
+    id: appId, name: appId, description: "Synthetic app", instructions: `Read ${appId} fixtures.`,
     integration: {
       async search() { return [{ appId, resourceId: "fixture", title: "Fixture", sourceUrl: "https://example.test/fixture" }]; },
       async read() { return {
@@ -25,8 +25,9 @@ function setup(t: TestContext) {
         sections: [{ id: "content", title: "Content", text: "Synthetic report." }],
       }; },
     },
-  }));
-  const workspace = createWorkspace(store, apps, { mode: "fixture", model: "fixture", configured: true });
+  });
+  const apps = [app("notes"), app("research")];
+  const workspace = createWorkspace(store, () => apps, { mode: "fixture", model: "fixture", configured: true });
   const states = new Map<string, Inspection>();
   const prompts: Array<{ sessionId: string; text: string; context?: ViewContext; appContext?: AppContext }> = [];
   const harness: AgentHarness = {
@@ -77,8 +78,22 @@ function setup(t: TestContext) {
     state.status = "idle";
     await until(() => !store.activeRun(id));
   };
-  return { workspace, store, post, snapshot, bot, conversation, send, finish, prompts };
+  return { workspace, store, post, snapshot, bot, conversation, send, finish, prompts, apps, app };
 }
+
+test("a running conversation and new clients see the current registrations", async (t) => {
+  const { workspace, conversation, send, apps, app } = setup(t);
+  const chat = await conversation();
+  const { sessionId } = await send(chat.id, "Which apps can you use?", { appContext: { appId: "research" } });
+  assert.equal(workspace.agentContext(sessionId)!.activeAppInstructions, "Read research fixtures.");
+  const ids = async () => ((await (await workspace.app.request("/api/config")).json()).apps as Array<{ id: string }>).map(({ id }) => id);
+  apps.push(app("garden"));
+  apps.splice(0, 1);
+  assert.deepEqual(workspace.agentContext(sessionId)!.allowedApps.map(({ id }) => id), ["research", "garden"]);
+  assert.deepEqual(await ids(), ["research", "garden"]);
+  assert.equal((await workspace.app.request("/api/apps/notes/read?resourceId=fixture")).status, 404);
+  assert.equal((await workspace.app.request("/api/apps/garden/read?resourceId=fixture")).status, 200);
+});
 
 test("normal chats and bot chats retain session identity and enforce the current bot's app scope", async (t) => {
   const { workspace, store, post, snapshot, bot, conversation, send, prompts } = setup(t);

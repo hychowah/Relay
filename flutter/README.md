@@ -44,7 +44,9 @@ using Relay's usual registration format. For example:
 
 Each app must allow the Flutter Relay origin in its own launcher. Preserve its
 existing origins when adding one. Set `trustedNative` only for an app you trust.
-Restart the Flutter backend and reopen Flutter after changing registrations.
+The backend applies changes to that file without a restart; the app picker,
+App library and Bots dialog show them when they open. See
+[Registration](../docs/integration.md#registration).
 
 A Mac build needs full Xcode and Flutter's macOS plugin toolchain. Android needs
 its SDK/device. The official WebView plugin does not support Linux, so WSL tests

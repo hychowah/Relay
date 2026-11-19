@@ -139,7 +139,7 @@ test("provider HTTP settings redact keys and enforce origin, active-work and app
   let running = false;
   const workspace = createWorkspace(
     store,
-    [],
+    () => [],
     { mode: "fixture", model: "fixture", configured: true },
     {
       get: (mode) => settings.status(mode),
