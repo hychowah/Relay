@@ -326,7 +326,7 @@ Defer read/write effects to the first write, access scopes and versioned migrati
 
 The [Flutter handoff](../flutter/master-plan.md#next) covers installing and reviewing Stable 0.0.13 on the Mac, with its checks for tab restore, the transcript pane and the app list refresh, and the split view. It also lists the Mac check for the capture animation, which is not in Stable yet. On the next preview teardown, use the [worktree removal command](../../../flutter/README.md#publish-a-worktree-test-build).
 
-The [coding sessions plan](../coding-sessions/master-plan.md) covers handing requests to Claude Code or Codex sessions through a coding app in its own project.
+The [coding sessions plan](../coding-sessions/master-plan.md) covers handing requests to Claude Code or Codex sessions through a coding app in its own project. Its Next section holds the current step.
 
 1. Verify a sourced two-app question on the user's saved records from the Mac.
    Both stock adapters have run as local services, registered with the live
