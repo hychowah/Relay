@@ -13,7 +13,6 @@ import 'package:relay_flutter/page_surface.dart';
 import 'package:relay_flutter/relay_api.dart';
 import 'package:relay_flutter/transcript_pane.dart';
 import 'package:relay_flutter/workspace.dart';
-import 'package:relay_flutter/workspace_style.dart';
 import 'package:relay_flutter/region_capture.dart';
 import 'package:relay_flutter/workspace_tabs.dart';
 
@@ -1012,6 +1011,44 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('appearance follows the system until a theme is chosen', (
+    tester,
+  ) async {
+    final f = Fixture();
+    final saved = <ThemeMode>[];
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final dispatcher = tester.binding.platformDispatcher;
+    addTearDown(dispatcher.clearPlatformBrightnessTestValue);
+    await tester.pumpWidget(
+      RelayApp(
+        workspace: f.w,
+        saveThemeMode: (mode) async => saved.add(mode),
+        saveDraft: (_) async {},
+      ),
+    );
+    await tester.pumpAndSettle();
+    Brightness shown() =>
+        Theme.of(tester.element(find.byType(RelayShell))).brightness;
+    expect(shown(), Brightness.light);
+    dispatcher.platformBrightnessTestValue = Brightness.dark;
+    await tester.pumpAndSettle();
+    expect(shown(), Brightness.dark);
+
+    await tester.tap(find.byTooltip('Workspace menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Appearance'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Light'));
+    await tester.pumpAndSettle();
+    expect(saved, [ThemeMode.light]);
+    expect(shown(), Brightness.light);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
     'deleting a tab during insertion keeps the next tab interactive',
     (tester) async {
@@ -1241,6 +1278,9 @@ void main() {
                   as BoxDecoration)
               .color;
       final pane = tester.getRect(find.byType(TranscriptPane));
+      final tint = Theme.of(tester.element(find.byType(TranscriptPane)))
+          .colorScheme
+          .primaryContainer;
       bool shown(int i) => pane.contains(tester.getTopLeft(part(i)));
       final scroll = tester
           .state<ScrollableState>(

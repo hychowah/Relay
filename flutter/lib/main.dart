@@ -95,13 +95,19 @@ Future<void> main() async {
       saveDraft: (text) async {
         await prefs.setString('draft', text);
       },
+      initialThemeMode:
+          ThemeMode.values.asNameMap()[prefs.getString('themeMode')] ??
+          ThemeMode.system,
+      saveThemeMode: (mode) async {
+        await prefs.setString('themeMode', mode.name);
+      },
       onClose: connection.close,
     ),
   );
   unawaited(workspace.start());
 }
 
-class RelayApp extends StatelessWidget {
+class RelayApp extends StatefulWidget {
   const RelayApp({
     super.key,
     required this.workspace,
@@ -111,6 +117,8 @@ class RelayApp extends StatelessWidget {
     this.initialChatOpen = true,
     this.saveChatOpen,
     required this.saveDraft,
+    this.initialThemeMode = ThemeMode.system,
+    this.saveThemeMode,
     this.onClose,
     this.updates,
   });
@@ -121,13 +129,23 @@ class RelayApp extends StatelessWidget {
   final bool initialChatOpen;
   final Future<void> Function(bool)? saveChatOpen;
   final Future<void> Function(String) saveDraft;
+  final ThemeMode initialThemeMode;
+  final Future<void> Function(ThemeMode)? saveThemeMode;
   final VoidCallback? onClose;
   final AppUpdates? updates;
+  @override
+  State<RelayApp> createState() => _RelayAppState();
+}
+
+class _RelayAppState extends State<RelayApp> {
+  late ThemeMode themeMode = widget.initialThemeMode;
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Relay Flutter — experiment',
     debugShowCheckedModeBanner: false,
-    theme: workspaceTheme(),
+    theme: workspaceTheme(Brightness.light),
+    darkTheme: workspaceTheme(Brightness.dark),
+    themeMode: themeMode,
     builder: (context, child) => Theme(
       data: MediaQuery.sizeOf(context).width < 900
           ? Theme.of(context).copyWith(
@@ -143,15 +161,20 @@ class RelayApp extends StatelessWidget {
       child: child!,
     ),
     home: RelayShell(
-      workspace: workspace,
-      initialDraft: initialDraft,
-      initialChatWidth: initialChatWidth,
-      saveChatWidth: saveChatWidth,
-      initialChatOpen: initialChatOpen,
-      saveChatOpen: saveChatOpen,
-      saveDraft: saveDraft,
-      onClose: onClose,
-      updates: updates,
+      workspace: widget.workspace,
+      initialDraft: widget.initialDraft,
+      initialChatWidth: widget.initialChatWidth,
+      saveChatWidth: widget.saveChatWidth,
+      initialChatOpen: widget.initialChatOpen,
+      saveChatOpen: widget.saveChatOpen,
+      saveDraft: widget.saveDraft,
+      themeMode: themeMode,
+      onThemeMode: (mode) {
+        setState(() => themeMode = mode);
+        widget.saveThemeMode?.call(mode);
+      },
+      onClose: widget.onClose,
+      updates: widget.updates,
     ),
   );
 }
@@ -166,6 +189,8 @@ class RelayShell extends StatefulWidget {
     this.initialChatOpen = true,
     this.saveChatOpen,
     required this.saveDraft,
+    required this.themeMode,
+    required this.onThemeMode,
     this.onClose,
     this.updates,
   });
@@ -176,6 +201,8 @@ class RelayShell extends StatefulWidget {
   final bool initialChatOpen;
   final Future<void> Function(bool)? saveChatOpen;
   final Future<void> Function(String) saveDraft;
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeMode;
   final VoidCallback? onClose;
   final AppUpdates? updates;
   @override
@@ -183,6 +210,7 @@ class RelayShell extends StatefulWidget {
 }
 
 class _RelayShellState extends State<RelayShell> {
+  ColorScheme get colors => Theme.of(context).colorScheme;
   Workspace get w => widget.workspace;
   late final TextEditingController draft;
   final address = TextEditingController();
@@ -594,8 +622,8 @@ class _RelayShellState extends State<RelayShell> {
             : DecoratedBox(
                 key: ValueKey(left ? 'drop-left' : 'drop-right'),
                 decoration: BoxDecoration(
-                  color: accent.withValues(alpha: .12),
-                  border: Border.all(color: accent, width: 2),
+                  color: colors.primary.withValues(alpha: .12),
+                  border: Border.all(color: colors.primary, width: 2),
                 ),
               ),
       ),
@@ -667,7 +695,7 @@ class _RelayShellState extends State<RelayShell> {
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           border: Border.all(
-                            color: accent.withValues(alpha: .45),
+                            color: colors.primary.withValues(alpha: .45),
                             width: 2,
                           ),
                         ),
@@ -679,7 +707,9 @@ class _RelayShellState extends State<RelayShell> {
                         w.recorder.action('select tab', {'tab': tab.title});
                         w.select(tab);
                       },
-                      child: ColoredBox(color: ink.withValues(alpha: .04)),
+                      child: ColoredBox(
+                        color: colors.onSurface.withValues(alpha: .04),
+                      ),
                     ),
             ),
         ],
@@ -709,7 +739,7 @@ class _RelayShellState extends State<RelayShell> {
           );
         }),
         onHorizontalDragEnd: (_) => widget.saveChatWidth?.call(chatWidth),
-        child: const ColoredBox(color: line),
+        child: ColoredBox(color: colors.outline),
       ),
     );
     return TweenAnimationBuilder<double>(
@@ -801,9 +831,9 @@ class _RelayShellState extends State<RelayShell> {
   Widget _toolbar() => Container(
     height: 48,
     padding: const EdgeInsets.symmetric(horizontal: 10),
-    decoration: const BoxDecoration(
-      color: canvas,
-      border: Border(bottom: BorderSide(color: line)),
+    decoration: BoxDecoration(
+      color: colors.surfaceContainerHighest,
+      border: Border(bottom: BorderSide(color: colors.outline)),
     ),
     child: Row(
       children: [
@@ -854,7 +884,10 @@ class _RelayShellState extends State<RelayShell> {
           onPressed: () => _menu('record'),
           icon: w.recorder.recording
               ? const Icon(Icons.fiber_manual_record, color: Colors.red)
-              : const Icon(Icons.fiber_manual_record_outlined, color: muted),
+              : Icon(
+                  Icons.fiber_manual_record_outlined,
+                  color: colors.onSurfaceVariant,
+                ),
         ),
         IconButton(
           tooltip: 'Toggle chat',
@@ -865,7 +898,7 @@ class _RelayShellState extends State<RelayShell> {
           }),
           icon: Icon(
             Icons.view_sidebar_outlined,
-            color: chatOpen ? accent : muted,
+            color: chatOpen ? colors.primary : colors.onSurfaceVariant,
           ),
         ),
         MenuAnchor(
@@ -893,6 +926,25 @@ class _RelayShellState extends State<RelayShell> {
               child: Divider(),
             ),
             _menuItem('chat', 'Chat only', Icons.chat_bubble_outline_rounded),
+            SubmenuButton(
+              leadingIcon: const Icon(Icons.contrast_rounded, size: 17),
+              menuChildren: [
+                for (final (mode, label) in const [
+                  (ThemeMode.system, 'System'),
+                  (ThemeMode.light, 'Light'),
+                  (ThemeMode.dark, 'Dark'),
+                ])
+                  MenuItemButton(
+                    leadingIcon: Icon(
+                      widget.themeMode == mode ? Icons.check : null,
+                      size: 16,
+                    ),
+                    onPressed: () => widget.onThemeMode(mode),
+                    child: Text(label),
+                  ),
+              ],
+              child: const Text('Appearance'),
+            ),
             if (widget.updates != null)
               _menuItem(
                 'updates',
@@ -923,13 +975,13 @@ class _RelayShellState extends State<RelayShell> {
   );
 
   Widget _chat(bool desktop) => Material(
-    color: Colors.white,
+    color: colors.surface,
     child: Column(
       children: [
         Container(
           padding: const EdgeInsets.fromLTRB(18, 12, 10, 12),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: line)),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: colors.outline)),
           ),
           child: Row(
             children: [
@@ -951,7 +1003,10 @@ class _RelayShellState extends State<RelayShell> {
                       w.activeBot?['name'] as String? ?? 'Personal workspace',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11, color: muted),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: colors.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -1037,10 +1092,10 @@ class _RelayShellState extends State<RelayShell> {
                           child: CircularProgressIndicator(strokeWidth: 1.5),
                         )
                       else
-                        const Icon(
+                        Icon(
                           Icons.check_circle_outline,
                           size: 14,
-                          color: accent,
+                          color: colors.primary,
                         ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -1048,7 +1103,10 @@ class _RelayShellState extends State<RelayShell> {
                           w.status ?? 'Working…',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: muted),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colors.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     ],
@@ -1094,8 +1152,8 @@ class _RelayShellState extends State<RelayShell> {
       if (pane != null)
         Expanded(
           child: DecoratedBox(
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: line)),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: colors.outline)),
             ),
             child: TranscriptPane(
               key: ValueKey(pane),
@@ -1115,9 +1173,9 @@ class _RelayShellState extends State<RelayShell> {
     padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
     child: Container(
       decoration: BoxDecoration(
-        color: canvas,
+        color: colors.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: line),
+        border: Border.all(color: colors.outline),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1143,7 +1201,9 @@ class _RelayShellState extends State<RelayShell> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: w.includeContext ? tint : Colors.transparent,
+                      color: w.includeContext
+                          ? colors.primaryContainer
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Row(
@@ -1154,7 +1214,7 @@ class _RelayShellState extends State<RelayShell> {
                               ? Icons.check_circle_outline
                               : Icons.add_circle_outline,
                           size: 14,
-                          color: accent,
+                          color: colors.primary,
                         ),
                         const SizedBox(width: 6),
                         Flexible(
@@ -1168,7 +1228,10 @@ class _RelayShellState extends State<RelayShell> {
                             },
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 11, color: accent),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: colors.primary,
+                            ),
                           ),
                         ),
                       ],
@@ -1245,7 +1308,7 @@ class _RelayShellState extends State<RelayShell> {
                     child: TextButton(
                       onPressed: () => _menu('provider'),
                       style: TextButton.styleFrom(
-                        foregroundColor: muted,
+                        foregroundColor: colors.onSurfaceVariant,
                         padding: const EdgeInsets.symmetric(horizontal: 6),
                       ),
                       child: Text(
@@ -1274,7 +1337,7 @@ class _RelayShellState extends State<RelayShell> {
                           ? controller.close()
                           : controller.open(),
                       style: TextButton.styleFrom(
-                        foregroundColor: muted,
+                        foregroundColor: colors.onSurfaceVariant,
                         padding: const EdgeInsets.symmetric(horizontal: 6),
                       ),
                       child: Row(
@@ -1324,8 +1387,8 @@ class _RelayShellState extends State<RelayShell> {
                   tooltip: w.busy ? 'Stop response' : 'Send message',
                   onPressed: w.busy ? w.stop : _send,
                   style: IconButton.styleFrom(
-                    backgroundColor: ink,
-                    foregroundColor: Colors.white,
+                    backgroundColor: colors.onSurface,
+                    foregroundColor: colors.surface,
                   ),
                   icon: Icon(
                     w.busy ? Icons.stop_rounded : Icons.arrow_upward_rounded,
@@ -1356,6 +1419,7 @@ class NewTabPage extends StatefulWidget {
 }
 
 class _NewTabPageState extends State<NewTabPage> {
+  ColorScheme get colors => Theme.of(context).colorScheme;
   String search = '';
   @override
   void initState() {
@@ -1386,13 +1450,13 @@ class _NewTabPageState extends State<NewTabPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'YOUR WORKSPACE',
                   style: TextStyle(
                     fontSize: 11,
                     letterSpacing: 1.5,
                     fontWeight: FontWeight.w600,
-                    color: muted,
+                    color: colors.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -1401,17 +1465,20 @@ class _NewTabPageState extends State<NewTabPage> {
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 10),
-                const Text(
+                Text(
                   'Your apps, connected by one conversation.',
-                  style: TextStyle(fontSize: 14, color: muted),
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: colors.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 28),
                 TextField(
                   autofocus: true,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Search apps',
-                    prefixIcon: Icon(Icons.search_rounded, size: 19),
-                    fillColor: Colors.white,
+                    prefixIcon: const Icon(Icons.search_rounded, size: 19),
+                    fillColor: colors.surface,
                   ),
                   onChanged: (value) => setState(() => search = value),
                   onSubmitted: (_) {
@@ -1419,13 +1486,13 @@ class _NewTabPageState extends State<NewTabPage> {
                   },
                 ),
                 const SizedBox(height: 28),
-                const Text(
+                Text(
                   'APPS',
                   style: TextStyle(
                     fontSize: 10,
                     letterSpacing: 1.2,
                     fontWeight: FontWeight.w600,
-                    color: muted,
+                    color: colors.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -1433,10 +1500,10 @@ class _NewTabPageState extends State<NewTabPage> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: Material(
-                      color: Colors.white,
+                      color: colors.surface,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
-                        side: const BorderSide(color: line),
+                        side: BorderSide(color: colors.outline),
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: InkWell(
@@ -1449,7 +1516,7 @@ class _NewTabPageState extends State<NewTabPage> {
                                 width: 40,
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color: tint,
+                                  color: colors.primaryContainer,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Icon(
@@ -1457,7 +1524,7 @@ class _NewTabPageState extends State<NewTabPage> {
                                       ? Icons.language_rounded
                                       : Icons.grid_view_rounded,
                                   size: 20,
-                                  color: accent,
+                                  color: colors.primary,
                                 ),
                               ),
                               const SizedBox(width: 16),
@@ -1474,9 +1541,9 @@ class _NewTabPageState extends State<NewTabPage> {
                                     const SizedBox(height: 3),
                                     Text(
                                       app.description ?? '',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 12,
-                                        color: muted,
+                                        color: colors.onSurfaceVariant,
                                       ),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
@@ -1493,9 +1560,9 @@ class _NewTabPageState extends State<NewTabPage> {
                     ),
                   ),
                 if (matches.isEmpty)
-                  const Text(
+                  Text(
                     'No matching apps.',
-                    style: TextStyle(color: muted),
+                    style: TextStyle(color: colors.onSurfaceVariant),
                   ),
               ],
             ),

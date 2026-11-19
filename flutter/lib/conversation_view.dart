@@ -148,6 +148,7 @@ class ConversationMessages extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final snapshot = workspace.snapshot;
     if (snapshot == null) return _welcome(context);
     final forwards = snapshot.forwards;
@@ -223,7 +224,7 @@ class ConversationMessages extends StatelessWidget {
                 Container(
                   margin: const EdgeInsets.only(bottom: 18),
                   decoration: BoxDecoration(
-                    border: Border.all(color: line),
+                    border: Border.all(color: colors.outline),
                     borderRadius: BorderRadius.circular(9),
                   ),
                   child: ExpansionTile(
@@ -233,23 +234,26 @@ class ConversationMessages extends StatelessWidget {
                           ? Icons.more_horiz
                           : Icons.check_circle_outline,
                       size: 16,
-                      color: accent,
+                      color: colors.primary,
                     ),
                     title: Text(
                       latestRun?.status == 'running'
                           ? 'Working in your apps'
                           : 'Activity',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: muted,
+                        color: colors.onSurfaceVariant,
                       ),
                     ),
                     subtitle: tools.isEmpty
                         ? null
                         : Text(
                             '${tools.length} tool ${tools.length == 1 ? 'call' : 'calls'}',
-                            style: const TextStyle(fontSize: 11, color: muted),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: colors.onSurfaceVariant,
+                            ),
                           ),
                     children: [
                       ...tools.map(
@@ -264,7 +268,7 @@ class ConversationMessages extends StatelessWidget {
                               width: double.infinity,
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: canvas,
+                                color: colors.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: SelectableText(
@@ -301,15 +305,15 @@ class ConversationMessages extends StatelessWidget {
                   .where((m) => m.role != 'user')
                   .map((m) => _message(context, m, citations, commands)),
               if (sources.isNotEmpty) ...[
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 8),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
                     'SOURCES',
                     style: TextStyle(
                       fontSize: 10,
                       letterSpacing: 1,
                       fontWeight: FontWeight.w600,
-                      color: muted,
+                      color: colors.onSurfaceVariant,
                     ),
                   ),
                 ),
@@ -324,8 +328,8 @@ class ConversationMessages extends StatelessWidget {
                             constraints: const BoxConstraints(maxWidth: 260),
                             child: OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: muted,
-                                side: const BorderSide(color: line),
+                                foregroundColor: colors.onSurfaceVariant,
+                                side: BorderSide(color: colors.outline),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 10,
                                   vertical: 10,
@@ -366,8 +370,8 @@ class ConversationMessages extends StatelessWidget {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: r.status == 'failed'
-                        ? const Color(0xfffff1ed)
-                        : canvas,
+                        ? colors.errorContainer
+                        : colors.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(switch (r.status) {
@@ -411,54 +415,65 @@ class ConversationMessages extends StatelessWidget {
     );
   }
 
-  Widget _welcome(BuildContext context) => LayoutBuilder(
-    builder: (context, size) => SingleChildScrollView(
-      padding: const EdgeInsets.all(28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(height: size.maxHeight > 360 ? 50 : 8),
-          const RelayMark(size: 36),
-          const SizedBox(height: 22),
-          const Text(
-            'Let’s work on it.',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -.6,
+  Widget _welcome(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return LayoutBuilder(
+      builder: (context, size) => SingleChildScrollView(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(height: size.maxHeight > 360 ? 50 : 8),
+            const RelayMark(size: 36),
+            const SizedBox(height: 22),
+            const Text(
+              'Let’s work on it.',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -.6,
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'Ask about what you’re viewing, compare information across apps, or pick up an earlier conversation.',
-            style: TextStyle(fontSize: 14, height: 1.7, color: muted),
-          ),
-          const SizedBox(height: 26),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: canvas,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: line),
+            const SizedBox(height: 10),
+            Text(
+              'Ask about what you’re viewing, compare information across apps, or pick up an earlier conversation.',
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.7,
+                color: colors.onSurfaceVariant,
+              ),
             ),
-            child: const Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.layers_outlined, size: 18, color: accent),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Open an app to give Relay context. Your conversation stays with you as you switch tabs.',
-                    style: TextStyle(fontSize: 12, height: 1.6, color: muted),
+            const SizedBox(height: 26),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: colors.outline),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.layers_outlined, size: 18, color: colors.primary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Open an app to give Relay context. Your conversation stays with you as you switch tabs.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.6,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _message(
     BuildContext context,
@@ -466,6 +481,7 @@ class ConversationMessages extends StatelessWidget {
     List<Json> citations,
     List<ViewCommand> commands,
   ) {
+    final colors = Theme.of(context).colorScheme;
     final user = m.role == 'user';
     final created = DateTime.tryParse(m.createdAt ?? '')?.toLocal();
     final time = created == null
@@ -485,15 +501,21 @@ class ConversationMessages extends StatelessWidget {
               if (user) const Spacer(),
               Text(
                 user ? 'You' : 'Relay',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: ink,
+                  color: colors.onSurface,
                 ),
               ),
               if (time.isNotEmpty) ...[
                 const SizedBox(width: 8),
-                Text(time, style: const TextStyle(fontSize: 10, color: muted)),
+                Text(
+                  time,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
               ],
             ],
           ),
@@ -532,12 +554,16 @@ class ConversationMessages extends StatelessWidget {
                   vertical: 12,
                 ),
                 decoration: BoxDecoration(
-                  color: tint,
+                  color: colors.primaryContainer,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: SelectableText(
                   m.text,
-                  style: const TextStyle(fontSize: 14, height: 1.6, color: ink),
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.6,
+                    color: colors.onSurface,
+                  ),
                 ),
               ),
             )
@@ -546,73 +572,87 @@ class ConversationMessages extends StatelessWidget {
               data: m.text,
               selectable: true,
               styleSheet: MarkdownStyleSheet(
-                p: const TextStyle(
+                p: TextStyle(
                   fontFamily: '.AppleSystemUIFont',
                   fontSize: 14,
                   height: 1.65,
-                  color: ink,
+                  color: colors.onSurface,
                 ),
-                h1: const TextStyle(
+                h1: TextStyle(
                   fontFamily: '.AppleSystemUIFont',
                   fontSize: 22,
                   height: 1.35,
                   fontWeight: FontWeight.w600,
-                  color: ink,
+                  color: colors.onSurface,
                 ),
-                h2: const TextStyle(
+                h2: TextStyle(
                   fontFamily: '.AppleSystemUIFont',
                   fontSize: 18,
                   height: 1.4,
                   fontWeight: FontWeight.w600,
-                  color: ink,
+                  color: colors.onSurface,
                 ),
-                h3: const TextStyle(
+                h3: TextStyle(
                   fontFamily: '.AppleSystemUIFont',
                   fontSize: 15,
                   height: 1.4,
                   fontWeight: FontWeight.w600,
-                  color: ink,
+                  color: colors.onSurface,
                 ),
                 h1Padding: const EdgeInsets.only(top: 8, bottom: 8),
                 h2Padding: const EdgeInsets.only(top: 8, bottom: 6),
                 h3Padding: const EdgeInsets.only(top: 6, bottom: 4),
+                // The package fills unset styles from Flutter's default light
+                // theme, not this app's, so text it shows needs a colour here.
+                h4: TextStyle(color: colors.onSurface),
+                h5: TextStyle(color: colors.onSurface),
+                h6: TextStyle(color: colors.onSurface),
+                blockquote: TextStyle(color: colors.onSurface),
+                checkbox: TextStyle(color: colors.primary),
+                horizontalRuleDecoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(width: 5, color: colors.outline),
+                  ),
+                ),
                 blockSpacing: 12,
                 listIndent: 20,
-                listBullet: const TextStyle(
+                listBullet: TextStyle(
                   fontFamily: '.AppleSystemUIFont',
                   fontSize: 14,
-                  color: muted,
+                  color: colors.onSurfaceVariant,
                 ),
-                tableHead: const TextStyle(
+                tableHead: TextStyle(
                   fontFamily: '.AppleSystemUIFont',
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: ink,
+                  color: colors.onSurface,
                 ),
-                tableBody: const TextStyle(
+                tableBody: TextStyle(
                   fontFamily: '.AppleSystemUIFont',
                   fontSize: 12,
-                  color: ink,
+                  color: colors.onSurface,
                 ),
-                tableBorder: TableBorder.all(color: line),
+                tableBorder: TableBorder.all(color: colors.outline),
                 tableCellsPadding: const EdgeInsets.all(8),
-                a: const TextStyle(
+                a: TextStyle(
                   fontFamily: '.AppleSystemUIFont',
-                  color: accent,
+                  color: colors.primary,
                   decoration: TextDecoration.underline,
                 ),
-                code: const TextStyle(
+                code: TextStyle(
                   fontFamily: 'monospace',
                   fontSize: 12,
-                  color: ink,
-                  backgroundColor: canvas,
+                  color: colors.onSurface,
+                  backgroundColor: colors.surfaceContainerHighest,
                 ),
                 codeblockDecoration: BoxDecoration(
-                  color: canvas,
+                  color: colors.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                blockquoteDecoration: const BoxDecoration(
-                  border: Border(left: BorderSide(color: accent, width: 2)),
+                blockquoteDecoration: BoxDecoration(
+                  border: Border(
+                    left: BorderSide(color: colors.primary, width: 2),
+                  ),
                 ),
                 blockquotePadding: const EdgeInsets.symmetric(
                   horizontal: 14,
@@ -637,7 +677,7 @@ class ConversationMessages extends StatelessWidget {
               child: Text(
                 'From ${m.context!['source']['title']}',
                 textAlign: TextAlign.right,
-                style: const TextStyle(fontSize: 11, color: muted),
+                style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
               ),
             ),
         ],
@@ -649,9 +689,12 @@ class ConversationMessages extends StatelessWidget {
 class _CaptureNote extends StatelessWidget {
   const _CaptureNote();
   @override
-  Widget build(BuildContext context) => const Text(
+  Widget build(BuildContext context) => Text(
     'Screenshot attached',
-    style: TextStyle(fontSize: 12, color: muted),
+    style: TextStyle(
+      fontSize: 12,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    ),
   );
 }
 

@@ -40,6 +40,9 @@ The implemented workflows include the following.
   page to show it beside the current tab. At most two panes; the pair is saved
   and restored with the tabs. The clicked pane is the selected tab for context
   and agent navigation. Narrow windows show only the selected pane.
+- Night mode: Workspace menu → Appearance offers System, Light and Dark,
+  saved per device. Relay's own screens follow it; app and website pages keep
+  their own look, and the Mac title bar follows macOS.
 - Development bug recording: actions, server exchanges, errors, tabs and a page
   screenshot are saved on the service as a report and read in the Bug reports
   viewer (see the root README).
@@ -216,5 +219,9 @@ backend did not change. It has not been installed or reviewed on the Mac.
    page, the drop highlight, clicking the dimmed pane to select it, and pages
    keeping their state as they move in and out of the split. Only widget tests
    with fake pages cover it.
+12. Check night mode on the Mac in Dark and Light, with macOS both light and
+   dark: tabs, chat, Markdown replies, dialogs, menus and the empty Browser
+   page. Also check that System follows a live macOS switch. Only widget tests
+   and WSL screenshots cover it.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

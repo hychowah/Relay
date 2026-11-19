@@ -1,23 +1,75 @@
 import 'package:material_ui/material_ui.dart';
 
-const ink = Color(0xff23312e);
-const muted = Color(0xff75807b);
-const accent = Color(0xff386b59);
-const canvas = Color(0xfff7f8f6);
-const line = Color(0xffe5e9e4);
-const tint = Color(0xffedf3ee);
+// Relay's own colours. Widgets read them from the theme's ColorScheme so they
+// follow the light or dark setting: ink is onSurface, muted onSurfaceVariant,
+// accent primary, canvas surfaceContainerHighest, line outline, tint
+// primaryContainer and failed errorContainer.
+typedef _Palette = ({
+  Color ink,
+  Color muted,
+  Color accent,
+  Color onAccent,
+  Color canvas,
+  Color surface,
+  Color line,
+  Color tint,
+  Color failed,
+});
 
-ThemeData workspaceTheme() {
-  final scheme = ColorScheme.fromSeed(seedColor: accent).copyWith(
-    primary: accent,
-    onPrimary: Colors.white,
-    surface: Colors.white,
-    onSurface: ink,
-    onSurfaceVariant: muted,
-    outline: line,
-    outlineVariant: line,
-    surfaceContainerHighest: canvas,
-  );
+const _Palette _light = (
+  ink: Color(0xff23312e),
+  muted: Color(0xff75807b),
+  accent: Color(0xff386b59),
+  onAccent: Colors.white,
+  canvas: Color(0xfff7f8f6),
+  surface: Colors.white,
+  line: Color(0xffe5e9e4),
+  tint: Color(0xffedf3ee),
+  failed: Color(0xfffff1ed),
+);
+
+const _Palette _dark = (
+  ink: Color(0xffe2e8e4),
+  muted: Color(0xff939e99),
+  accent: Color(0xff7fc2a6),
+  onAccent: Color(0xff10241b),
+  canvas: Color(0xff141917),
+  surface: Color(0xff1b211f),
+  line: Color(0xff2f3834),
+  tint: Color(0xff213129),
+  failed: Color(0xff3a2622),
+);
+
+ThemeData workspaceTheme(Brightness brightness) {
+  final (
+    :ink,
+    :muted,
+    :accent,
+    :onAccent,
+    :canvas,
+    :surface,
+    :line,
+    :tint,
+    :failed,
+  ) = brightness == Brightness.dark
+      ? _dark
+      : _light;
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: _light.accent,
+        brightness: brightness,
+      ).copyWith(
+        primary: accent,
+        onPrimary: onAccent,
+        primaryContainer: tint,
+        errorContainer: failed,
+        surface: surface,
+        onSurface: ink,
+        onSurfaceVariant: muted,
+        outline: line,
+        outlineVariant: line,
+        surfaceContainerHighest: canvas,
+      );
   final base = ThemeData(
     colorScheme: scheme,
     fontFamily: '.AppleSystemUIFont',
@@ -28,36 +80,36 @@ ThemeData workspaceTheme() {
   );
   final border = OutlineInputBorder(
     borderRadius: BorderRadius.circular(10),
-    borderSide: const BorderSide(color: line),
+    borderSide: BorderSide(color: line),
   );
   return base.copyWith(
     textTheme: base.textTheme
         .copyWith(
-          bodyLarge: const TextStyle(fontSize: 14, height: 1.55, color: ink),
-          bodyMedium: const TextStyle(fontSize: 14, height: 1.5, color: ink),
-          bodySmall: const TextStyle(fontSize: 12, height: 1.45, color: muted),
-          titleLarge: const TextStyle(
+          bodyLarge: TextStyle(fontSize: 14, height: 1.55, color: ink),
+          bodyMedium: TextStyle(fontSize: 14, height: 1.5, color: ink),
+          bodySmall: TextStyle(fontSize: 12, height: 1.45, color: muted),
+          titleLarge: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w600,
             color: ink,
             letterSpacing: -.4,
           ),
-          titleMedium: const TextStyle(
+          titleMedium: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
             color: ink,
           ),
-          titleSmall: const TextStyle(
+          titleSmall: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
             color: ink,
           ),
-          labelLarge: const TextStyle(
+          labelLarge: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
             color: ink,
           ),
-          headlineMedium: const TextStyle(
+          headlineMedium: TextStyle(
             fontSize: 30,
             fontWeight: FontWeight.w600,
             height: 1.2,
@@ -66,8 +118,8 @@ ThemeData workspaceTheme() {
           ),
         )
         .apply(fontFamily: '.AppleSystemUIFont'),
-    iconTheme: const IconThemeData(size: 18, color: muted),
-    dividerTheme: const DividerThemeData(color: line, thickness: 1, space: 1),
+    iconTheme: IconThemeData(size: 18, color: muted),
+    dividerTheme: DividerThemeData(color: line, thickness: 1, space: 1),
     iconButtonTheme: IconButtonThemeData(
       style: IconButton.styleFrom(
         foregroundColor: muted,
@@ -96,15 +148,13 @@ ThemeData workspaceTheme() {
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       border: border,
       enabledBorder: border,
-      focusedBorder: border.copyWith(
-        borderSide: const BorderSide(color: accent),
-      ),
-      labelStyle: const TextStyle(
+      focusedBorder: border.copyWith(borderSide: BorderSide(color: accent)),
+      labelStyle: TextStyle(
         fontFamily: '.AppleSystemUIFont',
         fontSize: 13,
         color: muted,
       ),
-      hintStyle: const TextStyle(
+      hintStyle: TextStyle(
         fontFamily: '.AppleSystemUIFont',
         fontSize: 14,
         color: muted,
@@ -112,19 +162,19 @@ ThemeData workspaceTheme() {
       floatingLabelBehavior: FloatingLabelBehavior.always,
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: Colors.white,
+      backgroundColor: surface,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: line),
+        side: BorderSide(color: line),
       ),
-      titleTextStyle: const TextStyle(
+      titleTextStyle: TextStyle(
         fontFamily: '.AppleSystemUIFont',
         fontSize: 20,
         fontWeight: FontWeight.w600,
         color: ink,
       ),
-      contentTextStyle: const TextStyle(
+      contentTextStyle: TextStyle(
         fontFamily: '.AppleSystemUIFont',
         fontSize: 14,
         height: 1.5,
@@ -133,14 +183,14 @@ ThemeData workspaceTheme() {
     ),
     menuTheme: MenuThemeData(
       style: MenuStyle(
-        backgroundColor: const WidgetStatePropertyAll(Colors.white),
+        backgroundColor: WidgetStatePropertyAll(surface),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
         padding: const WidgetStatePropertyAll(EdgeInsets.all(6)),
         elevation: const WidgetStatePropertyAll(8),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: const BorderSide(color: line),
+            side: BorderSide(color: line),
           ),
         ),
       ),
@@ -164,11 +214,11 @@ ThemeData workspaceTheme() {
         ),
       ),
     ),
-    listTileTheme: const ListTileThemeData(
+    listTileTheme: ListTileThemeData(
       iconColor: muted,
       selectedColor: accent,
       selectedTileColor: tint,
-      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       titleTextStyle: TextStyle(
         fontFamily: '.AppleSystemUIFont',
         fontSize: 14,
@@ -182,11 +232,11 @@ ThemeData workspaceTheme() {
         color: muted,
       ),
     ),
-    expansionTileTheme: const ExpansionTileThemeData(
-      tilePadding: EdgeInsets.symmetric(horizontal: 10),
-      childrenPadding: EdgeInsets.all(12),
-      shape: Border(),
-      collapsedShape: Border(),
+    expansionTileTheme: ExpansionTileThemeData(
+      tilePadding: const EdgeInsets.symmetric(horizontal: 10),
+      childrenPadding: const EdgeInsets.all(12),
+      shape: const Border(),
+      collapsedShape: const Border(),
       iconColor: muted,
       collapsedIconColor: muted,
     ),
@@ -196,9 +246,9 @@ ThemeData workspaceTheme() {
         color: ink,
         borderRadius: BorderRadius.circular(6),
       ),
-      textStyle: const TextStyle(
+      textStyle: TextStyle(
         fontFamily: '.AppleSystemUIFont',
-        color: Colors.white,
+        color: surface,
         fontSize: 12,
       ),
     ),
@@ -209,15 +259,22 @@ class RelayMark extends StatelessWidget {
   const RelayMark({super.key, this.size = 26});
   final double size;
   @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(
-      color: accent,
-      borderRadius: BorderRadius.circular(size * .3),
-    ),
-    child: Icon(Icons.auto_awesome, size: size * .58, color: Colors.white),
-  );
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: colors.primary,
+        borderRadius: BorderRadius.circular(size * .3),
+      ),
+      child: Icon(
+        Icons.auto_awesome,
+        size: size * .58,
+        color: colors.onPrimary,
+      ),
+    );
+  }
 }
 
 class MenuLabel extends StatelessWidget {
@@ -228,12 +285,12 @@ class MenuLabel extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
     child: Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontFamily: '.AppleSystemUIFont',
         fontSize: 10,
         fontWeight: FontWeight.w600,
         letterSpacing: 1.1,
-        color: muted,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
       ),
     ),
   );

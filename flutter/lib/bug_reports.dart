@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:material_ui/material_ui.dart';
 
 import 'relay_api.dart';
-import 'workspace_style.dart';
 
 /// Lists the bug reports saved on the service and shows one report's
 /// description, screenshot and recorded events.
@@ -17,6 +16,7 @@ class BugReportsDialog extends StatefulWidget {
 }
 
 class _BugReportsDialogState extends State<BugReportsDialog> {
+  ColorScheme get colors => Theme.of(context).colorScheme;
   List<Json> reports = [];
   Json? report;
   Uint8List? screenshot;
@@ -112,13 +112,13 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
         ? ''
         : '+${(at.difference(start).inMilliseconds / 1000).toStringAsFixed(1)}s';
     final (icon, color) = switch (event['type']) {
-      'action' => (Icons.touch_app_outlined, accent),
+      'action' => (Icons.touch_app_outlined, colors.primary),
       'request' =>
         (event['status'] ?? 500) >= 400 || event['failure'] != null
             ? (Icons.swap_vert, Colors.red)
-            : (Icons.swap_vert, muted),
+            : (Icons.swap_vert, colors.onSurfaceVariant),
       'error' => (Icons.error_outline, Colors.red),
-      _ => (Icons.smart_toy_outlined, ink),
+      _ => (Icons.smart_toy_outlined, colors.onSurface),
     };
     return ExpansionTile(
       dense: true,
@@ -153,7 +153,7 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
         '${client['app'] == null ? '' : ' · ${client['app']}'}\n'
         'Model ${client['provider']?['mode'] ?? '?'} ${client['provider']?['model'] ?? ''}'
         '${(report['droppedEvents'] ?? 0) > 0 ? '\nOldest ${report['droppedEvents']} events were dropped.' : ''}',
-        style: const TextStyle(color: muted, fontSize: 12),
+        style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
       ),
       if (screenshot != null)
         Padding(
@@ -192,10 +192,10 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-              leading: const Icon(
+              leading: Icon(
                 Icons.bug_report_outlined,
                 size: 17,
-                color: muted,
+                color: colors.onSurfaceVariant,
               ),
               title: Text(
                 description.isEmpty ? 'No description' : description,

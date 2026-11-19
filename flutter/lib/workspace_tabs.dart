@@ -27,6 +27,7 @@ class WorkspaceTabs extends StatefulWidget {
 }
 
 class _WorkspaceTabsState extends State<WorkspaceTabs> {
+  ColorScheme get colors => Theme.of(context).colorScheme;
   final _list = GlobalKey<AnimatedListState>();
   final _scroll = ScrollController();
   static const _tabWidth = 196.0;
@@ -119,7 +120,7 @@ class _WorkspaceTabsState extends State<WorkspaceTabs> {
                   offset: const Offset(-24, -18),
                   child: Material(
                     elevation: 6,
-                    color: Colors.white,
+                    color: colors.surface,
                     borderRadius: BorderRadius.circular(8),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -128,7 +129,7 @@ class _WorkspaceTabsState extends State<WorkspaceTabs> {
                       ),
                       child: Text(
                         tab.title,
-                        style: const TextStyle(fontSize: 12, color: ink),
+                        style: TextStyle(fontSize: 12, color: colors.onSurface),
                       ),
                     ),
                   ),
@@ -154,13 +155,15 @@ class _WorkspaceTabsState extends State<WorkspaceTabs> {
         padding: const EdgeInsets.only(right: 5),
         child: Material(
           color: selected
-              ? Colors.white
+              ? colors.surface
               : paired
-              ? tint
+              ? colors.primaryContainer
               : Colors.transparent,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
-            side: BorderSide(color: selected ? line : Colors.transparent),
+            side: BorderSide(
+              color: selected ? colors.outline : Colors.transparent,
+            ),
           ),
           child: Row(
             children: [
@@ -179,7 +182,9 @@ class _WorkspaceTabsState extends State<WorkspaceTabs> {
                               ? Icons.add
                               : Icons.grid_view_rounded,
                           size: 15,
-                          color: selected ? accent : muted,
+                          color: selected
+                              ? colors.primary
+                              : colors.onSurfaceVariant,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -189,17 +194,19 @@ class _WorkspaceTabsState extends State<WorkspaceTabs> {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 12,
-                              color: selected ? ink : muted,
+                              color: selected
+                                  ? colors.onSurface
+                                  : colors.onSurfaceVariant,
                             ),
                           ),
                         ),
                         if (paired)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 4),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4),
                             child: Icon(
                               Icons.vertical_split,
                               size: 13,
-                              color: accent,
+                              color: colors.primary,
                               semanticLabel: 'Split view',
                             ),
                           ),

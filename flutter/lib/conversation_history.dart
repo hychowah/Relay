@@ -4,7 +4,6 @@ import 'package:material_ui/material_ui.dart';
 
 import 'relay_api.dart';
 import 'workspace.dart';
-import 'workspace_style.dart';
 
 class ConversationHistory extends StatefulWidget {
   const ConversationHistory({
@@ -19,6 +18,7 @@ class ConversationHistory extends StatefulWidget {
 }
 
 class _ConversationHistoryState extends State<ConversationHistory> {
+  ColorScheme get colors => Theme.of(context).colorScheme;
   final search = TextEditingController();
   Timer? debounce;
   List<Conversation> items = [];
@@ -235,10 +235,10 @@ class _ConversationHistoryState extends State<ConversationHistory> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          leading: const Icon(
+                          leading: Icon(
                             Icons.chat_bubble_outline_rounded,
                             size: 17,
-                            color: muted,
+                            color: colors.onSurfaceVariant,
                           ),
                           selected: item.id == widget.workspace.conversationId,
                           title: Text(

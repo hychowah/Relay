@@ -8,7 +8,6 @@ import 'package:material_ui/material_ui.dart';
 import 'browser_transcript.dart';
 import 'page_surface.dart';
 import 'relay_api.dart';
-import 'workspace_style.dart';
 
 /// Desktop chat panel only: opens and closes the video transcript pane.
 class TranscriptBar extends StatelessWidget {
@@ -17,31 +16,34 @@ class TranscriptBar extends StatelessWidget {
   final VoidCallback onToggle;
 
   @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onToggle,
-    child: Container(
-      padding: const EdgeInsets.fromLTRB(18, 7, 14, 7),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: line)),
-      ),
-      child: Row(
-        children: [
-          const Expanded(
-            child: Text(
-              'Transcript',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onToggle,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(18, 7, 14, 7),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: colors.outline)),
+        ),
+        child: Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Transcript',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
             ),
-          ),
-          Icon(
-            open ? Icons.expand_less : Icons.expand_more,
-            size: 18,
-            color: muted,
-            semanticLabel: open ? 'Hide transcript' : 'Show transcript',
-          ),
-        ],
+            Icon(
+              open ? Icons.expand_less : Icons.expand_more,
+              size: 18,
+              color: colors.onSurfaceVariant,
+              semanticLabel: open ? 'Hide transcript' : 'Show transcript',
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// Desktop chat panel only: the transcript of the video in a Browser tab.
@@ -62,6 +64,7 @@ class TranscriptPane extends StatefulWidget {
 }
 
 class _TranscriptPaneState extends State<TranscriptPane> {
+  ColorScheme get colors => Theme.of(context).colorScheme;
   final focus = FocusNode();
   Json? transcript;
   String? error;
@@ -155,7 +158,10 @@ class _TranscriptPaneState extends State<TranscriptPane> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(error!, style: const TextStyle(fontSize: 12, color: muted)),
+            Text(
+              error!,
+              style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+            ),
             TextButton(
               onPressed: () {
                 setState(() => error = null);
@@ -204,7 +210,10 @@ class _TranscriptPaneState extends State<TranscriptPane> {
                       padding: const EdgeInsets.symmetric(horizontal: 6),
                       child: Text(
                         '${loaded['language']}',
-                        style: const TextStyle(fontSize: 11, color: muted),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: colors.onSurfaceVariant,
+                        ),
                       ),
                     ),
                     for (var i = 0; i < paragraphs.length; i++)
@@ -215,7 +224,9 @@ class _TranscriptPaneState extends State<TranscriptPane> {
                         // selection inside the paragraph.
                         child: DecoratedBox(
                           decoration: BoxDecoration(
-                            color: i == playing ? tint : null,
+                            color: i == playing
+                                ? colors.primaryContainer
+                                : null,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Padding(
@@ -250,9 +261,9 @@ class _TranscriptPaneState extends State<TranscriptPane> {
                 _reveal();
               },
               style: OutlinedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: accent,
-                side: const BorderSide(color: line),
+                backgroundColor: colors.surface,
+                foregroundColor: colors.primary,
+                side: BorderSide(color: colors.outline),
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(7),

@@ -312,8 +312,11 @@ class _BrowserPage extends _WebPage with BrowserSurface {
         }
       },
     );
+    // WebKit only knows the system appearance, not Relay's own setting.
     await controller.loadHtmlString(
-      '<!doctype html><title>Browser</title><body style="font:18px system-ui;padding:40px;color:#496452">Enter an address or search above.</body>',
+      '<!doctype html><title>Browser</title><style>body{font:18px system-ui;padding:40px;color:#496452}'
+      '@media(prefers-color-scheme:dark){body{background:#141917;color:#9cbdad}}</style>'
+      '<body>Enter an address or search above.</body>',
     );
   }
 
