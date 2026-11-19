@@ -49,9 +49,10 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
       _Placed(tab, index * _tabWidth),
   ];
   static const _tabWidth = 196.0;
-  // A tab moved to the left end travels slower than the others shift, so the
-  // eye can follow it.
-  static const _travelTime = Duration(milliseconds: 350);
+  // A tab moved to the left end travels slower than the others shift, and
+  // both slower than other workspace motion, so the eye can follow the move.
+  static const _travelTime = Duration(milliseconds: 600);
+  static const _shiftTime = Duration(milliseconds: 350);
 
   @override
   void dispose() {
@@ -107,7 +108,8 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
         final total = mover == null ? duration : _travelTime;
         final shift = Interval(
           0,
-          duration.inMicroseconds / total.inMicroseconds,
+          (mover == null ? duration : _shiftTime).inMicroseconds /
+              total.inMicroseconds,
           curve: Curves.easeOutCubic,
         );
         for (final chip in _chips) {

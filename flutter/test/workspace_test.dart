@@ -1427,7 +1427,7 @@ void main() {
     expect(f.w.tabs.last, room);
     expect(left('Research'), allOf(lessThan(start), greaterThan(end)));
     expect(width('Research'), greaterThan(rest));
-    expect(width('Room layout'), rest);
+    expect(width('Room layout'), moreOrLessEquals(rest));
     await tester.pumpAndSettle();
     expect(left('Research'), end);
     expect(left('Room layout'), start);
