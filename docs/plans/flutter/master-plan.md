@@ -188,6 +188,7 @@ load on the real WebViews.
    saving and viewing; native screenshots and the live service's report folder are unverified.
 7. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 8. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
-9. With a build that has the tab restore change (it is not in Stable 0.0.9), restart on the Mac with a Browser tab and two or more app tabs open. Check that the last active tab shows first, the hidden tabs finish loading (none closed by the 20 s limit), and the chat history appears without waiting for them.
+9. Deploy the backend and a client build with apps-file reloading, then check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this; the Mac and the live service are unverified.
+10. With a build that has the tab restore change (it is not in Stable 0.0.9), restart on the Mac with a Browser tab and two or more app tabs open. Check that the last active tab shows first, the hidden tabs finish loading (none closed by the 20 s limit), and the chat history appears without waiting for them.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

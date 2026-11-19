@@ -9,7 +9,7 @@ import { createWorkspace } from "../server/app.ts";
 
 const day = 24 * 60 * 60 * 1000;
 function setup(store: Store, deleteSession: (id: string) => Promise<void>) {
-  const workspace = createWorkspace(store, [], { mode: "fixture", model: "fixture", configured: true });
+  const workspace = createWorkspace(store, () => [], { mode: "fixture", model: "fixture", configured: true });
   workspace.setHarness({
     async createSession() { return "unused"; }, deleteSession,
     async prompt() { assert.fail("Trashed conversations cannot start work"); },

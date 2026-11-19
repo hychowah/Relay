@@ -179,6 +179,16 @@ class Workspace extends ChangeNotifier {
     changed();
   }
 
+  /// Reads the registered apps again, so places that choose an app show
+  /// registration changes without Reconnect. Open tabs are left as they are;
+  /// when the backend cannot be reached the current list stays.
+  Future<void> refreshApps() async {
+    try {
+      apps = (await api.config()).apps;
+      changed();
+    } catch (_) {}
+  }
+
   Future<void> loadBots() async {
     bots = await api.bots();
     changed();

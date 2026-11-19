@@ -17,7 +17,7 @@ test("conversation effort migrates old records, persists per chat, and reaches t
   old.close();
   let store = new Store(path);
   const provider = { mode: "deepseek" as const, model: "deepseek-flash", configured: true };
-  const workspace = createWorkspace(store, [], provider);
+  const workspace = createWorkspace(store, () => [], provider);
   let workspaceClosed = false;
   let received: ReasoningEffort | null | undefined;
   let called = false;

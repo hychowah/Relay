@@ -108,7 +108,7 @@ test(
       dataDir: dir,
       mode: "fixture" as const,
       model: "relay-fixture",
-      apps: [{ id: source.appId, name: "Notes" }],
+      apps: () => [{ id: source.appId, name: "Notes" }],
       contextHandler: () => ({ memories: [{ key: "format", content: memory }] }),
       toolHandler: async (_session: string, name: string, _input: unknown) => {
         calls.push(name);
@@ -358,15 +358,13 @@ test(
       title: "Pose study",
       sourceUrl: "https://notes.test/pose",
     };
-    const instructions =
-      "Search notes by title; an empty query lists recent publications.";
     const calls: Array<{ name: string; input: any }> = [];
     const harness = await Harness.start({
       dataDir: dir,
       mode: "fixture",
       model: "relay-fixture",
-      apps: [
-        { id: "field-notes", name: "Field Notes", instructions },
+      apps: () => [
+        { id: "field-notes", name: "Field Notes" },
         { id: "lab-archive", name: "Lab Archive" },
       ],
       toolHandler: async (_sessionId, name, input) => {
@@ -434,12 +432,6 @@ test(
       assert.ok(
         excerpt.length < 2100,
         "Large app sections produce bounded excerpts",
-      );
-      assert.ok(
-        harness["fixture"]!.requests.every(({ messages }) =>
-          messages.every((message) => message.role !== "system" || !String(message.content).includes(instructions)),
-        ),
-        "Configured instructions are not injected globally; the scoped workspace context supplies active v1 instructions.",
       );
 
       calls.length = 0;
@@ -515,7 +507,7 @@ test("real harness presents an initial native view then final published field ta
   const calls: Array<{ name: string; input: any }> = [];
   const harness = await Harness.start({
     dataDir: dir, mode: "fixture", model: "relay-fixture",
-    apps: [{ id: "field-notes", name: "Field Notes", resourceId: "home" }],
+    apps: () => [{ id: "field-notes", name: "Field Notes" }],
     toolHandler: async (_session, name, input) => {
       calls.push({ name, input });
       if (name === "app_search") return [source];

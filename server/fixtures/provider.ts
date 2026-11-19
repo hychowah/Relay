@@ -10,7 +10,7 @@ type WireMessage = {
 
 // Scripted responses for the local demo and harness tests.
 export async function startFixtureProvider(
-  apps: Array<{ id: string; name: string }>,
+  apps: () => Array<{ id: string; name: string }>,
 ) {
   const requests: Array<{
     tools: string[];
@@ -57,7 +57,7 @@ export async function startFixtureProvider(
       const appContext: AppContext | undefined = appMatch
         ? JSON.parse(appMatch[1])
         : undefined;
-      const activeAppId = appContext?.appId ?? context?.source.appId ?? apps[0]?.id;
+      const activeAppId = appContext?.appId ?? context?.source.appId ?? apps()[0]?.id;
       const find = userText
         .replace(
           /<relay_(?:app_)?context>[\s\S]*?<\/relay_(?:app_)?context>/g,
@@ -119,7 +119,7 @@ export async function startFixtureProvider(
             ...(viewState ? { viewState } : {}),
           }),
         };
-      const appName = (id: string) => apps.find(app => app.id === id)?.name ?? id;
+      const appName = (id: string) => apps().find(app => app.id === id)?.name ?? id;
       let text = activeAppId
         ? `Scripted demonstration — ${appName(activeAppId)}\n\nNo matching saved resource was available.`
         : "No apps are registered.";

@@ -2,8 +2,8 @@
 import {flutterReleases} from '../server/flutter-releases.ts';
 import {serve} from '@hono/node-server';
 import {serveStatic} from '@hono/node-server/serve-static';
-import {mkdirSync, readFileSync, existsSync, copyFileSync, chmodSync} from 'node:fs';
-import {HttpIntegration, type AppRegistration} from '../server/integrations/http.ts';
+import {mkdirSync, existsSync, copyFileSync, chmodSync} from 'node:fs';
+import {appRegistry} from '../server/app-registry.ts';
 import {startWorkspace} from '../server/runtime.ts';
 import {createBrowser} from '../server/browser.ts';
 import {ProviderSettingsStore} from '../server/provider-settings.ts';
@@ -13,12 +13,8 @@ const browserOrigin = process.env.FLUTTER_BROWSER_ORIGIN || 'http://127.0.0.1:32
 const broker = createBrowser();
 const browser = serve({fetch:broker.app.fetch, hostname:'127.0.0.1', port:3251});
 broker.attach(browser);
-const registrations: AppRegistration[] = [
-  {id:'browser',name:'Browser',serverUrl:'http://127.0.0.1:3251',browserUrl:browserOrigin},
-  ...(process.env.RELAY_APPS_FILE
-    ? JSON.parse(readFileSync(process.env.RELAY_APPS_FILE, 'utf8')) as AppRegistration[] : []),
-];
-const apps = registrations.map(HttpIntegration.register);
+const apps = appRegistry(process.env.RELAY_APPS_FILE,
+  [{id:'browser',name:'Browser',serverUrl:'http://127.0.0.1:3251',browserUrl:browserOrigin}]);
 const dataDir = process.env.RELAY_DATA_DIR || 'runtime/flutter';
 mkdirSync(dataDir, {recursive:true});
 // Import service settings once; subsequent changes belong to this experiment.

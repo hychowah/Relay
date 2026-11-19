@@ -39,7 +39,7 @@ test('Flutter release delivery serves the fresh manifest and completed Mac archi
 
 test('Flutter restart waits for work in its device and tab across conversations', async () => {
   const store = new Store(':memory:');
-  const workspace = createWorkspace(store, [], {mode: 'fixture', model: 'fixture', configured: true});
+  const workspace = createWorkspace(store, () => [], {mode: 'fixture', model: 'fixture', configured: true});
   const first = store.createConversation('First', 'session-first');
   const second = store.createConversation('Second', 'session-second');
   const own = store.startRun(first.id, 'Synthetic task', 'mac', 'window');

@@ -125,7 +125,7 @@ test("an app unavailable at registration recovers on open and publishes its tool
   });
   const registered = HttpIntegration.register(registration);
   const store = new Store(":memory:");
-  const workspace = createWorkspace(store, [registered], provider);
+  const workspace = createWorkspace(store, () => [registered], provider);
   harness(workspace);
   const config = async () => (await (await workspace.app.request("/api/config")).json()).apps[0];
   try {
@@ -188,7 +188,7 @@ test("v2 abort disconnects the upstream operation without claiming remote cancel
 test("workspace presents app-owned state without Reports and carries acknowledged generation forward", async () => {
   const store = new Store(":memory:");
   const integration: AppIntegration = { open: async (token) => ({ url: `https://rooms.test/?token=${token}`, origin: "https://rooms.test", native: true, sandbox: "allow-scripts allow-same-origin" }) };
-  const workspace = createWorkspace(store, [{ ...manifest, protocolVersion: 2, integration }], provider);
+  const workspace = createWorkspace(store, () => [{ ...manifest, protocolVersion: 2, integration }], provider);
   harness(workspace);
   const conversation = store.createConversation("Layout", "session");
   try {
@@ -246,7 +246,7 @@ test("workspace scopes discovery instructions, persists actual progress and abor
   app.state.delayed = true;
   app.state.events = '{"type":"progress","message":"Reading room"}\n';
   const store = new Store(":memory:");
-  const workspace = createWorkspace(store, [
+  const workspace = createWorkspace(store, () => [
     { ...manifest, protocolVersion: 2, integration: app.adapter },
     { id: "private", name: "Private", description: "Forbidden", instructions: "DO NOT LEAK", integration: {} },
   ], provider);
