@@ -61,14 +61,57 @@ class AppUpdates extends ChangeNotifier {
     final identity = updates.previewName.isEmpty
         ? info.version
         : '${info.version}-${info.buildNumber}';
-    await File('${updates.directory.path}/launched-$identity')
-        .writeAsString('ready');
+    final receipt = 'launched-$identity';
+    await File('${updates.directory.path}/$receipt').writeAsString('ready');
+    await updates.discardInstallLeftovers(
+      receipt,
+      File(Platform.resolvedExecutable).parent.parent.parent,
+    );
     updates.timer = Timer.periodic(
       const Duration(hours: 1),
       (_) => updates.check(),
     );
     unawaited(updates.check());
     return updates;
+  }
+
+  /// Once this build has started, the apps that earlier installs replaced and
+  /// other builds' launch receipts have no further use. The helper script only
+  /// needs the replaced app until the new one starts; every published Stable
+  /// package stays in the served release directory for recovery.
+  Future<void> discardInstallLeftovers(String receipt, Directory bundle) async {
+    try {
+      await for (final entry in directory.list()) {
+        final name = entry.path.split('/').last;
+        if (name.startsWith('launched-') && name != receipt) {
+          await entry.delete();
+        }
+      }
+      if (!bundle.path.endsWith('/Relay Flutter.app')) return;
+      await for (final entry in bundle.parent.list()) {
+        final name = entry.path.split('/').last;
+        if (entry is Directory && name.startsWith('.relay-flutter-update-')) {
+          await entry.delete(recursive: true);
+        }
+      }
+    } on FileSystemException {
+      // Leftovers that cannot be removed must not stop the app from starting.
+    }
+  }
+
+  // Only a download that is ready to install is worth its disk space.
+  Future<void> _discardDownloads({File? except}) async {
+    try {
+      await for (final entry in directory.list()) {
+        if (entry is File &&
+            entry.path != except?.path &&
+            (entry.path.endsWith('.zip') || entry.path.endsWith('.part'))) {
+          await entry.delete();
+        }
+      }
+    } on FileSystemException {
+      // A stale download that cannot be removed does not affect updating.
+    }
   }
 
   Future<dynamic> _manifest(String path) async {
@@ -166,6 +209,7 @@ class AppUpdates extends ChangeNotifier {
           : previewName == choice['name'] && buildNumber == choice['build'];
       if (current) {
         status = 'You have the latest published version';
+        await _discardDownloads();
         return;
       }
       release = data;
@@ -209,6 +253,7 @@ class AppUpdates extends ChangeNotifier {
         }
       }
       archive = destination;
+      await _discardDownloads(except: destination);
       _pinned = explicit;
       status = '${label(data)} is ready to install';
       progress = 1;

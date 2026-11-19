@@ -45,6 +45,6 @@ for ((i=0; i<45; i++)); do
   sleep 1
 done
 # A security prompt may still be open. Keep both bundles rather than moving a
-# possibly running app. The previous bundle remains available for manual recovery.
+# possibly running app. The next version to start removes the previous bundle.
 echo 'No launch confirmation. The previous app remains in the backup folder.'
 exit 1

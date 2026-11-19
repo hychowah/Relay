@@ -746,12 +746,15 @@ class _RelayShellState extends State<RelayShell> {
           icon: const Icon(Icons.add),
         ),
         const SizedBox(width: 8),
-        if (w.recorder.recording)
-          IconButton(
-            tooltip: 'Recording a bug. Stop and save',
-            onPressed: () => _menu('record'),
-            icon: const Icon(Icons.fiber_manual_record, color: Colors.red),
-          ),
+        IconButton(
+          tooltip: w.recorder.recording
+              ? 'Recording a bug. Stop and save'
+              : 'Record a bug',
+          onPressed: () => _menu('record'),
+          icon: w.recorder.recording
+              ? const Icon(Icons.fiber_manual_record, color: Colors.red)
+              : const Icon(Icons.fiber_manual_record_outlined, color: muted),
+        ),
         IconButton(
           tooltip: 'Toggle chat',
           onPressed: () => setState(() {
@@ -800,15 +803,6 @@ class _RelayShellState extends State<RelayShell> {
               child: Divider(),
             ),
             const MenuLabel('DEVELOPMENT'),
-            _menuItem(
-              'record',
-              w.recorder.recording
-                  ? 'Stop and save bug report'
-                  : 'Record a bug',
-              w.recorder.recording
-                  ? Icons.stop_circle_outlined
-                  : Icons.fiber_manual_record_outlined,
-            ),
             _menuItem('reports', 'Bug reports', Icons.bug_report_outlined),
           ],
         ),

@@ -97,8 +97,10 @@ Trash cleanup deletes it with the conversation.
 Downloads run at startup and hourly. Workspace menu → Updates shows progress;
 **Install and restart** remains manual and waits for this window's agent work.
 The package is checked against the release hash, bundle signature, identity and
-version before replacement; the previous bundle stays beside the install staging
-folder for recovery. The app uses ad-hoc signing outside the App Store. It is not
+version before replacement. The previous app is kept only until the new version
+starts; that version then removes it, with older downloads and launch receipts
+on the Mac. Every published Stable package stays in the served release directory
+on WSL for recovery. The app uses ad-hoc signing outside the App Store. It is not
 sandboxed so it can replace its own bundle; WebKit still owns web-content processes.
 The first sandboxed prototype's preferences are copied on first launch.
 

@@ -56,6 +56,69 @@ void main() {
     expect(updates.ready, isTrue);
   });
   test(
+    'a started build discards replaced apps, old receipts and old downloads',
+    () async {
+      final root = await Directory.systemTemp.createTemp('relay-leftovers');
+      addTearDown(() => root.delete(recursive: true));
+      final directory = await Directory('${root.path}/updates').create();
+      final replaced = await Directory(
+        '${root.path}/Applications/.relay-flutter-update-abc/Previous.app',
+      ).create(recursive: true);
+      final unrelated = await Directory(
+        '${root.path}/Applications/.other-update-abc',
+      ).create();
+      for (final name in [
+        'launched-0.0.1',
+        'launched-0.0.2',
+        'Relay-Flutter-0.0.1-macOS-arm64.zip',
+        'Relay-Flutter-0.0.2-macOS-arm64.zip.part',
+      ]) {
+        await File('${directory.path}/$name').writeAsString('old');
+      }
+      final bytes = utf8.encode('synthetic package');
+      final updates = AppUpdates(
+        origin: Uri.parse('http://localhost'),
+        version: '0.0.2',
+        directory: directory,
+        client: MockClient(
+          (request) async => request.url.path.endsWith('latest.json')
+              ? http.Response(
+                  jsonEncode({
+                    'version': '0.0.3',
+                    'file': 'Relay-Flutter-0.0.3-macOS-arm64.zip',
+                    'size': bytes.length,
+                    'sha256': sha256.convert(bytes).toString(),
+                  }),
+                  200,
+                )
+              : http.Response.bytes(bytes, 200),
+        ),
+      );
+      addTearDown(updates.dispose);
+      Future<List<String>> names() async => [
+        await for (final entry in directory.list()) entry.uri.pathSegments.last,
+      ]..sort();
+
+      await updates.discardInstallLeftovers(
+        'launched-0.0.2',
+        Directory('${root.path}/Applications/Development build.app'),
+      );
+      expect(await replaced.exists(), isTrue);
+      await updates.discardInstallLeftovers(
+        'launched-0.0.2',
+        Directory('${root.path}/Applications/Relay Flutter.app'),
+      );
+      expect(await replaced.parent.exists(), isFalse);
+      expect(await unrelated.exists(), isTrue);
+      await updates.check();
+      expect(updates.ready, isTrue);
+      expect(await names(), [
+        'Relay-Flutter-0.0.3-macOS-arm64.zip',
+        'launched-0.0.2',
+      ]);
+    },
+  );
+  test(
     'two same-version previews stay selectable and can return to Stable',
     () async {
       final root = await Directory.systemTemp.createTemp('relay-previews');

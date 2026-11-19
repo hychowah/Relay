@@ -553,6 +553,23 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+  testWidgets('the toolbar record button starts and finishes a bug recording', (
+    tester,
+  ) async {
+    final f = Fixture();
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.tap(find.byTooltip('Record a bug'));
+    await tester.pump();
+    expect(f.w.recorder.recording, isTrue);
+    await tester.tap(find.byTooltip('Recording a bug. Stop and save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Save bug report'), findsOneWidget);
+    await tester.tap(find.text('Discard'));
+    await tester.pumpAndSettle();
+    expect(f.w.recorder.recording, isFalse);
+    expect(find.byTooltip('Record a bug'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets(
     'compact chat keeps context, keyboard sending and grouped menus usable',
     (tester) async {
