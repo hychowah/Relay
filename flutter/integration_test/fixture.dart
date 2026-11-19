@@ -257,7 +257,8 @@ class _VideoPage extends PageSurface with BrowserSurface {
   @override
   Future<double?> playbackTime() async => _clock.elapsedMilliseconds / 1000;
   @override
-  Future<void> navigate(String text) => inner.browser!.navigate(text);
+  Future<void> navigate(String text, {bool restoring = false}) =>
+      inner.browser!.navigate(text, restoring: restoring);
 }
 
 /// Checks that this is a profile build under the test bundle id, starts the

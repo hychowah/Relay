@@ -93,8 +93,8 @@ class FakePage extends PageSurface with BrowserSurface {
   }
 
   @override
-  Future<void> navigate(String text) async {
-    navigated.add(text);
+  Future<void> navigate(String text, {bool restoring = false}) async {
+    navigated.add(restoring ? 'restore $text' : text);
     changed(true);
   }
 
@@ -669,6 +669,9 @@ void main() {
     expect((f.w.tabs.first.page as FakePage).lastCommand!['intent']['state'], {
       'zone': 'work',
     });
+    expect((f.w.active!.page as FakePage).navigated, [
+      'restore https://example.com/desk',
+    ]);
   });
   test('a split is its own tab whose panes nest, move and leave', () async {
     final f = Fixture();

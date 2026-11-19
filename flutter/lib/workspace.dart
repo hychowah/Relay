@@ -971,7 +971,10 @@ class Workspace extends ChangeNotifier {
       if (tab.isBrowser) {
         // A Browser tab that never left its start page has nothing to reopen.
         if (item['url'] != null && item['url'] != 'about:blank') {
-          await tab.page!.browser!.navigate(item['url'] as String);
+          await tab.page!.browser!.navigate(
+            item['url'] as String,
+            restoring: true,
+          );
         }
       } else if (tab.report == null && item['context'] != null) {
         final result = await tab.page!.presentOnCurrentView({

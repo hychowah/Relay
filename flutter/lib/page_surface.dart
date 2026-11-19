@@ -80,7 +80,9 @@ mixin BrowserSurface {
 
   /// The video's play time in seconds, or null when no video content plays.
   Future<double?> playbackTime();
-  Future<void> navigate(String text);
+
+  /// A [restoring] load reopens a saved tab; its page is not a new visit.
+  Future<void> navigate(String text, {bool restoring = false});
   bool get canGoBack => false;
   bool get canGoForward => false;
   Future<void> browserAction(String action) async {}

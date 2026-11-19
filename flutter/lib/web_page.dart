@@ -282,6 +282,12 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   // The address this tab last counted as a visit. While a load is under way
   // its address may still pass through redirects; only the finished page counts.
   String? _visited;
+  // The counted address still waiting for its one title; later title changes,
+  // such as unread counts, are not sent.
+  String? _untitled;
+  // A restored tab's first page is not a new visit; counting it on every
+  // launch would keep tabs left open at the top of the history.
+  bool _restoring = false;
   bool _loading = false;
   int _generation = 0;
   String? _comment, _presentationId;
@@ -421,11 +427,12 @@ class _BrowserPage extends _WebPage with BrowserSurface {
         if (message.message.startsWith('title:')) {
           _title = message.message.substring('title:'.length);
           (_context?['state'] as Map?)?['title'] = _title;
-          final visited = _visited;
-          if (visited != null &&
+          final untitled = _untitled;
+          if (untitled != null &&
               _title.isNotEmpty &&
-              _historyAddress(_url) == visited) {
-            _history?.browserTitle(visited, _title);
+              _historyAddress(_url) == untitled) {
+            _untitled = null;
+            _history?.browserTitle(untitled, _title);
           }
           changed(false);
           return;
@@ -470,13 +477,12 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   // A reload or #fragment change of the page shown is not another visit.
   void _visit([String? title]) {
     final address = _historyAddress(_url);
-    if (_history == null || address == null) return;
-    if (address != _visited) {
-      _visited = address;
-      _history.browserVisit(address, title);
-    } else if (title != null && title.isNotEmpty) {
-      _history.browserTitle(address, title);
-    }
+    if (_history == null || address == null || address == _visited) return;
+    final restored = _restoring;
+    _visited = address;
+    _restoring = false;
+    _untitled = (restored || (title?.isNotEmpty ?? false)) ? null : address;
+    if (!restored) _history.browserVisit(address, title);
   }
 
   int get _webViewId =>
@@ -576,8 +582,9 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   }
 
   @override
-  Future<void> navigate(String text) async {
+  Future<void> navigate(String text, {bool restoring = false}) async {
     final target = await browserUrl(text);
+    _restoring = restoring;
     _navigation = Completer<void>();
     await controller.loadRequest(target);
     await _navigation!.future.timeout(const Duration(seconds: 30));
