@@ -20,7 +20,7 @@ class FakeBrowser with BrowserSurface {
   @override
   Future<double?> playbackTime() async => null;
   @override
-  Future<void> navigate(String text) async {}
+  Future<void> navigate(String text, {bool restoring = false}) async {}
 }
 
 void main() {

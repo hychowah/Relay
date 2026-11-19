@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:relay_flutter/browser_transcript.dart';
 import 'package:relay_flutter/page_surface.dart';
@@ -62,7 +64,7 @@ class TestController extends PlatformWebViewController {
 
   @override
   Future<void> loadRequest(LoadRequestParams params) async {
-    loaded.complete();
+    if (!loaded.isCompleted) loaded.complete();
   }
 
   @override
@@ -237,6 +239,76 @@ void main() {
       });
       expect(changes, [false, false]);
       expect(page.context!['generation'], generation);
+    },
+  );
+
+  test(
+    'a restored Browser page is not a visit, and each visit sends one title',
+    () async {
+      final platform = TestWebPlatform();
+      WebViewPlatform.instance = platform;
+      final sent = <String>[];
+      final api = RelayApi(
+        Uri.parse('http://relay.test'),
+        client: MockClient((request) async {
+          sent.add('${request.url.pathSegments.last} ${request.body}');
+          return http.Response('{}', 200);
+        }),
+      );
+      final page = createWebPage(
+        PageSpec(
+          id: 'tab',
+          appId: 'browser',
+          name: 'Browser',
+          sessionId: 'session',
+          relayOrigin: api.origin,
+        ),
+        (_) {},
+        history: api,
+      );
+      addTearDown(page.dispose);
+      final controller = platform.controller;
+      await pumpEventQueue();
+      controller
+        ..location = 'about:blank'
+        ..delegate.finished('about:blank');
+      await page.ready;
+
+      Future<void> open(String url, {bool restoring = false}) async {
+        final done = page.browser!.navigate(url, restoring: restoring);
+        await pumpEventQueue();
+        controller
+          ..location = url
+          ..delegate.finished(url);
+        await done;
+        await pumpEventQueue();
+      }
+
+      void title(String text) => controller.channel.onMessageReceived(
+        JavaScriptMessage(message: 'title:$text'),
+      );
+
+      await open('https://8.8.8.8/saved', restoring: true);
+      title('Saved');
+      await pumpEventQueue();
+      expect(sent, isEmpty);
+
+      await open('https://8.8.8.8/next');
+      title('(1) Next');
+      await pumpEventQueue();
+      expect(sent, ['visit {"url":"https://8.8.8.8/next","title":"YouTube"}']);
+
+      // A page changing its own address is a visit whose title comes next.
+      controller.location = 'https://8.8.8.8/next?v=2';
+      controller.delegate.urlChange(UrlChange(url: controller.location));
+      title('');
+      title('Video');
+      title('(1) Video');
+      await pumpEventQueue();
+      expect(sent.skip(1), [
+        'visit {"url":"https://8.8.8.8/next?v=2"}',
+        'title {"url":"https://8.8.8.8/next?v=2","title":"Video"}',
+      ]);
     },
   );
 

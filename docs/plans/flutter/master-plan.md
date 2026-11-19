@@ -253,7 +253,7 @@ real WKWebViews.
    page ran on the Mac.
 19. Browser history (desktop only) is in `main`, not in Stable or on the live
    backend. Deploy the backend, then check on the Mac: one titled entry per
-   redirect or reload; instant, clickable suggestions. A restored tab still
-   counts as a visit.
+   redirect or reload; instant, clickable suggestions; a restored tab's page
+   is not counted again; one title per visit.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.
