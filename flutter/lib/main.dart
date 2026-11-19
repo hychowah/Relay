@@ -598,12 +598,17 @@ class _RelayShellState extends State<RelayShell> {
   Widget _pages(double width, bool desktop) {
     final pair = desktop && w.splitShown ? w.split! : null;
     final shown = pair ?? [?w.active];
+    // Each pane keeps at least 240 pixels or a fifth of the page, whichever
+    // is larger.
+    final minFraction = (240 / width).clamp(.2, .5);
+    final fraction = w.splitWidth.clamp(minFraction, 1 - minFraction);
+    final middle = width * fraction;
     Widget pane(WorkspaceTab tab, Widget child, {Key? key}) {
       final side = pair?.indexOf(tab) ?? -1;
       return Positioned.fill(
         key: key,
-        left: side == 1 ? width / 2 + 1 : 0,
-        right: side == 0 ? width / 2 + 1 : 0,
+        left: side == 1 ? middle + 3 : 0,
+        right: side == 0 ? width - middle + 3 : 0,
         child: child,
       );
     }
@@ -712,6 +717,58 @@ class _RelayShellState extends State<RelayShell> {
                       ),
                     ),
             ),
+        ],
+        if (pair != null) ...[
+          Positioned(
+            key: const ValueKey('split-divider'),
+            left: middle - 3,
+            width: 6,
+            top: 0,
+            bottom: 0,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.resizeColumn,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onHorizontalDragUpdate: (details) => setState(() {
+                  w.splitWidth = (fraction + details.delta.dx / width).clamp(
+                    minFraction,
+                    1 - minFraction,
+                  );
+                }),
+                onHorizontalDragEnd: (_) => w.changed(),
+                onDoubleTap: () {
+                  w.splitWidth = .5;
+                  w.changed();
+                },
+                child: ColoredBox(color: colors.outline),
+              ),
+            ),
+          ),
+          Positioned(
+            left: middle - 14,
+            width: 28,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: Material(
+                shape: CircleBorder(side: BorderSide(color: colors.outline)),
+                color: colors.surface,
+                child: IconButton(
+                  tooltip: 'Exit split view',
+                  iconSize: 16,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 28,
+                    height: 28,
+                  ),
+                  icon: const Icon(Icons.close),
+                  // Leaving with the other tab keeps the selected one shown.
+                  onPressed: () =>
+                      w.leaveSplit(pair.firstWhere((tab) => tab != w.active)),
+                ),
+              ),
+            ),
+          ),
         ],
         if (desktop) ...[dropZone(true), dropZone(false)],
       ],
