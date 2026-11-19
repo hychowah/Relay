@@ -340,7 +340,7 @@ void main() {
       await off.w.start();
       final offRoom = await off.w.openApp(off.w.apps[1]);
       await off.w.openApp(off.w.apps[0]);
-      off.w.select(offRoom, opened: true);
+      expect(await off.w.openApp(off.w.apps[1]), offRoom);
       expect(off.w.tabs.map((tab) => tab.appId), ['room-layout', 'browser']);
 
       final f = Fixture(newestTabFirst: true);
@@ -353,7 +353,8 @@ void main() {
       expect(f.w.tabs, [blank, browser, room]);
       f.w.dropInSplit(browser, left: false);
       expect(f.w.tabs, [blank, browser, room], reason: 'a split keeps order');
-      f.w.select(room, opened: true);
+      await f.w.openApp(f.w.apps[1]);
+      expect(f.w.active, room);
       expect(f.w.tabs, [room, blank, browser]);
       // An app the agent opens, here into the blank tab, also moves left.
       f.w.select(blank);
@@ -1252,6 +1253,11 @@ void main() {
     double left(String title) => tester.getTopLeft(chip(title)).dx;
     final start = left('Research'), end = left('Room layout');
     await tester.tap(chip('Research'));
+    await tester.pumpAndSettle();
+    expect(f.w.active!.appId, 'research');
+    expect(f.w.tabs.first, room, reason: 'clicking a tab keeps the order');
+    expect(left('Research'), start);
+    await f.w.openApp(f.w.apps[2]);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 60));
     expect(f.w.tabs.last, room);
@@ -1274,7 +1280,7 @@ void main() {
     strip.position.jumpTo(strip.position.maxScrollExtent);
     await tester.pumpAndSettle();
     expect(strip.position.pixels, greaterThan(0));
-    await tester.tap(chip('Room layout'));
+    await f.w.openApp(f.w.apps[1]);
     await tester.pumpAndSettle();
     expect(f.w.tabs.first, room);
     expect(strip.position.pixels, 0);

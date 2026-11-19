@@ -999,7 +999,7 @@ class _RelayShellState extends State<RelayShell> {
               onSelect: (tab) {
                 w.recorder.action('select tab', {'tab': tab.title});
                 setState(() => chatOnly = false);
-                w.select(tab, opened: true);
+                w.select(tab);
               },
               onClose: w.closeTab,
             ),
