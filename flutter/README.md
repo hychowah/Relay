@@ -91,6 +91,25 @@ Image input currently uses Claude. The service keeps a sent screenshot with its
 message, so reopening the chat shows it again; Trash hides it and the 24-hour
 Trash cleanup deletes it with the conversation.
 
+### Measure the conversation panel animation
+
+From `flutter/` on the Mac, keep the test window visible on the display being
+measured, with Reduce Motion off. The benchmark starts a loopback fixture with
+a 24-message conversation and a responsive HTML page. It needs no Relay server.
+
+```sh
+flutter drive --profile -d macos --driver=test_driver/integration_test.dart \
+  --target=integration_test/chat_panel_performance_test.dart
+```
+
+The driver writes `build/integration_response_data.json`. For the empty tab and
+the loaded WKWebView, it records six opens and six closes after a warm-up cycle.
+Each result includes frame build and raster times in microseconds, the count
+where either stage exceeded one display refresh, and the longest interval
+between Flutter frames within a slide. Intervals above 25 ms flag uneven pacing
+on a 60 Hz display. These timings cover Flutter's part of the animation.
+WebKit compositing and final screen presentation need a separate trace.
+
 ## Mac updates
 
 Downloads run at startup and hourly. Workspace menu → Updates shows progress;

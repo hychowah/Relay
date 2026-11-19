@@ -108,8 +108,7 @@ restart. For setup and publishing, see [Mac updates](../../../flutter/README.md#
 Public-page guards cover top-level navigation. webview_flutter 4.14.1 lacks
 subresource interception, a download API and separate data stores. JavaScript
 channel access from sandboxed subframes, PDF rendering in WKWebView and behavior
-on physical Android devices remain unverified. No Flutter performance measurements
-exist. The [platform decision](../prototype/phases/phase-01/decisions/0002-client-platform.md)
+on physical Android devices remain unverified. The [platform decision](../prototype/phases/phase-01/decisions/0002-client-platform.md)
 records supported platforms and the Windows constraint.
 
 Pre-commit review fixed update-session loss when the backend is unavailable:
@@ -156,6 +155,15 @@ release with its commit, the download matches its hash, and publishing retired
 the one listed test build that Stable contains. The native Mac workflow was not
 rerun for 0.0.9, and it has not been installed or reviewed on the Mac.
 
+Three profile runs on the MacBook Neo (60 Hz, 1280 × 739 logical pixels)
+measured 18 opens and 18 closes per surface with 24 synthetic messages, on the
+source of 2026-11-18, before Stable 0.0.9.
+Opening exceeded the 16.7 ms build budget on 3/269 empty-tab frames and
+3/270 loaded-WKWebView frames. Closing stayed within budget on all 540 frames.
+The longest interval between Flutter frames was 33.3 ms on an empty-tab open.
+The [benchmark](../../../flutter/README.md#measure-the-conversation-panel-animation)
+covers the Flutter shell. Final screen presentation and real pages remain unmeasured.
+
 ## Next
 
 1. Install Stable 0.0.9 on the Mac. Check that tabs, the chat panel and the
@@ -166,7 +174,7 @@ rerun for 0.0.9, and it has not been installed or reviewed on the Mac.
    applied there.
 3. Republishing a test build's name leaves its earlier ZIP in the release
    folder on WSL. Remove it at publish time if that folder grows.
-4. Review Stable 0.0.9 on the Mac: the panel, tab and menu transitions and text selection. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
+4. Review Stable 0.0.9 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported panel hitch with a fresh run of the fixture benchmark, whose recorded numbers predate 0.0.9, including native presentation timing if it appears only over web content. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
 5. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified.
 6. Try the toolbar record button and **Bug reports**, both in Stable 0.0.9, on the Mac. Source tests cover recording,
    saving and viewing; native screenshots and the live service's report folder are unverified.

@@ -16,7 +16,7 @@ pages, 1,040 MiB with the views hidden, and 519 MiB after closing the tabs.
 The native view count returned to zero. Five switches took 21–42 ms. Summed
 idle CPU was 0.02–0.10% in three-second samples. RSS can count shared memory twice.
 The Flutter macOS release archive was 19.7 MB. That measures distribution
-size. There is no Flutter runtime performance measurement.
+size. Relay had no Flutter runtime performance measurements when the platform was chosen.
 
 The pinned webview_flutter 4.14.1 plugin supports Android, iOS and macOS. Relay
 has no Windows platform folder. The plugin lacks subresource interception, a
