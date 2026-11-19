@@ -175,24 +175,31 @@ unready. Reading the code shows that each WKWebView starts loading when its page
 is created, before it is shown; no Mac run has yet confirmed that hidden tabs
 load on the real WebViews.
 
+Stable 0.0.10 (build 10) is published from `main`. Beyond 0.0.9 it carries the
+Browser address fix for in-page navigation, the app list refresh, tab restore,
+the transcript pane and transcript reading. Analysis, 46 Flutter tests and 85
+backend tests passed on its commit. The feed serves the release with its commit,
+the download matches its hash, and publishing retired the one test build that
+Stable contains. The backend at `main` was deployed the same day: it lists the
+registered apps, offers `browser.transcript`, and applied an edit to the live
+apps file without a restart. The native Mac workflow was not rerun, and 0.0.10
+has not been installed or reviewed on the Mac.
+
 ## Next
 
-1. Install Stable 0.0.9 on the Mac. Check that tabs, the chat panel and the
+1. Install Stable 0.0.10 on the Mac. Check that tabs, the chat panel and the
    window come back after a restart, and that its first start removes the
    update folders beside the app and the older downloads.
-2. Deploy the backend at `main`. The live service predates draft conversations,
-   so a thinking effort chosen before a new conversation's first message is not
-   applied there.
-3. Republishing a test build's name leaves its earlier ZIP in the release
+2. Republishing a test build's name leaves its earlier ZIP in the release
    folder on WSL. Remove it at publish time if that folder grows.
-4. Review Stable 0.0.9 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported panel hitch with a fresh run of the fixture benchmark, whose recorded numbers predate 0.0.9, including native presentation timing if it appears only over web content. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
-5. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified.
-6. Try the toolbar record button and **Bug reports**, both in Stable 0.0.9, on the Mac. Source tests cover recording,
+3. Review Stable 0.0.10 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported panel hitch with a fresh run of the fixture benchmark, whose recorded numbers predate 0.0.9, including native presentation timing if it appears only over web content. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
+4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable since 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified.
+5. Try the toolbar record button and **Bug reports**, both in Stable since 0.0.9, on the Mac. Source tests cover recording,
    saving and viewing; native screenshots and the live service's report folder are unverified.
-7. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
-8. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
-9. Deploy the backend and a client build with apps-file reloading, then check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this; the Mac and the live service are unverified.
-10. With a build that has the tab restore change (it is not in Stable 0.0.9), restart on the Mac with a Browser tab and two or more app tabs open. Check that the last active tab shows first, the hidden tabs finish loading (none closed by the 20 s limit), and the chat history appears without waiting for them.
-11. Check `browser.transcript` in WKWebView on the Mac with a short and an hour-long YouTube video, note how long each page takes against the 7-second limit, then ask about one through the real agent. Its page script passed against live YouTube only in headless Chromium with a Safari user agent. In the transcript pane, check on the Mac: opening it loads the hour-long transcript and scrolls smoothly; a drag selection survives clicking into the composer and reaches the question; moving to another video reloads it; a newer selection on the page replaces the transcript's; it stays hidden for other pages and narrow windows, and still loads in chat-only mode. Only a fake page tests the pane.
+6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
+7. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
+8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.
+9. Restart Stable 0.0.10 on the Mac with a Browser tab and two or more app tabs open. Check that the last active tab shows first, the hidden tabs finish loading (none closed by the 20 s limit), and the chat history appears without waiting for them.
+10. Check `browser.transcript` in WKWebView on the Mac with a short and an hour-long YouTube video, note how long each page takes against the 7-second limit, then ask about one through the real agent. Its page script passed against live YouTube only in headless Chromium with a Safari user agent. In the transcript pane, check on the Mac: opening it loads the hour-long transcript and scrolls smoothly; a drag selection survives clicking into the composer and reaches the question; moving to another video reloads it; a newer selection on the page replaces the transcript's; it stays hidden for other pages and narrow windows, and still loads in chat-only mode. Only a fake page tests the pane.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.
