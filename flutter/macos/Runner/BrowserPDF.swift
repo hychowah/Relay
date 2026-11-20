@@ -68,11 +68,38 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
     return String(decoding: text.utf16.prefix(4000), as: UTF16.self)
   }
 
-  /// A picture of the viewer as it shows, for captures and bug reports.
+  /// A picture of the pages in view, with their highlights, for captures and
+  /// bug reports. PDFKit draws its pages on layers that AppKit's view capture
+  /// leaves blank, so each page in view is drawn again here.
   func snapshot() -> Data? {
-    guard let image = viewer.bitmapImageRepForCachingDisplay(in: viewer.bounds) else { return nil }
-    viewer.cacheDisplay(in: viewer.bounds, to: image)
-    return image.representation(using: .png, properties: [:])
+    let bounds = viewer.bounds
+    let scale = viewer.window?.backingScaleFactor ?? 2
+    guard !bounds.isEmpty,
+          let context = CGContext(
+            data: nil, width: Int(bounds.width * scale), height: Int(bounds.height * scale),
+            bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+    context.scaleBy(x: scale, y: scale)
+    context.setFillColor(viewer.backgroundColor.cgColor)
+    context.fill(CGRect(origin: .zero, size: bounds.size))
+    let box = viewer.displayBox
+    for page in viewer.visiblePages {
+      let frame = viewer.convert(page.bounds(for: box), from: page)
+      // A page turned on its side is drawn with its sides swapped.
+      var size = page.bounds(for: box).size
+      if page.rotation % 180 != 0 { size = CGSize(width: size.height, height: size.width) }
+      if frame.isEmpty || size.width <= 0 || size.height <= 0 { continue }
+      context.saveGState()
+      // The picture's origin is at the bottom left.
+      context.translateBy(x: frame.minX, y: viewer.isFlipped ? bounds.height - frame.maxY : frame.minY)
+      context.scaleBy(x: frame.width / size.width, y: frame.height / size.height)
+      context.setFillColor(CGColor.white)
+      context.fill(CGRect(origin: .zero, size: size))
+      page.draw(with: box, to: context)
+      context.restoreGState()
+    }
+    guard let image = context.makeImage() else { return nil }
+    return NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
   }
 
   private func open(over webView: WKWebView, result: @escaping FlutterResult) {

@@ -251,10 +251,10 @@ real WKWebViews.
    redirect or reload; instant, clickable suggestions; a restored tab's page
    is not counted again; one title per visit; inline fill-in (none after
    paste; Right+Enter opens real URL) and first-click select-all.
-20. The PDF viewer's Swift code is uncompiled; WSL tests cover only its
-   buttons. Run `npm run test:mac -- pdf_viewer_test.dart`, then on the Mac
-   drag-select in an arXiv PDF, click chat and send: the question must carry
-   the selection. Why 0.0.16 lost it is unknown; embedded PDFs still use that
-   path.
+20. The PDF viewer passed `npm run test:mac -- pdf_viewer_test.dart` on
+   2026-11-20: open, text, selection, capture, zoom, highlight. By hand on the
+   Mac, drag-select in an arXiv PDF, click chat and send: the question must
+   carry the selection. Why 0.0.16 lost it is unknown; embedded PDFs still use
+   that path.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

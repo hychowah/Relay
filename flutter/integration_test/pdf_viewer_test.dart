@@ -18,7 +18,7 @@ import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 
 const installedBundleId = 'app.relay.flutterExperiment';
 // A fixed version, so the pages stay as the checks expect.
-const paper = 'https://arxiv.org/pdf/2008.08324v1';
+const paper = 'https://arxiv.org/pdf/1301.3781v3';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -84,7 +84,7 @@ void main() {
     expect(page.url, startsWith(paper));
     expect(page.title, isNot('Browser'));
     final read = await browser.read();
-    expect(read['text'], contains('FrankMocap'));
+    expect(read['text'], contains('Word Representations'));
     expect(read['title'], page.title);
     expect((read['pdf'] as Map)['page'], 1);
     expect((read['pdf'] as Map)['pages'], greaterThan(5));
@@ -93,10 +93,10 @@ void main() {
     // Selected text reaches the page context as it is selected, and a read.
     await selectAll();
     await until(
-      () => selection().contains('FrankMocap'),
+      () => selection().contains('Word Representations'),
       'the selection did not reach Relay',
     );
-    expect((await browser.read())['selection'], contains('FrankMocap'));
+    expect((await browser.read())['selection'], contains('Word Representations'));
 
     // A capture shows the viewer, not the page under it; zoom changes it.
     Future<Uint8List> shown() async {
