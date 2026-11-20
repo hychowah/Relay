@@ -235,7 +235,19 @@ class _RelayShellState extends State<RelayShell> {
   late final TextEditingController draft;
   final address = TextEditingController();
   final addressFocus = FocusNode();
-  bool pickedSuggestion = false;
+  bool pickedSuggestion = false, addressWasFocused = false;
+
+  /// The inline fill-in: what the user typed, the whole address shown, with
+  /// the filled-in rest selected after the typed text, and the page's URL.
+  ({String typed, String text, String url})? fill;
+
+  /// The last edit was a deletion, or Esc removed the fill-in (which also
+  /// hides the list); either lasts until the user's next edit.
+  bool noFill = false, escaped = false;
+
+  /// The latest suggestions request, kept so that filling in, which changes
+  /// the text but not the query, does not ask again until the page changes.
+  ({String query, Future<List<_Suggestion>> pages})? asked;
   final messagesScroll = ScrollController();
   Timer? saveTimer;
   ({String appId, Uint8List bytes})? capture;
@@ -553,6 +565,8 @@ class _RelayShellState extends State<RelayShell> {
     final url = w.active?.page?.url;
     if (url != lastPageUrl) {
       lastPageUrl = url;
+      fill = null;
+      asked = null;
       address.text = url == 'about:blank' ? '' : url ?? '';
     }
     // Several controls open or close chat; the panel reopens as it was left.
@@ -629,7 +643,7 @@ class _RelayShellState extends State<RelayShell> {
                               Expanded(child: _addressField()),
                               IconButton(
                                 tooltip: 'Go',
-                                onPressed: () => _go(address.text),
+                                onPressed: () => _go(_addressTarget),
                                 icon: const Icon(Icons.arrow_forward),
                               ),
                             ],
@@ -653,6 +667,12 @@ class _RelayShellState extends State<RelayShell> {
     );
   }
 
+  /// What the address bar opens: the suggested page's own URL while it is
+  /// filled in, since the shown text drops its scheme, `www.` and final `/`;
+  /// otherwise the text as typed.
+  String get _addressTarget =>
+      _filled(address.value) ? fill!.url : address.text;
+
   /// Opens [text] from the address bar; the page it lands on counts as typed.
   Future<void> _go(String text) async {
     final page = w.active?.page;
@@ -673,46 +693,104 @@ class _RelayShellState extends State<RelayShell> {
 
   // Suggestions appear only once the user changes the address the app wrote.
   // Their first option stands for the typed text and is not listed, so Enter
-  // opens what was typed until the arrow keys move to a page. The server
+  // opens what was typed, or the filled-in page, until the arrow keys move to
+  // a page. The server
   // answers as the user types; RawAutocomplete drops an answer once the text
   // has changed again, and until then the earlier list stays, so the typed
   // text option always reads the field rather than the text it was made for.
+  // As in Chrome, the best page's address also fills in after the typed text;
+  // the query stays what the user typed, so the fill-in asks for nothing new.
   Widget _addressField() => RawAutocomplete<_Suggestion>(
     textEditingController: address,
     focusNode: addressFocus,
     optionsBuilder: (value) async {
+      final query = value.text == fill?.text ? fill!.typed : value.text;
       if (!widget.browserHistory ||
-          value.text == lastPageUrl ||
-          value.text.trim().isEmpty) {
+          escaped ||
+          query == lastPageUrl ||
+          query.trim().isEmpty) {
         return const [];
       }
-      final pages = await w.api.browserSuggestions(value.text);
+      if (asked?.query != query) {
+        asked = (query: query, pages: w.api.browserSuggestions(query));
+      }
+      final pages = await asked!.pages;
+      // A failed request also answers nothing; ask again next time.
+      if (pages.isEmpty) asked = null;
+      if (mounted) _fillIn(query, pages);
       return [if (pages.isNotEmpty) _typedText, ...pages];
     },
     displayStringForOption: (option) =>
         option == _typedText ? address.text : option.url,
+    // Enter on the typed text option is opened by onSubmitted.
     onSelected: (option) {
-      pickedSuggestion = true;
       addressFocus.unfocus();
-      _go(option == _typedText ? address.text : option.url);
+      if (option == _typedText) return;
+      pickedSuggestion = true;
+      _go(option.url);
     },
     fieldViewBuilder: (context, controller, focus, submit) => Builder(
-      builder: (context) => TextField(
-        controller: controller,
-        focusNode: focus,
-        decoration: const InputDecoration(
-          hintText: 'Search or enter a web address',
-          isDense: true,
-          contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        ),
-        // Each change of the text returns the highlight to the typed text.
-        onChanged: (_) =>
-            Actions.maybeInvoke(context, const AutocompleteFirstOptionIntent()),
-        onSubmitted: (text) {
-          pickedSuggestion = false;
-          submit();
-          if (!pickedSuggestion) _go(text);
+      builder: (context) => Actions(
+        actions: {
+          DismissIntent: CallbackAction<DismissIntent>(
+            onInvoke: (intent) {
+              if (_filled(address.value)) {
+                escaped = true;
+                address.value = TextEditingValue(
+                  text: fill!.typed,
+                  selection: TextSelection.collapsed(
+                    offset: fill!.typed.length,
+                  ),
+                );
+              }
+              return Actions.maybeInvoke(context, intent);
+            },
+          ),
         },
+        // A tap focuses the field as the field's own request, which
+        // selectAllOnFocus skips, and the tap has placed the caret by the
+        // time onTap runs; so a click that focuses the field selects here.
+        child: Listener(
+          onPointerDown: (_) => addressWasFocused = addressFocus.hasFocus,
+          child: TextField(
+            controller: controller,
+            focusNode: focus,
+            decoration: const InputDecoration(
+              hintText: 'Search or enter a web address',
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
+            ),
+            inputFormatters: [
+              TextInputFormatter.withFunction(
+                (before, now) => _edited(context, before, now),
+              ),
+            ],
+            onTap: () {
+              if (!addressWasFocused) {
+                address.selection = TextSelection(
+                  baseOffset: 0,
+                  extentOffset: address.text.length,
+                );
+              }
+            },
+            // Each change of the text returns the highlight to the typed text.
+            onChanged: (_) => Actions.maybeInvoke(
+              context,
+              const AutocompleteFirstOptionIntent(),
+            ),
+            onSubmitted: (_) {
+              // Read first: selecting the typed text option drops the
+              // selection that marks the fill-in.
+              final target = _addressTarget;
+              pickedSuggestion = false;
+              submit();
+              if (!pickedSuggestion) _go(target);
+            },
+          ),
+        ),
       ),
     ),
     optionsViewBuilder: (context, select, options) {
@@ -761,6 +839,83 @@ class _RelayShellState extends State<RelayShell> {
       );
     },
   );
+
+  bool _filled(TextEditingValue value) =>
+      value.text == fill?.text &&
+      value.selection.start == fill!.typed.length &&
+      value.selection.end == value.text.length &&
+      value.composing.isCollapsed;
+
+  /// Fills in the best page after [query] once its answer arrives, if the
+  /// user is still editing [query], as typed or filled in, with the caret at
+  /// the end and no input method composing.
+  void _fillIn(String query, List<_Suggestion> pages) {
+    final value = address.value;
+    final atEnd =
+        value.selection.isCollapsed &&
+        value.selection.baseOffset == value.text.length &&
+        value.composing.isCollapsed;
+    final typed = _filled(value) ? fill!.typed : (atEnd ? value.text : null);
+    if (noFill || typed != query || !addressFocus.hasFocus) return;
+    final best = pages.firstOrNull;
+    final text = best == null ? null : inlineCompletion(query, best.url);
+    fill = text == null ? null : (typed: query, text: text, url: best!.url);
+    final shown = text ?? query;
+    if (shown != value.text) {
+      address.value = TextEditingValue(
+        text: shown,
+        selection: TextSelection(
+          baseOffset: query.length,
+          extentOffset: shown.length,
+        ),
+      );
+    }
+  }
+
+  /// Applies the user's own edits. Typing the next filled-in character keeps
+  /// the rest filled in without waiting for the server; any other edit drops
+  /// the fill-in, and a deletion fills nothing in until the next edit.
+  TextEditingValue _edited(
+    BuildContext context,
+    TextEditingValue before,
+    TextEditingValue now,
+  ) {
+    final shown = fill, typed = now.text;
+    escaped = false;
+    if (shown != null &&
+        _filled(before) &&
+        now.composing.isCollapsed &&
+        now.selection.isCollapsed &&
+        now.selection.baseOffset == typed.length &&
+        typed.length > shown.typed.length &&
+        typed.length < shown.text.length &&
+        shown.text.toLowerCase().startsWith(typed.toLowerCase())) {
+      noFill = false;
+      fill = (
+        typed: typed,
+        text: typed + shown.text.substring(typed.length),
+        url: shown.url,
+      );
+      // The text stays the same, so onChanged does not run.
+      Actions.maybeInvoke(context, const AutocompleteFirstOptionIntent());
+      return TextEditingValue(
+        text: fill!.text,
+        selection: TextSelection(
+          baseOffset: typed.length,
+          extentOffset: fill!.text.length,
+        ),
+      );
+    }
+    fill = null;
+    final cut = before.selection;
+    noFill =
+        before.composing.isCollapsed &&
+        (cut.isCollapsed
+            ? typed.length < before.text.length
+            : typed ==
+                  cut.textBefore(before.text) + cut.textAfter(before.text));
+    return now;
+  }
 
   /// Every tab's page stays in one keyed slot of this stack, so showing it
   /// alone, in a split pane or hidden only changes its position and never
@@ -1920,6 +2075,24 @@ class _NewTabPageState extends State<NewTabPage> {
       ),
     );
   }
+}
+
+/// The address-bar text that completes [typed] with [url] inline, or null
+/// when [url], without its scheme and `www.`, does not continue [typed]. The
+/// typed characters stay as typed, and a bare site has no trailing `/`.
+String? inlineCompletion(String typed, String url) {
+  final prefix = RegExp(r'^(https?://)?(www\.)?', caseSensitive: false);
+  final start = typed.replaceFirst(prefix, '');
+  var address = url.replaceFirst(prefix, '');
+  if (RegExp(r'^[^/]+/$').hasMatch(address)) {
+    address = address.substring(0, address.length - 1);
+  }
+  if (start.isEmpty ||
+      address.length <= start.length ||
+      !address.toLowerCase().startsWith(start.toLowerCase())) {
+    return null;
+  }
+  return typed + address.substring(start.length);
 }
 
 /// An address-bar suggestion: a visited page, or [_typedText].
