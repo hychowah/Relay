@@ -39,3 +39,4 @@ flutter:
   assets:
     - assets/replace.sh
     - assets/page_fullscreen.js
+    - assets/page_highlights.js

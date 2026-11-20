@@ -21,8 +21,9 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
   private var fetch: URLSessionDataTask?
   private var opened: FlutterResult?
   private weak var webView: WKWebView?
-  /// The highlights made here. They last while the PDF stays open in the tab.
-  private var marks: [PDFAnnotation] = []
+  /// The highlights shown, each with the marks drawn for its lines. Relay
+  /// keeps them on its server and gives them back when the PDF opens.
+  private var highlights: [String: [PDFAnnotation]] = [:]
 
   private init(identifier: Int64, channel: FlutterMethodChannel) {
     self.identifier = identifier
@@ -36,15 +37,17 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
   }
 
   /// `open` answers the PDF's title and page count, or nil when the address
-  /// gave no PDF. `close` removes the viewer. `text` answers the text from
-  /// the page in view onward. `zoomIn`, `zoomOut`, `zoomFit` and `highlight`
-  /// act on the viewer.
+  /// gave no PDF this viewer can show. `close` removes the viewer. `text`
+  /// answers the text from the page in view onward. `zoomIn`, `zoomOut` and
+  /// `zoomFit` act on the viewer. `highlight` marks the selection as the
+  /// highlight `id`, or removes the highlights it lies on, and answers which.
+  /// `marks` draws the kept highlights given.
   static func perform(
-    _ action: String, on webView: WKWebView, identifier: Int64, channel: FlutterMethodChannel,
+    _ arguments: [String: Any], on webView: WKWebView, identifier: Int64, channel: FlutterMethodChannel,
     result: @escaping FlutterResult
   ) {
     let current = objc_getAssociatedObject(webView, &key) as? BrowserPDF
-    switch action {
+    switch arguments["do"] as? String {
     case "open":
       current?.close()
       let pdf = BrowserPDF(identifier: identifier, channel: channel)
@@ -56,8 +59,27 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
       result(nil)
     case "text":
       result(shown(on: webView)?.text())
+    case "highlight":
+      result((arguments["id"] as? String).flatMap { shown(on: webView)?.toggleHighlight(as: $0) })
+    case "marks":
+      shown(on: webView)?.draw(arguments["highlights"] as? [[String: Any]] ?? [])
+      result(nil)
+    case "zoomIn":
+      shown(on: webView)?.viewer.zoomIn(nil)
+      result(nil)
+    case "zoomOut":
+      shown(on: webView)?.viewer.zoomOut(nil)
+      result(nil)
+    case "zoomFit":
+      shown(on: webView)?.viewer.autoScales = true
+      result(nil)
+    #if DEBUG
+      // The Mac check cannot drag over a native view; debug builds only.
+      case "selectAll":
+        shown(on: webView)?.viewer.selectAll(nil)
+        result(nil)
+    #endif
     default:
-      shown(on: webView)?.act(action)
       result(nil)
     }
   }
@@ -118,15 +140,17 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
       if let agent = webView?.customUserAgent, !agent.isEmpty {
         request.setValue(agent, forHTTPHeaderField: "User-Agent")
       }
-      let session = URLSession(configuration: configuration)
-      let task = session.dataTask(with: request) { [weak self, weak webView] data, _, _ in
+      let session = URLSession(configuration: configuration, delegate: SameAddress(), delegateQueue: nil)
+      let task = session.dataTask(with: request) { [weak self, weak webView] data, response, _ in
         DispatchQueue.main.async {
           // A closed viewer has already answered.
           guard let pdf = self, let answer = pdf.opened else { return }
           pdf.opened = nil
           pdf.fetch = nil
+          // A PDF that needs a password stays with WebKit, which asks for it.
           guard let webView = webView, webView.url == url, let data = data,
-                let document = PDFDocument(data: data), document.pageCount > 0 else {
+                let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status),
+                let document = PDFDocument(data: data), document.pageCount > 0, !document.isLocked else {
             answer(nil)
             return
           }
@@ -185,20 +209,6 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
     channel.invokeMethod("pdfSelection", arguments: event)
   }
 
-  private func act(_ action: String) {
-    switch action {
-    case "zoomIn": viewer.zoomIn(nil)
-    case "zoomOut": viewer.zoomOut(nil)
-    case "zoomFit": viewer.autoScales = true
-    case "highlight": toggleHighlight()
-    #if DEBUG
-      // The Mac check cannot drag over a native view; debug builds only.
-      case "selectAll": viewer.selectAll(nil)
-    #endif
-    default: break
-    }
-  }
-
   private func text() -> [String: Any]? {
     guard let document = viewer.document else { return nil }
     let inView = viewer.currentPage.map { document.index(for: $0) } ?? 0
@@ -214,9 +224,38 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
     ]
   }
 
-  /// Highlights the selected lines, or removes the highlights they lie on.
-  private func toggleHighlight() {
-    guard let selection = viewer.currentSelection else { return }
+  private func mark(_ bounds: NSRect, on page: PDFPage) -> PDFAnnotation {
+    let mark = PDFAnnotation(bounds: bounds, forType: .highlight, withProperties: nil)
+    mark.color = NSColor.systemYellow.withAlphaComponent(0.5)
+    page.addAnnotation(mark)
+    return mark
+  }
+
+  /// Draws kept highlights: each has an `id` and, for every line, a
+  /// [page, x, y, width, height] in `marks`.
+  private func draw(_ kept: [[String: Any]]) {
+    guard let document = viewer.document else { return }
+    for item in kept {
+      guard let id = item["id"] as? String, highlights[id] == nil,
+            let lines = item["marks"] as? [[NSNumber]] else { continue }
+      var drawn: [PDFAnnotation] = []
+      for line in lines where line.count == 5 {
+        let index = line[0].intValue
+        guard index >= 0, index < document.pageCount, let page = document.page(at: index) else { continue }
+        let bounds = NSRect(
+          x: line[1].doubleValue, y: line[2].doubleValue, width: line[3].doubleValue,
+          height: line[4].doubleValue)
+        drawn.append(mark(bounds, on: page))
+      }
+      if !drawn.isEmpty { highlights[id] = drawn }
+    }
+  }
+
+  /// Highlights the selected lines as `id` and answers `added` with their
+  /// text and marks, or removes the highlights the selection lies on and
+  /// answers `removed` with their ids.
+  private func toggleHighlight(as id: String) -> [String: Any]? {
+    guard let selection = viewer.currentSelection, let document = viewer.document else { return nil }
     var lines: [(page: PDFPage, bounds: NSRect)] = []
     for line in selection.selectionsByLine() {
       for page in line.pages {
@@ -224,26 +263,48 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
         if !bounds.isEmpty { lines.append((page, bounds)) }
       }
     }
-    if lines.isEmpty { return }
+    if lines.isEmpty { return nil }
+    defer { viewer.clearSelection() }
     // Neighbouring lines' boxes touch, so only a real overlap counts.
-    let covered = marks.filter { mark in
-      lines.contains { line in
-        let overlap = line.bounds.intersection(mark.bounds)
-        return line.page === mark.page && overlap.width > 1
-          && overlap.height > min(line.bounds.height, mark.bounds.height) / 2
+    let covered = highlights.filter { _, drawn in
+      drawn.contains { mark in
+        lines.contains { line in
+          let overlap = line.bounds.intersection(mark.bounds)
+          return line.page === mark.page && overlap.width > 1
+            && overlap.height > min(line.bounds.height, mark.bounds.height) / 2
+        }
       }
-    }
-    if covered.isEmpty {
-      for line in lines {
-        let mark = PDFAnnotation(bounds: line.bounds, forType: .highlight, withProperties: nil)
-        mark.color = NSColor.systemYellow.withAlphaComponent(0.5)
-        line.page.addAnnotation(mark)
-        marks.append(mark)
+    }.map { $0.key }
+    if !covered.isEmpty {
+      for key in covered {
+        for mark in highlights.removeValue(forKey: key) ?? [] { mark.page?.removeAnnotation(mark) }
       }
-    } else {
-      for mark in covered { mark.page?.removeAnnotation(mark) }
-      marks.removeAll { mark in covered.contains { $0 === mark } }
+      return ["removed": covered]
     }
-    viewer.clearSelection()
+    var drawn: [PDFAnnotation] = []
+    var marks: [[Double]] = []
+    for line in lines {
+      drawn.append(mark(line.bounds, on: line.page))
+      marks.append([
+        Double(document.index(for: line.page)), Double(line.bounds.minX), Double(line.bounds.minY),
+        Double(line.bounds.width), Double(line.bounds.height),
+      ])
+    }
+    highlights[id] = drawn
+    let quoted = String(decoding: (selection.string ?? "").utf16.prefix(4000), as: UTF16.self)
+    let added: [String: Any] = ["text": quoted, "marks": marks]
+    return ["added": added]
+  }
+}
+
+/// The viewer's own fetch goes only to the address the tab shows. That address
+/// passed the Browser's rule; a redirect could lead to one that would not, such
+/// as a private address, so a redirected fetch is given up.
+private final class SameAddress: NSObject, URLSessionTaskDelegate {
+  func urlSession(
+    _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void
+  ) {
+    completionHandler(nil)
   }
 }

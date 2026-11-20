@@ -60,14 +60,14 @@ class MainFlutterWindow: NSWindow {
       }
       if call.method == "pdf" {
         guard let registry = flutterViewController, let arguments = call.arguments as? [String: Any],
-              let identifier = arguments["view"] as? NSNumber, let action = arguments["do"] as? String,
+              let identifier = arguments["view"] as? NSNumber,
               let view = FWFWebViewFlutterWKWebViewExternalAPI.webView(
                 forIdentifier: identifier.int64Value, withPluginRegistry: registry
               ) else {
           result(nil)
           return
         }
-        BrowserPDF.perform(action, on: view, identifier: identifier.int64Value, channel: browser, result: result)
+        BrowserPDF.perform(arguments, on: view, identifier: identifier.int64Value, channel: browser, result: result)
         return
       }
       if call.method == "snapshot" || call.method == "selection" {

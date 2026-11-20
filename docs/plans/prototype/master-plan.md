@@ -324,7 +324,7 @@ Tailscale checks for Relay and Research Web remain open prototype exits.
 
 Defer read/write effects to the first write, access scopes and versioned migrations to projects, and network policy injection to the Docker executor. Revisit server acknowledgement checks if bridge ownership changes, and new tool statuses or a run-oriented harness when existing lifecycles fall short.
 
-The [Flutter handoff](../flutter/master-plan.md#next) covers installing and reviewing Stable 0.0.16 on the Mac, with its checks for tab restore, the transcript pane and the app list refresh, and the split view. It also lists the Mac checks for the capture animation and the Browser's PDF viewer, which are not in Stable yet. On the next preview teardown, use the [worktree removal command](../../../flutter/README.md#publish-a-worktree-test-build).
+The [Flutter handoff](../flutter/master-plan.md#next) covers installing and reviewing Stable 0.0.16 on the Mac, with its checks for tab restore, the transcript pane and the app list refresh, and the split view. It also lists the Mac checks for the capture animation, the Browser's PDF viewer, highlights and Stored data, which are not in Stable yet; the last three need the backend deployed first. On the next preview teardown, use the [worktree removal command](../../../flutter/README.md#publish-a-worktree-test-build).
 
 The [coding sessions plan](../coding-sessions/master-plan.md) covers handing requests to Claude Code or Codex sessions through a coding app in its own project.
 

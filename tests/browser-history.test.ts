@@ -113,15 +113,9 @@ test("browser history shows the best six", async () => {
   assert.deepEqual(await h.suggested("site"), [8, 7, 6, 5, 4, 3].map((i) => `https://site${i}.example/`));
 });
 
-test("browser history forgets pages after 90 days and keeps the best 1000", async () => {
+test("browser history keeps the best 1000", async () => {
   const h = history();
-  await h.visit("https://stale.example/", { visits: 20, daysAgo: 91 });
   await h.visit("https://kept.example/", { daysAgo: 89 });
-  assert.deepEqual(await h.suggested("example"), ["https://kept.example/"]);
-  assert.equal(h.store.browserPages().length, 2, "only a write forgets pages");
-  await h.post("typed", { url: "https://kept.example/" });
-  assert.deepEqual(h.store.browserPages().map((page) => page.url), ["https://kept.example/"]);
-
   for (let i = 0; i < 999; i++) {
     h.store.countBrowserPage(`https://page${i}.example/`, h.clock.time, "visit");
     h.store.countBrowserPage(`https://page${i}.example/`, h.clock.time, "visit");
@@ -130,12 +124,4 @@ test("browser history forgets pages after 90 days and keeps the best 1000", asyn
   assert.equal(h.store.browserPages().length, 1000);
   assert.deepEqual(await h.suggested("kept"), [], "the weakest page goes");
   assert.deepEqual(await h.suggested("page999"), ["https://page999.example/"]);
-});
-
-test("browser history clears every page", async () => {
-  const h = history();
-  await h.visit("https://example.com/");
-  assert.equal((await h.app.request("/api/browser-history", { method: "DELETE" })).status, 204);
-  assert.deepEqual(h.store.browserPages(), []);
-  assert.deepEqual(await h.suggested("example"), []);
 });

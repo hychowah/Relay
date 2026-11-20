@@ -24,6 +24,7 @@ import 'workspace_tabs.dart';
 import 'page_surface.dart';
 import 'region_capture.dart';
 import 'split_layout.dart';
+import 'stored_data.dart';
 import 'bug_reports.dart';
 import 'capture_flight.dart';
 import 'transcript_pane.dart';
@@ -49,7 +50,7 @@ Future<void> main() async {
     api: api,
     deviceId: device,
     pages: (spec, changed) =>
-        createWebPage(spec, changed, history: browserHistory ? api : null),
+        createWebPage(spec, changed, records: browserHistory ? api : null),
     conversationId: prefs.getString('conversation'),
     pendingSession: session == null ? null : jsonDecode(session) as Json,
     storeSession: (session) async {
@@ -492,6 +493,11 @@ class _RelayShellState extends State<RelayShell> {
             context: context,
             builder: (_) => BugReportsDialog(api: w.api),
           );
+        case 'stored':
+          await showDialog<void>(
+            context: context,
+            builder: (_) => StoredDataDialog(api: w.api),
+          );
         case 'provider':
           await showDialog<void>(
             context: context,
@@ -646,8 +652,7 @@ class _RelayShellState extends State<RelayShell> {
                                 onPressed: () => _go(_addressTarget),
                                 icon: const Icon(Icons.arrow_forward),
                               ),
-                              if (w.active?.page?.browser?.pdf == true)
-                                ..._pdfControls(),
+                              ..._readingControls(),
                             ],
                           ),
                         ),
@@ -669,34 +674,38 @@ class _RelayShellState extends State<RelayShell> {
     );
   }
 
-  // Desktop only: a PDF in the Browser tab shows in the Mac's own PDF viewer,
-  // which these buttons drive.
-  List<Widget> _pdfControls() {
+  // Desktop only: zoom for a PDF, which shows in the Mac's own PDF viewer,
+  // and Highlight for the text selected on any page of a Browser tab.
+  List<Widget> _readingControls() {
+    final browser = w.active?.page?.browser;
     final selection = w.active?.page?.context?['selection'];
     final selected = selection is String && selection.isNotEmpty;
     return [
-      IconButton(
-        tooltip: 'Zoom out',
-        onPressed: () => w.browserAction('zoomOut'),
-        icon: const Icon(Icons.zoom_out),
-      ),
-      IconButton(
-        tooltip: 'Zoom in',
-        onPressed: () => w.browserAction('zoomIn'),
-        icon: const Icon(Icons.zoom_in),
-      ),
-      IconButton(
-        tooltip: 'Fit to width',
-        onPressed: () => w.browserAction('zoomFit'),
-        icon: const Icon(Icons.fit_screen),
-      ),
-      IconButton(
-        tooltip: selected
-            ? 'Highlight the selected text, or remove its highlight'
-            : 'Select text in the PDF to highlight it',
-        onPressed: selected ? () => w.browserAction('highlight') : null,
-        icon: const Icon(Icons.border_color),
-      ),
+      if (browser?.pdf == true) ...[
+        IconButton(
+          tooltip: 'Zoom out',
+          onPressed: () => w.browserAction('zoomOut'),
+          icon: const Icon(Icons.zoom_out),
+        ),
+        IconButton(
+          tooltip: 'Zoom in',
+          onPressed: () => w.browserAction('zoomIn'),
+          icon: const Icon(Icons.zoom_in),
+        ),
+        IconButton(
+          tooltip: 'Fit to width',
+          onPressed: () => w.browserAction('zoomFit'),
+          icon: const Icon(Icons.fit_screen),
+        ),
+      ],
+      if (browser?.canHighlight == true)
+        IconButton(
+          tooltip: selected
+              ? 'Highlight the selected text, or remove its highlight'
+              : 'Select text on the page to highlight it',
+          onPressed: selected ? () => w.browserAction('highlight') : null,
+          icon: const Icon(Icons.border_color),
+        ),
     ];
   }
 
@@ -712,15 +721,6 @@ class _RelayShellState extends State<RelayShell> {
     await w.navigate(text);
     if (mounted && w.error == null && page != null && widget.browserHistory) {
       w.api.browserTyped(page.url);
-    }
-  }
-
-  Future<void> _clearBrowserHistory() async {
-    try {
-      await w.api.clearBrowserHistory();
-    } catch (e) {
-      w.error = 'Browsing history was not cleared: $e';
-      w.changed();
     }
   }
 
@@ -1440,26 +1440,7 @@ class _RelayShellState extends State<RelayShell> {
               onChanged: (value) => w.setNewestTabFirst(value!),
               child: const Text('Newest tab first'),
             ),
-            if (widget.browserHistory)
-              Padding(
-                padding: const EdgeInsets.only(left: 12),
-                child: Row(
-                  children: [
-                    const Icon(Icons.history_rounded, size: 17),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'Browsing history',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                    const Spacer(),
-                    ConfirmDeleteButton(
-                      tooltip: 'Clear browsing history',
-                      label: 'Clear',
-                      onConfirmed: _clearBrowserHistory,
-                    ),
-                  ],
-                ),
-              ),
+            _menuItem('stored', 'Stored data', Icons.storage_rounded),
             if (widget.updates != null)
               _menuItem(
                 'updates',

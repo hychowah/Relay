@@ -129,8 +129,30 @@ in, and otherwise what was typed. The history is kept on the Relay server, one
 entry per address, so every Mac using that server shares it. The agent and app
 integrations never get it, and history requests are left out of bug recordings
 (the addresses you type are still recorded as navigation). Pages not visited
-for 90 days drop out, and the trash button beside **Browsing history** in the
-Workspace menu clears it on the server.
+for 90 days drop out unless **Stored data** says otherwise.
+
+**Workspace menu → Stored data** lists what the Relay server keeps as you
+work, for every device that uses it: browsing history and highlights now, and
+any kind the server adds later. Each kind shows how many items it holds and
+their size, and has a clear button. **Auto-clean** forgets a kind's items once
+they are older than the number of days you set; turned off, they are kept
+until you clear them. Browsing history starts at 90 days and highlights start
+with auto-clean off. The server cleans at start, every hour and when you
+change a setting.
+
+On macOS only, select text on a page in a Browser tab and press **Highlight**
+beside the address bar to mark it; select marked text and press it again to
+remove the mark. Highlights are kept on the Relay server for the page's
+address (without its #fragment), so they return on the next visit and on
+every Mac. A web page's highlight is the quoted text and a little of the text
+around it, not a place in the page: it shows wherever that text is on a page
+with that address, and only while it is there. A page that redraws itself, or
+changes its content under one address as single-page apps do, keeps its
+highlights on the right text, and a view without that text shows none.
+Highlights are painted without changing the page's own elements. Text inside a
+frame, such as an embedded document, cannot be highlighted. Like browsing
+history, highlights are never given to the agent or to app integrations, and
+their requests are left out of bug recordings.
 
 On macOS only, a video's fullscreen button works in a Browser tab, also for a
 player embedded from another site that allows fullscreen. In split view the
@@ -143,16 +165,20 @@ popup window fills only that window.
 
 On macOS only, a PDF opened in a Browser tab shows in the Mac's own PDF viewer
 (PDFKit, as in Preview) in place of WebKit's. **Zoom out**, **Zoom in** and
-**Fit to width** appear beside the address bar, and a pinch zooms too. Select
-text and press **Highlight** to mark it; select marked text and press it again
-to remove the mark. Highlights last while the PDF stays open in the tab; they
-are not saved, so a reload or a restart clears them. Text selected in the PDF
-shows in the chat's page context at once and goes with the next question. The
-agent's `browser.read` gets the PDF's text from the page in view onward, with
-that page's number and the page count.
-Relay fetches the PDF a second time for this viewer, with the tab's cookies;
-if that fails, WebKit's own view stays, without these features. A PDF embedded
-inside a web page keeps the page's own viewer.
+**Fit to width** appear beside the address bar, and a pinch zooms too.
+**Highlight** works as on web pages; a PDF's highlight also keeps where its
+lines are drawn, so a PDF that changes under the same address can show old
+highlights in the wrong place. Text selected in the PDF shows in the chat's
+page context at once and goes with the next question. The agent's
+`browser.read` gets the PDF's text from the page in view onward, with that
+page's number and the page count. A link in the PDF opens in the tab, under
+the Browser's address rule.
+Relay fetches the PDF a second time for this viewer, with the tab's cookies
+and only from the address the tab shows: a redirect is not followed. If the
+fetch fails, or the PDF needs a password, WebKit's own view stays, without
+these features. A PDF embedded inside a web page keeps the page's own viewer.
+The viewer reads the PDF in Relay's own process, which is not sandboxed, where
+WebKit reads it in its sandboxed web process.
 
 On macOS, select page or PDF text and ask a question with page context enabled.
 With a YouTube video open in a Browser tab, ask about the video: the agent reads
@@ -177,10 +203,11 @@ Trash cleanup deletes it with the conversation.
 one self-contained integration test on the Mac against real WKWebViews:
 `popup_windows_test.dart` (with its own loopback fixture),
 `video_fullscreen_test.dart`, which puts the test window into macOS fullscreen
-for a few seconds, or `pdf_viewer_test.dart`, which opens one public PDF and
-so needs the internet on the Mac. Like the smoothness suite below, it builds a
-temporary copy under its own bundle id, `app.relay.flutterTest`, and removes
-the copy and the test app's data afterwards. It refuses `workflow_test.dart`,
+for a few seconds, or `pdf_viewer_test.dart`, which opens one arXiv paper as
+a PDF and as a web page and so needs the internet on the Mac. Like the
+smoothness suite below, it builds a temporary copy under its own bundle id,
+`app.relay.flutterTest`, and removes the copy and the test app's data
+afterwards. It refuses `workflow_test.dart`,
 which uses the Flutter deployment's records.
 
 ### Measure performance

@@ -49,6 +49,26 @@ export interface BrowserPage {
   lastVisit: number;
 }
 
+/**
+ * Text the user highlighted on a page. A web page finds it again by the text
+ * and the text around it, so it shows wherever that text is on the page; a
+ * PDF also keeps where its lines are drawn.
+ */
+export interface Highlight {
+  id: string;
+  text: string;
+  prefix: string;
+  suffix: string;
+  /** PDF only: one [page, x, y, width, height] for each highlighted line. */
+  marks?: number[][];
+}
+
+/** How much one stored-data category holds. */
+export interface StoredUsage {
+  items: number;
+  bytes: number;
+}
+
 export class Store {
   private db: DatabaseSync;
 
@@ -99,6 +119,11 @@ export class Store {
         url TEXT PRIMARY KEY, title TEXT NOT NULL, visits INTEGER NOT NULL, typed INTEGER NOT NULL,
         last_visit INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS highlights (
+        id TEXT PRIMARY KEY, url TEXT NOT NULL, data TEXT NOT NULL, created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS highlights_url ON highlights(url);
+      CREATE TABLE IF NOT EXISTS stored_data_cleanup (category TEXT PRIMARY KEY, days INTEGER);
     `);
     const columns = this.db.prepare("PRAGMA table_info(conversations)").all();
     if (!columns.some((column) => column.name === "bot_id")) {
@@ -349,6 +374,53 @@ export class Store {
       this.db.exec("ROLLBACK");
       throw error;
     }
+  }
+
+  forgetBrowserPagesBefore(at: number) {
+    this.db.prepare("DELETE FROM browser_pages WHERE last_visit < ?").run(at);
+  }
+
+  browserPagesUsage() {
+    return this.db.prepare(`SELECT COUNT(*) AS items,
+      COALESCE(SUM(LENGTH(CAST(url AS BLOB)) + LENGTH(CAST(title AS BLOB))), 0) AS bytes
+      FROM browser_pages`).get() as unknown as StoredUsage;
+  }
+
+  /** The highlights made at a page address, oldest first. */
+  highlights(url: string): Highlight[] {
+    return this.db.prepare("SELECT id, data FROM highlights WHERE url = ? ORDER BY created_at, rowid").all(url)
+      .map((row) => ({ ...JSON.parse(row.data as string), id: row.id as string }));
+  }
+
+  addHighlight(url: string, { id, ...data }: Highlight, at: number) {
+    this.db.prepare("INSERT OR REPLACE INTO highlights VALUES (?, ?, ?, ?)").run(id, url, JSON.stringify(data), at);
+  }
+
+  forgetHighlight(id: string) {
+    this.db.prepare("DELETE FROM highlights WHERE id = ?").run(id);
+  }
+
+  /** Forgets every highlight, or those made before [before]. */
+  forgetHighlights(before?: number) {
+    if (before === undefined) this.db.exec("DELETE FROM highlights");
+    else this.db.prepare("DELETE FROM highlights WHERE created_at < ?").run(before);
+  }
+
+  highlightsUsage() {
+    return this.db.prepare(`SELECT COUNT(*) AS items,
+      COALESCE(SUM(LENGTH(CAST(url AS BLOB)) + LENGTH(CAST(data AS BLOB))), 0) AS bytes
+      FROM highlights`).get() as unknown as StoredUsage;
+  }
+
+  /** The days a stored-data category is kept: null for ever, undefined when never chosen. */
+  cleanupDays(category: string): number | null | undefined {
+    const row = this.db.prepare("SELECT days FROM stored_data_cleanup WHERE category = ?").get(category);
+    return row ? row.days as number | null : undefined;
+  }
+
+  setCleanupDays(category: string, days: number | null) {
+    this.db.prepare(`INSERT INTO stored_data_cleanup VALUES (?, ?)
+      ON CONFLICT(category) DO UPDATE SET days = excluded.days`).run(category, days);
   }
 
   forgottenKeys(conversationId: string): string[] {

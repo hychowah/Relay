@@ -73,10 +73,14 @@ class TestController extends PlatformWebViewController {
   Future<void> runJavaScript(String javaScript) async =>
       scripts.add(javaScript);
   Object playTime = -1;
+  // What the page's highlight script answers to Highlight.
+  String highlighted = 'null';
   @override
   Future<Object> runJavaScriptReturningResult(String javaScript) async =>
       javaScript == youtubePlaybackTimeScript
       ? playTime
+      : javaScript.contains('__relayHighlights?.toggle')
+      ? highlighted
       : jsonEncode({'url': location, 'title': 'YouTube', 'selection': ''});
   @override
   Future<bool> canGoBack() async => history;
@@ -251,6 +255,9 @@ void main() {
       final api = RelayApi(
         Uri.parse('http://relay.test'),
         client: MockClient((request) async {
+          if (request.url.path.startsWith('/api/highlights')) {
+            return http.Response('[]', 200);
+          }
           sent.add('${request.url.pathSegments.last} ${request.body}');
           return http.Response('{}', 200);
         }),
@@ -264,7 +271,7 @@ void main() {
           relayOrigin: api.origin,
         ),
         (_) {},
-        history: api,
+        records: api,
       );
       addTearDown(page.dispose);
       final controller = platform.controller;
@@ -309,6 +316,102 @@ void main() {
         'visit {"url":"https://8.8.8.8/next?v=2"}',
         'title {"url":"https://8.8.8.8/next?v=2","title":"Video"}',
       ]);
+    },
+  );
+
+  test(
+    'a web page highlight is kept under the page address and shown again',
+    () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final platform = TestWebPlatform();
+      WebViewPlatform.instance = platform;
+      const kept = {
+        'id': 'old',
+        'text': 'an earlier passage',
+        'prefix': 'before ',
+        'suffix': ' after',
+      };
+      final sent = <String>[];
+      final api = RelayApi(
+        Uri.parse('http://relay.test'),
+        client: MockClient((request) async {
+          if (!request.url.path.startsWith('/api/highlights')) {
+            return http.Response('{}', 200);
+          }
+          sent.add(
+            '${request.method} ${request.url.path} '
+                    '${request.url.queryParameters['url'] ?? request.body}'
+                .trim(),
+          );
+          return request.method == 'GET'
+              ? http.Response(jsonEncode([kept]), 200)
+              : http.Response('', 204);
+        }),
+      );
+      final page = createWebPage(
+        PageSpec(
+          id: 'tab',
+          appId: 'browser',
+          name: 'Browser',
+          sessionId: 'session',
+          relayOrigin: api.origin,
+        ),
+        (_) {},
+        records: api,
+      );
+      addTearDown(page.dispose);
+      final controller = platform.controller;
+      await pumpEventQueue();
+      controller
+        ..location = 'about:blank'
+        ..delegate.finished('about:blank');
+      await page.ready;
+      sent.clear();
+      final done = page.browser!.navigate('https://8.8.8.8/article#part');
+      await pumpEventQueue();
+      controller
+        ..location = 'https://8.8.8.8/article#part'
+        ..delegate.finished(controller.location);
+      await done;
+      await pumpEventQueue();
+
+      // The page gets its script, then the highlights kept for its address.
+      expect(sent, ['GET /api/highlights https://8.8.8.8/article']);
+      expect(controller.scripts.last, contains('.set([${jsonEncode(kept)}])'));
+      expect(
+        controller.scripts[controller.scripts.length - 2],
+        contains('window.__relayHighlights ='),
+      );
+
+      // Highlight saves what the page's script quoted, and forgets what the
+      // script took off.
+      controller.highlighted = jsonEncode({
+        'added': {'text': 'a passage', 'prefix': 'the ', 'suffix': ' ends'},
+      });
+      await page.browser!.browserAction('highlight');
+      final saved = jsonDecode(sent.last.split(' ').skip(2).join(' ')) as Map;
+      expect(sent.last, startsWith('POST /api/highlights '));
+      expect(saved['id'], hasLength(36));
+      expect(saved..remove('id'), {
+        'url': 'https://8.8.8.8/article',
+        'text': 'a passage',
+        'prefix': 'the ',
+        'suffix': ' ends',
+      });
+      controller.highlighted = jsonEncode({
+        'removed': ['old'],
+      });
+      await page.browser!.browserAction('highlight');
+      expect(sent.last, 'DELETE /api/highlights/old');
+      controller.highlighted = 'null';
+      await page.browser!.browserAction('highlight');
+      expect(sent, hasLength(3), reason: 'nothing was selected');
+
+      // A page that moves to another of its addresses shows that one's.
+      controller.location = 'https://8.8.8.8/other';
+      controller.delegate.urlChange(UrlChange(url: controller.location));
+      await pumpEventQueue();
+      expect(sent.last, 'GET /api/highlights https://8.8.8.8/other');
     },
   );
 

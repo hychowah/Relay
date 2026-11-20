@@ -44,8 +44,12 @@ The implemented workflows include the following.
   details.
 - Video fullscreen (desktop only): a page's fullscreen fills its split pane,
   or the whole screen when its tab shows alone (see the Flutter README).
-- PDF viewer (desktop only): a PDF in a Browser tab gets zoom and highlights,
-  and its selection and text reach the agent (see the Flutter README).
+- PDF viewer (desktop only): a PDF in a Browser tab gets zoom, and its
+  selection and text reach the agent (see the Flutter README).
+- Highlights (desktop only): text marked on web pages and PDFs in Browser
+  tabs, kept on the server by address and quoted text.
+- Stored data: a Workspace menu screen lists what the server keeps (browsing
+  history, highlights), with sizes, clear and auto-clean by age.
 - Night mode: Workspace menu → Appearance offers System, Light and Dark,
   saved per device. Relay's own screens follow it; app and website pages keep
   their own look, and the Mac title bar follows macOS.
@@ -97,10 +101,6 @@ Native verification found and fixed nested URL decoding that corrupted Research
 rerun then passed. The test renders frames itself when an SSH-launched window is
 occluded.
 
-The real-agent check also fixed failed-presentation retry: both clients
-acknowledge the returned context on failure, so a corrected retry works while the
-failed status stays. Backend and client regressions cover it.
-
 The actual Dart installer passed on an isolated Mac bundle: verified background
 download, signature/identity/version checks, preparation, process exit, replacement,
 relaunch and preserved draft. It did not replace the installed user app.
@@ -144,10 +144,6 @@ into a throwaway release folder, recorded its commit and left nothing on the Mac
 Updates download only changed files, about 7.3 MB instead of the 20.4 MB ZIP.
 On 2026-11-19 the Mac updated one `small-updates` build to the next through its
 file list: it passed the signature check, restarted and left no downloads.
-
-Stable 0.0.9 (build 9), published with that tool, added everyday restoration,
-the updater's leftover removal, inline region capture, saved screenshots, bug
-reports and draft conversations. The native Mac workflow was not rerun for it.
 
 On 2026-11-19 the [UI smoothness suite](../../../flutter/README.md#measure-performance)
 held 57–60 fps on the MacBook Neo (60 Hz), with waits up to 117 ms on tab
@@ -251,10 +247,12 @@ real WKWebViews.
    redirect or reload; instant, clickable suggestions; a restored tab's page
    is not counted again; one title per visit; inline fill-in (none after
    paste; Right+Enter opens real URL) and first-click select-all.
-20. The PDF viewer passed `npm run test:mac -- pdf_viewer_test.dart` on
-   2026-11-20: open, text, selection, capture, zoom, highlight. By hand on the
-   Mac, drag-select in an arXiv PDF, click chat and send: the question must
-   carry the selection. Why 0.0.16 lost it is unknown; embedded PDFs still use
-   that path.
+20. The PDF viewer and highlights passed `npm run test:mac --
+   pdf_viewer_test.dart` on 2026-11-20. They need the backend deployed first.
+   Then by hand on the Mac: drag-select in an arXiv PDF, click chat and send
+   (the question must carry the selection); highlight on a few real sites,
+   one a single-page app; and open **Stored data**. Unverified: a
+   password-protected PDF. Why 0.0.16 lost the selection is unknown; embedded
+   PDFs still use that path.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

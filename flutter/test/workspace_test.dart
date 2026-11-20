@@ -100,6 +100,8 @@ class FakePage extends PageSurface with BrowserSurface {
 
   @override
   bool pdf = false;
+  @override
+  bool get canHighlight => spec.browser;
   final actions = <String>[];
   @override
   Future<void> browserAction(String action) async => actions.add(action);
@@ -1219,7 +1221,7 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
-  testWidgets('a PDF in a Browser tab adds zoom and highlight buttons', (
+  testWidgets('a Browser tab highlights selected text, and zooms a PDF', (
     tester,
   ) async {
     final f = Fixture();
@@ -1232,19 +1234,22 @@ void main() {
     await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
     await tester.pumpAndSettle();
     expect(find.byTooltip('Zoom in'), findsNothing);
+    // With nothing selected there is nothing to highlight.
+    IconButton highlight() => tester.widget(
+      find.widgetWithIcon(IconButton, Icons.border_color),
+    );
+    pdf.selection = '';
+    pdf.changed(false);
+    await tester.pumpAndSettle();
+    expect(highlight().onPressed, isNull);
 
     pdf.pdf = true;
-    pdf.selection = '';
     pdf.changed(false);
     await tester.pumpAndSettle();
     for (final button in ['Zoom out', 'Zoom in', 'Fit to width']) {
       await tester.tap(find.byTooltip(button));
     }
     expect(pdf.actions, ['zoomOut', 'zoomIn', 'zoomFit']);
-    // With nothing selected there is nothing to highlight.
-    IconButton highlight() => tester.widget(
-      find.widgetWithIcon(IconButton, Icons.border_color),
-    );
     expect(highlight().onPressed, isNull);
 
     pdf.selection = 'selected passage';
@@ -1678,13 +1683,6 @@ void main() {
       await type('desk');
       expect(find.text('Desk'), findsNothing);
 
-      await tester.tap(find.byTooltip('Workspace menu'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Clear browsing history'));
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.tap(find.text('Clear'));
-      await tester.pumpAndSettle();
-      expect(f.history.last, 'DELETE /api/browser-history');
       expect(
         f.w.recorder.events.where((e) => '${e['path']}'.contains('history')),
         isEmpty,

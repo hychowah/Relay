@@ -1,12 +1,12 @@
 import type { Hono } from "hono";
+import type { StoredCategory } from "./stored-data.ts";
 import type { BrowserPage, Store } from "./store.ts";
 
 const shown = 6, maxPages = 1000;
-const keptFor = 90 * 24 * 60 * 60 * 1000;
 const siteStart = /^(https?:\/\/)?(www\.)?/;
 
 /** The address kept for a page, without its #fragment, or null for anything but an HTTP or HTTPS website. */
-function historyAddress(text: unknown) {
+export function pageAddress(text: unknown) {
   if (typeof text !== "string" || !URL.canParse(text)) return null;
   const url = new URL(text);
   if (url.protocol !== "http:" && url.protocol !== "https:") return null;
@@ -21,16 +21,14 @@ function weight(page: BrowserPage, now: number) {
   return (page.visits + 3 * page.typed) * recency;
 }
 
-const current = (page: BrowserPage, now: number) => now - page.lastVisit <= keptFor;
-
-/** Forgets pages not visited for 90 days and all but the best 1000. */
+/** Forgets all but the best 1000 pages. Stored data's clean-up forgets the old ones. */
 function prune(store: Store, now: number) {
   const pages = store.browserPages();
-  const kept = new Set(pages.filter((page) => current(page, now))
+  if (pages.length <= maxPages) return;
+  const kept = new Set(pages
     .sort((a, b) => weight(b, now) - weight(a, now) || b.lastVisit - a.lastVisit)
     .slice(0, maxPages).map((page) => page.url));
-  if (kept.size < pages.length)
-    store.forgetBrowserPages(pages.filter((page) => !kept.has(page.url)).map((page) => page.url));
+  store.forgetBrowserPages(pages.filter((page) => !kept.has(page.url)).map((page) => page.url));
 }
 
 /** The pages that best match [text], best first. */
@@ -47,7 +45,7 @@ function suggest(pages: BrowserPage[], text: string, now: number) {
     return 0;
   };
   const scored = pages.flatMap((page) => {
-    const bonus = current(page, now) ? match(page) : 0;
+    const bonus = match(page);
     return bonus ? [{ page, score: bonus * weight(page, now) }] : [];
   });
   // A site whose name starts with the text also gets one row for its home
@@ -78,16 +76,12 @@ function suggest(pages: BrowserPage[], text: string, now: number) {
 export function addBrowserHistory(app: Hono, store: Store, now = Date.now) {
   app.get("/api/browser-history", (c) =>
     c.json(suggest(store.browserPages(), c.req.query("q") ?? "", now())));
-  app.delete("/api/browser-history", (c) => {
-    store.forgetBrowserPages();
-    return c.body(null, 204);
-  });
   // A visit and an address-bar open of the same page are counted separately,
   // so either request may arrive first.
   for (const kind of ["visit", "typed"] as const) {
     app.post(`/api/browser-history/${kind}`, async (c) => {
       const { url, title } = await c.req.json() as { url?: unknown; title?: unknown };
-      const address = historyAddress(url), at = now();
+      const address = pageAddress(url), at = now();
       if (address) {
         store.countBrowserPage(address, at, kind, kind === "visit" && typeof title === "string" ? title : "");
         prune(store, at);
@@ -97,8 +91,17 @@ export function addBrowserHistory(app: Hono, store: Store, now = Date.now) {
   }
   app.post("/api/browser-history/title", async (c) => {
     const { url, title } = await c.req.json() as { url?: unknown; title?: unknown };
-    const address = historyAddress(url);
+    const address = pageAddress(url);
     if (address && typeof title === "string" && title) store.retitleBrowserPage(address, title);
     return c.body(null, 204);
   });
 }
+
+export const browserHistoryData = (store: Store): StoredCategory => ({
+  id: "browser-history",
+  name: "Browsing history",
+  description: "Pages visited in Browser tabs, for address bar suggestions.",
+  defaultDays: 90,
+  usage: () => store.browserPagesUsage(),
+  forget: (before) => before === undefined ? store.forgetBrowserPages() : store.forgetBrowserPagesBefore(before),
+});

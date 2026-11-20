@@ -251,8 +251,40 @@ class RelayApi {
     }
   }
 
-  Future<void> clearBrowserHistory() =>
-      _request('/api/browser-history', null, 'DELETE', true);
+  /// The highlights kept for a page address; none when the request fails.
+  /// Like the history calls, these stay out of bug recordings.
+  Future<List<Json>> highlights(String url) async {
+    final params = Uri(queryParameters: {'url': url});
+    try {
+      final kept = await _request<List>(
+        '/api/highlights?${params.query}',
+        null,
+        null,
+        true,
+      );
+      return kept.cast<Json>();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> saveHighlight(String url, Json highlight) =>
+      _request('/api/highlights', {...highlight, 'url': url}, 'POST', true);
+  Future<void> forgetHighlight(String id) => _request(
+    '/api/highlights/${Uri.encodeComponent(id)}',
+    null,
+    'DELETE',
+    true,
+  );
+
+  /// Each kind of data the server keeps, with its size and how long it is
+  /// kept (`autoCleanDays`, null for ever).
+  Future<List<Json>> storedData() async =>
+      (await _request<List>('/api/stored-data')).cast<Json>();
+  Future<void> setAutoClean(String id, int? days) =>
+      _request('/api/stored-data/$id', {'autoCleanDays': days}, 'PUT');
+  Future<void> clearStoredData(String id) =>
+      _request('/api/stored-data/$id', null, 'DELETE');
 
   Future<void> checkIdleBeforeRestart(
     String deviceId,
