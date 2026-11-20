@@ -1538,8 +1538,9 @@ void main() {
             w is TextField &&
             w.decoration?.hintText == 'Search or enter a web address',
       );
+      // Entered at once over the whole address, as a paste after a focusing
+      // click, so nothing fills in.
       Future<void> type(String text) async {
-        // Typed over the whole address, as after a focusing click.
         final controller = tester.widget<TextField>(address).controller!;
         controller.selection = TextSelection(
           baseOffset: 0,
@@ -1567,9 +1568,7 @@ void main() {
       expect(find.text('Desk'), findsOneWidget);
       expect(find.text('News'), findsOneWidget);
       await submit();
-      expect(page.navigated, [
-        'https://example.com/',
-      ], reason: 'nothing was highlighted, so the filled-in page opens');
+      expect(page.navigated, ['exa'], reason: 'nothing was highlighted');
       expect(find.text('Desk'), findsNothing);
       expect(
         f.history.last,
@@ -1587,10 +1586,9 @@ void main() {
       // Typing again returns the highlight to the typed text.
       await type('exa');
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await type('exam');
       await submit();
-      expect(page.navigated.last, 'https://example.com/');
+      expect(page.navigated.last, 'exam');
 
       // A slow answer for older text never replaces the newer one, and Enter
       // opens the text in the field while the earlier list is still shown.
@@ -1724,30 +1722,34 @@ void main() {
       await tester.pumpAndSettle();
       expect(field.selection.isCollapsed, isTrue);
 
-      // The best page fills in after the typed text, asking for nothing more.
+      // A paste fills nothing in; the next typed character fills in the best
+      // page after the typed text, asking for nothing more.
       await edit(shown(''));
       await edit(shown('exa'));
-      expect(field.value, shown('example.com', 3));
-      expect(f.history, ['suggest exa']);
+      expect(field.value, shown('exa'));
       expect(find.text('Desk'), findsOneWidget);
-      // Typing what is filled in next keeps the fill-in at once.
       await edit(shown('exam'));
       expect(field.value, shown('example.com', 4));
       expect(f.history, ['suggest exa', 'suggest exam']);
+      // Typing what is filled in next keeps the fill-in at once.
+      await edit(shown('examp'));
+      expect(field.value, shown('example.com', 5));
+      expect(f.history, ['suggest exa', 'suggest exam', 'suggest examp']);
       // Deleting removes the fill-in and fills nothing in again.
       await key(LogicalKeyboardKey.backspace);
-      expect(field.value, shown('exam'));
+      expect(field.value, shown('examp'));
       await key(LogicalKeyboardKey.backspace);
-      expect(field.value, shown('exa'));
-      await edit(shown('exam'));
-      expect(field.value, shown('example.com', 4));
+      expect(field.value, shown('exam'));
+      await edit(shown('examp'));
+      expect(field.value, shown('example.com', 5));
       // Esc removes the fill-in and closes the list.
       await key(LogicalKeyboardKey.escape);
-      expect(field.value, shown('exam'));
+      expect(field.value, shown('examp'));
       expect(find.text('Desk'), findsNothing);
 
-      // Enter and Go open the filled-in page's own URL, not the shown text.
-      field.selection = const TextSelection(baseOffset: 0, extentOffset: 4);
+      // Enter and Go open the filled-in page's own URL, not the shown text,
+      // also once the caret has accepted the fill-in.
+      field.selection = const TextSelection(baseOffset: 0, extentOffset: 5);
       await edit(shown('e'));
       expect(field.value, shown('example.com', 1));
       await tester.testTextInput.receiveAction(TextInputAction.done);
@@ -1759,12 +1761,28 @@ void main() {
       );
       await tester.tap(address, kind: PointerDeviceKind.mouse);
       await tester.pumpAndSettle();
-      await edit(shown('ex'));
-      expect(field.value, shown('example.com', 2));
+      await edit(shown('e'));
+      expect(field.value, shown('example.com', 1));
+      await key(LogicalKeyboardKey.arrowRight);
+      expect(field.value, shown('example.com'));
       await tester.tap(find.byTooltip('Go'));
       await tester.pumpAndSettle();
-      expect(page.navigated.last, 'http://www.example.com/');
-      // With nothing filled in, Enter opens the text as typed.
+      expect(page.navigated, List.filled(2, 'http://www.example.com/'));
+      await tester.tap(address, kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      await edit(shown('e'));
+      await key(LogicalKeyboardKey.arrowRight);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(page.navigated, List.filled(3, 'http://www.example.com/'));
+      // With nothing filled in, as after a paste, Enter opens the text as is.
+      await tester.tap(address, kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      await edit(shown('exa'));
+      expect(field.value, shown('exa'));
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(page.navigated.last, 'exa');
       await tester.tap(address, kind: PointerDeviceKind.mouse);
       await tester.pumpAndSettle();
       await edit(shown('desk'));
@@ -1775,9 +1793,12 @@ void main() {
       // An answer fills nothing in once the text or caret has moved on.
       await tester.tap(address, kind: PointerDeviceKind.mouse);
       await tester.pumpAndSettle();
+      f.holdHistory['e'] = Completer();
       f.holdHistory['ex'] = Completer();
+      await edit(shown('e'));
       await edit(shown('ex'));
       await edit(shown('ex?'));
+      f.holdHistory['e']!.complete();
       f.holdHistory['ex']!.complete();
       await tester.pumpAndSettle();
       expect(field.value, shown('ex?'));

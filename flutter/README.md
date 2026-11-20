@@ -122,10 +122,10 @@ type in it, best first by how often and how recently each was visited; an
 address opened from the address bar counts more than a followed link, and
 pages the agent opens in a Browser tab count as visits too. As in Chrome, the
 best suggestion's address fills in after what you type when it starts with it,
-with the filled-in part selected; Backspace or Esc removes it. Arrow keys and
-Enter, or a click, open a suggestion. With none highlighted, Enter opens the
-suggested page while its address is filled in, and otherwise what was typed.
-The history is kept on the Relay server, one
+with the filled-in part selected; Backspace or Esc removes it, and a paste
+fills nothing in. Arrow keys and Enter, or a click, open a suggestion. With
+none highlighted, Enter opens the suggested page while its address is filled
+in, and otherwise what was typed. The history is kept on the Relay server, one
 entry per address, so every Mac using that server shares it. The agent and app
 integrations never get it, and history requests are left out of bug recordings
 (the addresses you type are still recorded as navigation). Pages not visited

@@ -241,8 +241,8 @@ class _RelayShellState extends State<RelayShell> {
   /// the filled-in rest selected after the typed text, and the page's URL.
   ({String typed, String text, String url})? fill;
 
-  /// The last edit was a deletion, or Esc removed the fill-in (which also
-  /// hides the list); either lasts until the user's next edit.
+  /// The last edit was a deletion or a paste, or Esc removed the fill-in
+  /// (which also hides the list); each lasts until the user's next edit.
   bool noFill = false, escaped = false;
 
   /// The latest suggestions request, kept so that filling in, which changes
@@ -667,11 +667,11 @@ class _RelayShellState extends State<RelayShell> {
     );
   }
 
-  /// What the address bar opens: the suggested page's own URL while it is
-  /// filled in, since the shown text drops its scheme, `www.` and final `/`;
-  /// otherwise the text as typed.
+  /// What the address bar opens: the suggested page's own URL while its
+  /// filled-in text is shown, selected or accepted with the caret, since the
+  /// text drops its scheme, `www.` and final `/`; otherwise the text as typed.
   String get _addressTarget =>
-      _filled(address.value) ? fill!.url : address.text;
+      address.text == fill?.text ? fill!.url : address.text;
 
   /// Opens [text] from the address bar; the page it lands on counts as typed.
   Future<void> _go(String text) async {
@@ -782,12 +782,9 @@ class _RelayShellState extends State<RelayShell> {
               const AutocompleteFirstOptionIntent(),
             ),
             onSubmitted: (_) {
-              // Read first: selecting the typed text option drops the
-              // selection that marks the fill-in.
-              final target = _addressTarget;
               pickedSuggestion = false;
               submit();
-              if (!pickedSuggestion) _go(target);
+              if (!pickedSuggestion) _go(_addressTarget);
             },
           ),
         ),
@@ -874,20 +871,24 @@ class _RelayShellState extends State<RelayShell> {
 
   /// Applies the user's own edits. Typing the next filled-in character keeps
   /// the rest filled in without waiting for the server; any other edit drops
-  /// the fill-in, and a deletion fills nothing in until the next edit.
+  /// the fill-in, and a deletion or a paste fills nothing in until the next
+  /// edit, as in Chrome. Moving only the caret is not an edit.
   TextEditingValue _edited(
     BuildContext context,
     TextEditingValue before,
     TextEditingValue now,
   ) {
-    final shown = fill, typed = now.text;
+    final shown = fill, typed = now.text, cut = before.selection;
+    // The characters the edit put in place of the selection; several at once
+    // with no input method composing are a paste.
+    final added = typed.length - before.text.length + cut.end - cut.start;
     escaped = false;
     if (shown != null &&
         _filled(before) &&
         now.composing.isCollapsed &&
         now.selection.isCollapsed &&
         now.selection.baseOffset == typed.length &&
-        typed.length > shown.typed.length &&
+        added == 1 &&
         typed.length < shown.text.length &&
         shown.text.toLowerCase().startsWith(typed.toLowerCase())) {
       noFill = false;
@@ -907,13 +908,10 @@ class _RelayShellState extends State<RelayShell> {
       );
     }
     fill = null;
-    final cut = before.selection;
     noFill =
         before.composing.isCollapsed &&
-        (cut.isCollapsed
-            ? typed.length < before.text.length
-            : typed ==
-                  cut.textBefore(before.text) + cut.textAfter(before.text));
+        now.composing.isCollapsed &&
+        (added < 0 || added > 1 || added == 0 && !cut.isCollapsed);
     return now;
   }
 

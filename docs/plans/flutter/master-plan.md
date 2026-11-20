@@ -255,7 +255,7 @@ real WKWebViews.
 19. Browser history (desktop only) is in Stable 0.0.16 and on the live
    backend. Check on the Mac: one titled entry per
    redirect or reload; instant, clickable suggestions; a restored tab's page
-   is not counted again; one title per visit; inline fill-in and
-   first-click select-all.
+   is not counted again; one title per visit; inline fill-in (none after
+   paste; Right+Enter opens real URL) and first-click select-all.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.
