@@ -99,6 +99,12 @@ class FakePage extends PageSurface with BrowserSurface {
   }
 
   @override
+  bool pdf = false;
+  final actions = <String>[];
+  @override
+  Future<void> browserAction(String action) async => actions.add(action);
+
+  @override
   bool fullScreen = false;
   final screenFills = <bool>[];
   @override
@@ -1213,6 +1219,41 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+  testWidgets('a PDF in a Browser tab adds zoom and highlight buttons', (
+    tester,
+  ) async {
+    final f = Fixture();
+    await f.w.start();
+    final pdf = (await f.w.openApp(f.w.apps[0])).page! as FakePage;
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Zoom in'), findsNothing);
+
+    pdf.pdf = true;
+    pdf.selection = '';
+    pdf.changed(false);
+    await tester.pumpAndSettle();
+    for (final button in ['Zoom out', 'Zoom in', 'Fit to width']) {
+      await tester.tap(find.byTooltip(button));
+    }
+    expect(pdf.actions, ['zoomOut', 'zoomIn', 'zoomFit']);
+    // With nothing selected there is nothing to highlight.
+    IconButton highlight() => tester.widget(
+      find.widgetWithIcon(IconButton, Icons.border_color),
+    );
+    expect(highlight().onPressed, isNull);
+
+    pdf.selection = 'selected passage';
+    pdf.changed(true);
+    await tester.pumpAndSettle();
+    highlight().onPressed!();
+    expect(pdf.actions.last, 'highlight');
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets('a click that moves a few pixels still selects the tab', (
     tester,
   ) async {

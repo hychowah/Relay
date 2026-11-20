@@ -58,6 +58,18 @@ class MainFlutterWindow: NSWindow {
           ? BrowserPopups.install(on: view, channel: browser) : BrowserPopups.close(on: view))
         return
       }
+      if call.method == "pdf" {
+        guard let registry = flutterViewController, let arguments = call.arguments as? [String: Any],
+              let identifier = arguments["view"] as? NSNumber, let action = arguments["do"] as? String,
+              let view = FWFWebViewFlutterWKWebViewExternalAPI.webView(
+                forIdentifier: identifier.int64Value, withPluginRegistry: registry
+              ) else {
+          result(nil)
+          return
+        }
+        BrowserPDF.perform(action, on: view, identifier: identifier.int64Value, channel: browser, result: result)
+        return
+      }
       if call.method == "snapshot" || call.method == "selection" {
         guard let registry = flutterViewController, let identifier = call.arguments as? NSNumber,
               let view = FWFWebViewFlutterWKWebViewExternalAPI.webView(
@@ -65,6 +77,17 @@ class MainFlutterWindow: NSWindow {
               ), !view.bounds.isEmpty else {
           if call.method == "selection" { result(nil); return }
           result(FlutterError(code: "capture", message: "Open the page before capturing it.", details: nil))
+          return
+        }
+        // A PDF shown in Relay's own viewer answers for the page under it.
+        if let pdf = BrowserPDF.shown(on: view) {
+          if call.method == "selection" {
+            result(pdf.selection)
+          } else if let png = pdf.snapshot() {
+            result(FlutterStandardTypedData(bytes: png))
+          } else {
+            result(FlutterError(code: "capture", message: "Page capture failed.", details: nil))
+          }
           return
         }
         if call.method == "selection" {

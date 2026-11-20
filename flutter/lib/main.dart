@@ -646,6 +646,8 @@ class _RelayShellState extends State<RelayShell> {
                                 onPressed: () => _go(_addressTarget),
                                 icon: const Icon(Icons.arrow_forward),
                               ),
+                              if (w.active?.page?.browser?.pdf == true)
+                                ..._pdfControls(),
                             ],
                           ),
                         ),
@@ -665,6 +667,37 @@ class _RelayShellState extends State<RelayShell> {
         ),
       ),
     );
+  }
+
+  // Desktop only: a PDF in the Browser tab shows in the Mac's own PDF viewer,
+  // which these buttons drive.
+  List<Widget> _pdfControls() {
+    final selection = w.active?.page?.context?['selection'];
+    final selected = selection is String && selection.isNotEmpty;
+    return [
+      IconButton(
+        tooltip: 'Zoom out',
+        onPressed: () => w.browserAction('zoomOut'),
+        icon: const Icon(Icons.zoom_out),
+      ),
+      IconButton(
+        tooltip: 'Zoom in',
+        onPressed: () => w.browserAction('zoomIn'),
+        icon: const Icon(Icons.zoom_in),
+      ),
+      IconButton(
+        tooltip: 'Fit to width',
+        onPressed: () => w.browserAction('zoomFit'),
+        icon: const Icon(Icons.fit_screen),
+      ),
+      IconButton(
+        tooltip: selected
+            ? 'Highlight the selected text, or remove its highlight'
+            : 'Select text in the PDF to highlight it',
+        onPressed: selected ? () => w.browserAction('highlight') : null,
+        icon: const Icon(Icons.border_color),
+      ),
+    ];
   }
 
   /// What the address bar opens: the suggested page's own URL while its

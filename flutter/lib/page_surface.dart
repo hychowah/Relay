@@ -74,6 +74,9 @@ abstract class PageSurface {
   void dispose();
 }
 
+/// `highlight` marks the selected text, or removes the highlight under it.
+const pdfActions = ['zoomOut', 'zoomIn', 'zoomFit', 'highlight'];
+
 mixin BrowserSurface {
   Future<Json> read();
   Future<Json> loadTranscript();
@@ -86,6 +89,10 @@ mixin BrowserSurface {
   bool get canGoBack => false;
   bool get canGoForward => false;
   Future<void> browserAction(String action) async {}
+
+  /// Desktop only. Whether the tab shows a PDF in the Mac's own PDF viewer,
+  /// which takes the [pdfActions] through [browserAction].
+  bool get pdf => false;
 
   /// Desktop only. Whether the page shows an element fullscreen, such as a
   /// video. The element fills the page's own view, so in a split pane it

@@ -141,6 +141,19 @@ does another tab opening, or the player leaving the page. As in a browser, only
 a click or key press can start it, and each one starts it once. A video in a
 popup window fills only that window.
 
+On macOS only, a PDF opened in a Browser tab shows in the Mac's own PDF viewer
+(PDFKit, as in Preview) in place of WebKit's. **Zoom out**, **Zoom in** and
+**Fit to width** appear beside the address bar, and a pinch zooms too. Select
+text and press **Highlight** to mark it; select marked text and press it again
+to remove the mark. Highlights last while the PDF stays open in the tab; they
+are not saved, so a reload or a restart clears them. Text selected in the PDF
+shows in the chat's page context at once and goes with the next question. The
+agent's `browser.read` gets the PDF's text from the page in view onward, with
+that page's number and the page count.
+Relay fetches the PDF a second time for this viewer, with the tab's cookies;
+if that fails, WebKit's own view stays, without these features. A PDF embedded
+inside a web page keeps the page's own viewer.
+
 On macOS, select page or PDF text and ask a question with page context enabled.
 With a YouTube video open in a Browser tab, ask about the video: the agent reads
 its full transcript page by page through the page itself (`browser.transcript`,
@@ -162,9 +175,10 @@ Trash cleanup deletes it with the conversation.
 
 `npm run test:mac -- <name>_test.dart`, from the repository root on WSL, runs
 one self-contained integration test on the Mac against real WKWebViews:
-`popup_windows_test.dart` (with its own loopback fixture) or
+`popup_windows_test.dart` (with its own loopback fixture),
 `video_fullscreen_test.dart`, which puts the test window into macOS fullscreen
-for a few seconds. Like the smoothness suite below, it builds a
+for a few seconds, or `pdf_viewer_test.dart`, which opens one public PDF and
+so needs the internet on the Mac. Like the smoothness suite below, it builds a
 temporary copy under its own bundle id, `app.relay.flutterTest`, and removes
 the copy and the test app's data afterwards. It refuses `workflow_test.dart`,
 which uses the Flutter deployment's records.

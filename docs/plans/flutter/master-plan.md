@@ -44,6 +44,8 @@ The implemented workflows include the following.
   details.
 - Video fullscreen (desktop only): a page's fullscreen fills its split pane,
   or the whole screen when its tab shows alone (see the Flutter README).
+- PDF viewer (desktop only): a PDF in a Browser tab gets zoom and highlights,
+  and its selection and text reach the agent (see the Flutter README).
 - Night mode: Workspace menu → Appearance offers System, Light and Dark,
   saved per device. Relay's own screens follow it; app and website pages keep
   their own look, and the Mac title bar follows macOS.
@@ -86,8 +88,6 @@ Baseline native checks passed tab retention, Browser reads, Room and Research
 navigation/highlights, and real DeepSeek Browser→Research comparison. The user
 confirmed the original prototype works. Conversation history/Trash passed on Mac.
 
-After the 2026-11-18 cleanup, 25 Flutter tests, analysis, 80 backend tests
-and the web build pass.
 Chromium checks pass v2 presentation and v1 Research source reopening/highlights.
 The Mac replacement helper passed against an isolated signed fixture app,
 including relaunch, receipt, previous-bundle retention and a preserved draft.
@@ -104,8 +104,6 @@ failed status stays. Backend and client regressions cover it.
 The actual Dart installer passed on an isolated Mac bundle: verified background
 download, signature/identity/version checks, preparation, process exit, replacement,
 relaunch and preserved draft. It did not replace the installed user app.
-The first sandboxed prototype's device, conversation and draft preferences were
-copied to the current app on the Mac; that one-time copy has since been removed.
 
 Before Stable 0.0.8 (no built-in server address), the native Mac workflow
 passed against the deployed backend with one real DeepSeek request: Browser
@@ -122,10 +120,6 @@ subresource interception, a download API and separate data stores. JavaScript
 channel access from sandboxed subframes, PDF rendering in WKWebView and behavior
 on physical Android devices remain unverified. The [platform decision](../prototype/phases/phase-01/decisions/0002-client-platform.md)
 records supported platforms and the Windows constraint.
-
-Since 0.0.4, Reconnect retries unfinished tabs and clears the saved session
-only on success, and the first snapshot interaction is no longer mistaken for
-native initial context. Focused regressions cover both.
 
 The motion and comment changes passed an isolated Mac test of chat toggling,
 tabs and menus with a retained WKWebView, where the Browser comment stayed out of
@@ -199,7 +193,7 @@ real WKWebViews.
    update folders beside the app and the older downloads.
 2. Republishing a test build's name leaves its earlier ZIP in the release
    folder on WSL. Remove it at publish time if that folder grows.
-3. Review Stable 0.0.16 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`. The suite's longest waits, on tab switches, are candidates for a smoothness fix. The Mac PDF probe recovered selected text after focus moved to chat. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
+3. Review Stable 0.0.16 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`. The suite's longest waits, on tab switches, are candidates for a smoothness fix. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
 4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable since 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified. The capture animation is not in Stable yet: on the Mac, check that the flash and the flight to the composer run smoothly over a real page, and that the thumbnail takes over without a jump.
 5. Try the toolbar record button and **Bug reports**, both in Stable since 0.0.9, on the Mac. Source tests cover recording,
    saving, viewing, marking solved and deleting; native screenshots and the live service's report folder are unverified. Marking solved and deleting are in Stable 0.0.13 and served by the live backend; try them on the Mac.
@@ -257,5 +251,10 @@ real WKWebViews.
    redirect or reload; instant, clickable suggestions; a restored tab's page
    is not counted again; one title per visit; inline fill-in (none after
    paste; Right+Enter opens real URL) and first-click select-all.
+20. The PDF viewer's Swift code is uncompiled; WSL tests cover only its
+   buttons. Run `npm run test:mac -- pdf_viewer_test.dart`, then on the Mac
+   drag-select in an arXiv PDF, click chat and send: the question must carry
+   the selection. Why 0.0.16 lost it is unknown; embedded PDFs still use that
+   path.
 
 Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.

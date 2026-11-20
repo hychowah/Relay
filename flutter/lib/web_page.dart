@@ -109,10 +109,20 @@ const _browserChannel = MethodChannel('app.relay/browser');
 /// The Browser page filling the screen (desktop only).
 _BrowserPage? _onScreen;
 
+/// The Browser pages whose PDF shows in the Mac's PDF viewer, by web view
+/// (desktop only).
+final _pdfPages = <int, _BrowserPage>{};
+
 /// Answers the Mac runner's calls on the browser channel (desktop only):
-/// a Browser popup window asks before each main-frame load, and the window
-/// says when the user left macOS fullscreen.
+/// a Browser popup window asks before each main-frame load, the window says
+/// when the user left macOS fullscreen, and the PDF viewer reports the text
+/// selected in it.
 Future<Object?> browserChannelCall(MethodCall call) async {
+  if (call.method == 'pdfSelection') {
+    final event = call.arguments as Map;
+    _pdfPages[event['view']]?._message('selection:${event['text']}');
+    return null;
+  }
   if (call.method == 'allowPopupPage') {
     return publicPageAllowed(call.arguments as String);
   }
@@ -293,6 +303,13 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   String? _comment, _presentationId;
   int _transcriptRequests = 0;
   final _transcriptReplies = <String, Completer<Json>>{};
+  // Desktop only. The Mac runner lays its PDF viewer over a page that is a
+  // PDF. [_pdfOpening] ends once the viewer shows or the page keeps WebKit's
+  // own PDF view; [_pdfLoad] tells a newer page from the one being opened.
+  @override
+  bool pdf = false;
+  Future<void>? _pdfOpening;
+  int _pdfLoad = 0;
 
   @override
   Widget get widget => Stack(
@@ -345,6 +362,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
             ? NavigationDecision.navigate
             : NavigationDecision.prevent,
         onPageStarted: (url) {
+          _closePdf();
           _nativeSelection = null;
           _url = url;
           _loading = true;
@@ -362,7 +380,11 @@ class _BrowserPage extends _WebPage with BrowserSurface {
           if (_disposed) return;
           try {
             await controller.runJavaScript(_observePage);
-            await read();
+            // The page is ready without waiting for the PDF viewer. A viewer
+            // put back after a stopped load must not cover this page.
+            _closePdf();
+            _pdfOpening = _openPdf();
+            await _readDocument();
             _loading = false;
             _visit(_title);
             canGoBack = await controller.canGoBack();
@@ -401,64 +423,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     // Public pages can only invalidate context; they cannot issue app commands.
     await controller.addJavaScriptChannel(
       'RelayBrowser',
-      onMessageReceived: (message) {
-        if (_disposed) return;
-        if (message.message.startsWith('transcript:')) {
-          final reply = jsonDecode(message.message.substring(11)) as Map;
-          final pending = _transcriptReplies.remove(reply['id']);
-          if (reply['error'] != null) {
-            pending?.completeError(StateError('${reply['error']}'));
-          } else {
-            pending?.complete(Map<String, dynamic>.from(reply['data'] as Map));
-          }
-          return;
-        }
-        if (message.message.startsWith('fullscreen:')) {
-          final on = message.message == 'fullscreen:enter:$_fullScreenKey';
-          if (!on && message.message != 'fullscreen:exit:$_fullScreenKey') {
-            return;
-          }
-          if (on != fullScreen) {
-            fullScreen = on;
-            changed(false);
-          }
-          return;
-        }
-        if (message.message.startsWith('title:')) {
-          _title = message.message.substring('title:'.length);
-          (_context?['state'] as Map?)?['title'] = _title;
-          final untitled = _untitled;
-          if (untitled != null &&
-              _title.isNotEmpty &&
-              _historyAddress(_url) == untitled) {
-            _untitled = null;
-            _history?.browserTitle(untitled, _title);
-          }
-          changed(false);
-          return;
-        }
-        if (message.message != 'interaction') {
-          if (!message.message.startsWith('selection:')) return;
-          final selection = message.message.substring('selection:'.length);
-          if (selection.length > 4000 || _context?['selection'] == selection) {
-            return;
-          }
-          _context?['selection'] = selection;
-        }
-        _nativeSelection = null;
-        final presenting = _presentationId != null;
-        _comment = null;
-        _presentationId = null;
-        _generation++;
-        _context?['generation'] = _generation;
-        changed(true);
-        if (presenting && _navigation?.isCompleted == false) {
-          unawaited(controller.runJavaScript('window.stop()'));
-          _navigation!.completeError(
-            StateError('Presentation interrupted by manual input.'),
-          );
-        }
-      },
+      onMessageReceived: (message) => _message(message.message),
     );
     // WebKit only knows the system appearance, not Relay's own setting.
     await controller.loadHtmlString(
@@ -466,6 +431,109 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       '@media(prefers-color-scheme:dark){body{background:#141917;color:#9cbdad}}</style>'
       '<body>Enter an address or search above.</body>',
     );
+  }
+
+  /// A message from the page's scripts, or from the Mac's PDF viewer about
+  /// the PDF it shows in the page's place.
+  void _message(String message) {
+    if (_disposed) return;
+    if (message.startsWith('transcript:')) {
+      final reply = jsonDecode(message.substring(11)) as Map;
+      final pending = _transcriptReplies.remove(reply['id']);
+      if (reply['error'] != null) {
+        pending?.completeError(StateError('${reply['error']}'));
+      } else {
+        pending?.complete(Map<String, dynamic>.from(reply['data'] as Map));
+      }
+      return;
+    }
+    if (message.startsWith('fullscreen:')) {
+      final on = message == 'fullscreen:enter:$_fullScreenKey';
+      if (!on && message != 'fullscreen:exit:$_fullScreenKey') return;
+      if (on != fullScreen) {
+        fullScreen = on;
+        changed(false);
+      }
+      return;
+    }
+    if (message.startsWith('title:')) {
+      _title = message.substring('title:'.length);
+      (_context?['state'] as Map?)?['title'] = _title;
+      final untitled = _untitled;
+      if (untitled != null &&
+          _title.isNotEmpty &&
+          _historyAddress(_url) == untitled) {
+        _untitled = null;
+        _history?.browserTitle(untitled, _title);
+      }
+      changed(false);
+      return;
+    }
+    if (message != 'interaction') {
+      if (!message.startsWith('selection:')) return;
+      final selection = message.substring('selection:'.length);
+      if (selection.length > 4000 || _context?['selection'] == selection) {
+        return;
+      }
+      _context?['selection'] = selection;
+    }
+    _nativeSelection = null;
+    final presenting = _presentationId != null;
+    _comment = null;
+    _presentationId = null;
+    _generation++;
+    _context?['generation'] = _generation;
+    changed(true);
+    if (presenting && _navigation?.isCompleted == false) {
+      unawaited(controller.runJavaScript('window.stop()'));
+      _navigation!.completeError(
+        StateError('Presentation interrupted by manual input.'),
+      );
+    }
+  }
+
+  Future<T?> _pdf<T>(String action) => _browserChannel.invokeMethod<T>('pdf', {
+    'view': _webViewId,
+    'do': action,
+  });
+
+  void _closePdf() {
+    if (!Platform.isMacOS) return;
+    _pdfLoad++;
+    pdf = false;
+    _pdfOpening = null;
+    _pdfPages.remove(_webViewId);
+    unawaited(_pdf<void>('close'));
+  }
+
+  // WebKit shows a PDF in a page with no text, title or selection events.
+  // The Mac runner fetches the PDF again and shows it in its own viewer.
+  Future<void> _openPdf() async {
+    if (!Platform.isMacOS) return;
+    final load = _pdfLoad;
+    try {
+      final type = await controller.runJavaScriptReturningResult(
+        'document.contentType',
+      );
+      if (!'$type'.contains('application/pdf')) return;
+      final opened = await _pdf<Map>('open');
+      if (opened == null || _disposed || load != _pdfLoad) return;
+      pdf = true;
+      _pdfPages[_webViewId] = this;
+      _message('title:${opened['title']}');
+    } catch (_) {
+      // WebKit's own PDF view stays.
+    }
+  }
+
+  // A load that fails or is stopped leaves the page as it was, but its start
+  // already removed the PDF viewer; a PDF still showing gets it back.
+  @override
+  void _resourceError(WebResourceError error) {
+    super._resourceError(error);
+    if (error.isForMainFrame == true && !pdf && _pdfOpening == null) {
+      _pdfOpening = _openPdf();
+    }
   }
 
   @override
@@ -517,8 +585,10 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   @override
   void dispose() {
     super.dispose();
-    // Closing the tab closes its popup windows.
+    _pdfPages.removeWhere((_, page) => page == this);
+    // Closing the tab closes its popup windows and ends its PDF's fetch.
     if (Platform.isMacOS) {
+      _pdf<void>('close').catchError((_) {});
       _browserChannel
           .invokeMethod<int>('closePopups', _webViewId)
           .catchError((_) => 0);
@@ -527,6 +597,20 @@ class _BrowserPage extends _WebPage with BrowserSurface {
 
   @override
   Future<Json> read() async {
+    // A PDF still being fetched is worth a short wait for its text: the
+    // server allows a read 8 seconds.
+    await _pdfOpening?.timeout(const Duration(seconds: 5), onTimeout: () {});
+    final result = await _readDocument();
+    final shown = pdf ? await _pdf<Map>('text') : null;
+    if (shown != null) {
+      // From the page in view onward, so `pdf` says where the text starts.
+      result['text'] = shown['text'];
+      result['pdf'] = {'page': shown['page'], 'pages': shown['pages']};
+    }
+    return result;
+  }
+
+  Future<Json> _readDocument() async {
     final raw = await controller
         .runJavaScriptReturningResult(_readPage)
         .timeout(const Duration(seconds: 20));
@@ -535,6 +619,8 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     final result = Map<String, dynamic>.from(data as Map);
     await refreshSelection();
     if (_nativeSelection != null) result['selection'] = _nativeSelection;
+    // WebKit's page for a PDF has no title; the viewer gave the PDF's own.
+    if (pdf) result['title'] = _title;
     _url = result['url'] as String;
     _title = result['title'] as String;
     _context = {
@@ -599,6 +685,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       await controller.goForward();
     }
     if (action == 'reload') await controller.reload();
+    if (pdf && pdfActions.contains(action)) await _pdf<void>(action);
   }
 
   @override
