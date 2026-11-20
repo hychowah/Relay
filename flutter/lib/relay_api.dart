@@ -281,8 +281,22 @@ class RelayApi {
   /// kept (`autoCleanDays`, null for ever).
   Future<List<Json>> storedData() async =>
       (await _request<List>('/api/stored-data')).cast<Json>();
-  Future<void> setAutoClean(String id, int? days) =>
-      _request('/api/stored-data/$id', {'autoCleanDays': days}, 'PUT');
+
+  /// Sets how long a kind is kept. A period that would delete items now is
+  /// not saved without [deleteOlder]: the answer is then how many items, and
+  /// otherwise 0.
+  Future<int> setAutoClean(
+    String id,
+    int? days, {
+    bool deleteOlder = false,
+  }) async {
+    final reply = await _request<Json>('/api/stored-data/$id', {
+      'autoCleanDays': days,
+      if (deleteOlder) 'deleteOlder': true,
+    }, 'PUT');
+    return reply['saved'] == true ? 0 : reply['older'] as int;
+  }
+
   Future<void> clearStoredData(String id) =>
       _request('/api/stored-data/$id', null, 'DELETE');
 

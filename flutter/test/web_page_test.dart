@@ -75,10 +75,15 @@ class TestController extends PlatformWebViewController {
   Object playTime = -1;
   // What the page's highlight script answers to Highlight.
   String highlighted = 'null';
+  // The document on screen, when it is not the tab's address: a load that is
+  // under way has moved the address on but not replaced the document.
+  String? document;
   @override
   Future<Object> runJavaScriptReturningResult(String javaScript) async =>
       javaScript == youtubePlaybackTimeScript
       ? playTime
+      : javaScript.startsWith('location.href')
+      ? '${document ?? location}\n${(document ?? location).split('#').first}'
       : javaScript.contains('__relayHighlights?.toggle')
       ? highlighted
       : jsonEncode({'url': location, 'title': 'YouTube', 'selection': ''});
@@ -407,11 +412,46 @@ void main() {
       await page.browser!.browserAction('highlight');
       expect(sent, hasLength(3), reason: 'nothing was selected');
 
-      // A page that moves to another of its addresses shows that one's.
+      // A page that moves to another of its addresses shows that one's; a
+      // new #fragment is the same address.
       controller.location = 'https://8.8.8.8/other';
       controller.delegate.urlChange(UrlChange(url: controller.location));
       await pumpEventQueue();
       expect(sent.last, 'GET /api/highlights https://8.8.8.8/other');
+      controller.location = 'https://8.8.8.8/other#part';
+      controller.delegate.urlChange(UrlChange(url: controller.location));
+      await pumpEventQueue();
+      expect(sent, hasLength(4));
+
+      // A load under way moves the tab's address through each redirect
+      // step, here back through the page's own address and on to another
+      // site, while the page stays on screen. That site's highlights are not
+      // asked for or given to this page, and Highlight still saves here.
+      controller.document = 'https://8.8.8.8/other#part';
+      final given = controller.scripts.length;
+      for (final step in [
+        'https://8.8.8.8/redirect',
+        'https://8.8.8.8/other',
+        'https://8.8.4.4/victim',
+        'https://8.8.4.4/victim/',
+      ]) {
+        controller.location = step;
+        controller.delegate.urlChange(UrlChange(url: step));
+        await pumpEventQueue();
+      }
+      expect(sent, hasLength(4));
+      expect(controller.scripts, hasLength(given));
+      controller.highlighted = jsonEncode({
+        'added': {'text': 'kept here', 'prefix': '', 'suffix': ''},
+      });
+      await page.browser!.browserAction('highlight');
+      expect(
+        sent.last,
+        allOf(
+          startsWith('POST /api/highlights '),
+          contains('"url":"https://8.8.8.8/other"'),
+        ),
+      );
     },
   );
 

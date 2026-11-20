@@ -15,13 +15,13 @@
   let kept = [];
   // Where each highlight is painted, and the text that was there.
   const ranges = new Map(), painted = new Map();
-  let watching = false, timer, changing = 0;
+  let watching = false, timer, changing = 0, lastRead = 0, retry;
 
+  let sheet;
   if (paints) {
     try {
-      const sheet = new CSSStyleSheet();
+      sheet = new CSSStyleSheet();
       sheet.replaceSync(`::highlight(${name}){background-color:rgba(255,214,10,.5);color:inherit}`);
-      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
     } catch (_) { /* The highlight keeps the browser's default look. */ }
   }
 
@@ -75,8 +75,16 @@
 
   function paint() {
     if (!paints) return;
-    if (ranges.size) CSS.highlights.set(name, new Highlight(...ranges.values()));
-    else CSS.highlights.delete(name);
+    if (!ranges.size) {
+      CSS.highlights.delete(name);
+      return;
+    }
+    CSS.highlights.set(name, new Highlight(...ranges.values()));
+    // A page that replaces its style sheets takes the colour away with them.
+    try {
+      if (sheet && !document.adoptedStyleSheets.includes(sheet))
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    } catch (_) { /* The highlight keeps the browser's default look. */ }
   }
 
   function put(id, range) {
@@ -90,18 +98,28 @@
   }
 
   // Puts every kept highlight on the text it quotes, and takes one off text
-  // that has changed. The page is read again only for those.
+  // that has changed. The page is read again only for those, and for text
+  // that is not on the page no more than once a second: an old highlight on
+  // a busy page must not have the page read over and over.
   function place() {
     changing = 0;
-    let page;
+    clearTimeout(retry);
+    const rest = lastRead + 1000 - Date.now();
+    let page, later = false;
     for (const highlight of kept) {
       const range = ranges.get(highlight.id);
       if (range && range.startContainer.isConnected && range.toString() === painted.get(highlight.id)) continue;
+      if (!range && rest > 0) {
+        later = true;
+        continue;
+      }
       page ??= read();
       const found = find(page, highlight);
       if (found) put(highlight.id, found);
       else drop(highlight.id);
     }
+    if (page) lastRead = Date.now();
+    if (later) retry = setTimeout(place, rest);
     paint();
   }
 
@@ -141,6 +159,7 @@
       kept = list;
       ranges.clear();
       painted.clear();
+      lastRead = 0;
       place();
       watch();
     },

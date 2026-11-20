@@ -83,6 +83,10 @@ test("stored data lists each category with its size and clears one", async () =>
   assert.deepEqual((await s.stored()).map((item) => item.items), [1, 0]);
   assert.equal((await s.send("DELETE", "/api/stored-data/browser-history")).status, 204);
   assert.deepEqual(s.store.browserPages(), []);
+  // The installed Stable 0.0.16 still clears the history at its old address.
+  await s.send("POST", "/api/browser-history/visit", { url: "https://example.com/" });
+  assert.equal((await s.send("DELETE", "/api/browser-history")).status, 204);
+  assert.deepEqual(s.store.browserPages(), []);
   assert.equal((await s.send("DELETE", "/api/stored-data/other")).status, 404);
 });
 
@@ -105,15 +109,24 @@ test("auto-clean forgets what is older than each category's days", async () => {
   assert.deepEqual(pages(), ["https://month.example/", "https://week.example/"]);
   assert.equal((await s.highlights("https://example.com/")).length, 2);
 
-  // A new choice applies at once and is remembered.
-  assert.equal((await s.send("PUT", "/api/stored-data/browser-history", { autoCleanDays: 30 })).status, 204);
+  // A period that would delete items now is not saved until the user has
+  // agreed to the number; then it applies at once and is remembered.
+  const set = async (id: string, body: object) => (await s.send("PUT", `/api/stored-data/${id}`, body)).json();
+  assert.deepEqual(await set("browser-history", { autoCleanDays: 30 }), { saved: false, older: 1 });
+  assert.deepEqual(pages(), ["https://month.example/", "https://week.example/"]);
+  assert.deepEqual((await s.stored()).map((item) => item.autoCleanDays), [90, null]);
+  assert.deepEqual(await set("browser-history", { autoCleanDays: 30, deleteOlder: true }), { saved: true, older: 1 });
   assert.deepEqual(pages(), ["https://week.example/"]);
-  assert.equal((await s.send("PUT", "/api/stored-data/highlights", { autoCleanDays: 365 })).status, 204);
+  assert.deepEqual(await set("highlights", { autoCleanDays: 365 }), { saved: false, older: 1 });
+  assert.equal((await s.highlights("https://example.com/")).length, 2);
+  assert.deepEqual(await set("highlights", { autoCleanDays: 365, deleteOlder: true }), { saved: true, older: 1 });
   assert.deepEqual((await s.highlights("https://example.com/")).map((item) => item.id), ["new"]);
   assert.deepEqual((await s.stored()).map((item) => item.autoCleanDays), [30, 365]);
+  // A period that deletes nothing now needs no agreement.
+  assert.deepEqual(await set("highlights", { autoCleanDays: 300 }), { saved: true, older: 0 });
 
   // Turned off, nothing is forgotten however old it gets.
-  assert.equal((await s.send("PUT", "/api/stored-data/browser-history", { autoCleanDays: null })).status, 204);
+  assert.deepEqual(await set("browser-history", { autoCleanDays: null }), { saved: true, older: 0 });
   s.clock.time += 1000 * day;
   s.clean();
   assert.deepEqual(pages(), ["https://week.example/"]);

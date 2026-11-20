@@ -380,10 +380,11 @@ export class Store {
     this.db.prepare("DELETE FROM browser_pages WHERE last_visit < ?").run(at);
   }
 
-  browserPagesUsage() {
+  /** What the history holds, or only the pages last visited before [before]. */
+  browserPagesUsage(before = Infinity) {
     return this.db.prepare(`SELECT COUNT(*) AS items,
       COALESCE(SUM(LENGTH(CAST(url AS BLOB)) + LENGTH(CAST(title AS BLOB))), 0) AS bytes
-      FROM browser_pages`).get() as unknown as StoredUsage;
+      FROM browser_pages WHERE last_visit < ?`).get(before) as unknown as StoredUsage;
   }
 
   /** The highlights made at a page address, oldest first. */
@@ -406,10 +407,11 @@ export class Store {
     else this.db.prepare("DELETE FROM highlights WHERE created_at < ?").run(before);
   }
 
-  highlightsUsage() {
+  /** What the highlights hold, or only those made before [before]. */
+  highlightsUsage(before = Infinity) {
     return this.db.prepare(`SELECT COUNT(*) AS items,
       COALESCE(SUM(LENGTH(CAST(url AS BLOB)) + LENGTH(CAST(data AS BLOB))), 0) AS bytes
-      FROM highlights`).get() as unknown as StoredUsage;
+      FROM highlights WHERE created_at < ?`).get(before) as unknown as StoredUsage;
   }
 
   /** The days a stored-data category is kept: null for ever, undefined when never chosen. */

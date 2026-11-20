@@ -314,10 +314,11 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   // Desktop only for now: highlights need the server's records.
   @override
   bool get canHighlight => _records != null;
-  // The address of the document shown, once it has loaded, and the ids of the
-  // highlights kept for it. [_url] is already the next address while a load
-  // is under way, and stays it when that load fails.
+  // The address of the document whose highlights are loaded, as that
+  // document reported it (see [_documentAddress]), and the ids of the
+  // highlights kept for it.
   String? _highlightsAddress;
+  String _highlightsSite = '';
   final _highlightIds = <String>{};
   static String? _highlightScript;
 
@@ -423,23 +424,16 @@ class _BrowserPage extends _WebPage with BrowserSurface {
           // A page can only change its own address within its origin, so
           // another origin here is a redirect of a load still under way.
           final before = Uri.tryParse(_url), after = Uri.tryParse(url);
-          // A load that failed or was stopped gives the address back to the
-          // document shown.
-          final shown =
-              _highlightsAddress != null &&
-              _historyAddress(url) == _highlightsAddress;
-          if (shown) _loading = false;
           final inPage =
               !_loading &&
               before?.scheme == after?.scheme &&
               before?.authority == after?.authority;
           _url = url;
-          if (inPage) {
-            _visit();
-            // A single-page app moved to another of its addresses; a new
-            // #fragment alone is the same address.
-            if (!shown) unawaited(_showHighlights());
-          }
+          if (inPage) _visit();
+          // A single-page app may have moved to another of its addresses.
+          // The document itself says whether it did: this address is also
+          // each redirect step of a load that has not replaced it yet.
+          unawaited(_showHighlights());
           (_context?['state'] as Map?)?['url'] = url;
           canGoBack = await controller.canGoBack();
           canGoForward = await controller.canGoForward();
@@ -538,10 +532,13 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     _highlightsAddress = null;
     _highlightIds.clear();
     if (!Platform.isMacOS) return;
+    final closing = pdf;
     pdf = false;
     _pdfOpening = null;
     _pdfPages.remove(_webViewId);
     unawaited(_pdf<void>('close'));
+    // The PDF's buttons go with its viewer.
+    if (closing) changed(false);
   }
 
   // WebKit shows a PDF in a page with no text, title or selection events.
@@ -564,15 +561,43 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     }
   }
 
+  // The document's address without its #fragment, as the document reports
+  // it. Location's own properties and plain operators cannot be replaced by
+  // a page's scripts.
+  static const _documentSite =
+      'location.origin + location.pathname + location.search';
+
+  /// Where the document on screen is, asked of the document itself. The
+  /// tab's address cannot say: while a load is under way it is already the
+  /// next page's, through every redirect step, and a page can stop that load
+  /// and stay. Highlights for an address go only to a document that is there.
+  Future<({String? address, String site})> _documentAddress() async {
+    final raw = await controller.runJavaScriptReturningResult(
+      "location.href + '\\n' + $_documentSite",
+    );
+    final parts = '$raw'.split('\n');
+    if (parts.length != 2) return (address: null, site: '');
+    return (address: _historyAddress(parts[0]), site: parts[1]);
+  }
+
   /// Shows the highlights kept for the page's address: in the Mac's viewer
   /// for a PDF, and through the page's highlight script for a web page.
   Future<void> _showHighlights() async {
-    final records = _records, address = _historyAddress(_url);
+    final records = _records;
+    if (records == null) return;
     final document = _documents;
-    _highlightsAddress = address;
-    _highlightIds.clear();
-    if (records == null || address == null) return;
     try {
+      final here = await _documentAddress();
+      // Nothing to do while the document and its address are the same.
+      if (_disposed ||
+          document != _documents ||
+          here.address == _highlightsAddress) {
+        return;
+      }
+      final address = _highlightsAddress = here.address;
+      _highlightsSite = here.site;
+      _highlightIds.clear();
+      if (address == null) return;
       final kept = await records.highlights(address);
       // The tab may show another document, or address, by now.
       if (_disposed ||
@@ -595,6 +620,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       );
       await controller.runJavaScript(_highlightScript!);
       await controller.runJavaScript(
+        'if ($_documentSite === ${jsonEncode(here.site)}) '
         'window.__relayHighlights?.set(${jsonEncode([
           for (final highlight in kept)
             if (highlight['marks'] == null) highlight,
@@ -608,6 +634,10 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   /// Highlights the selected text, or removes the highlights it touches, and
   /// keeps the change on the server.
   Future<void> _toggleHighlight() async {
+    // The document on screen must be the one whose highlights are loaded.
+    await _showHighlights();
+    final here = await _documentAddress();
+    if (here.address == null || here.address != _highlightsAddress) return;
     final id = const Uuid().v4();
     final viewer = pdf;
     Map? change;
@@ -617,7 +647,8 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       // The page's selection is gone with the highlight; the page observer
       // keeps the last one while the page is out of focus.
       final raw = await controller.runJavaScriptReturningResult(
-        '(() => { const change = window.__relayHighlights?.toggle(${jsonEncode(id)}) ?? null;'
+        '(() => { const change = $_documentSite === ${jsonEncode(_highlightsSite)}'
+        ' ? window.__relayHighlights?.toggle(${jsonEncode(id)}) ?? null : null;'
         " if (change) window.__relaySelection = ''; return JSON.stringify(change); })()",
       );
       dynamic data = raw is String ? jsonDecode(raw) : raw;

@@ -76,6 +76,12 @@ function suggest(pages: BrowserPage[], text: string, now: number) {
 export function addBrowserHistory(app: Hono, store: Store, now = Date.now) {
   app.get("/api/browser-history", (c) =>
     c.json(suggest(store.browserPages(), c.req.query("q") ?? "", now())));
+  // Stable 0.0.16 and earlier clear the history here; later clients use
+  // Stored data.
+  app.delete("/api/browser-history", (c) => {
+    store.forgetBrowserPages();
+    return c.body(null, 204);
+  });
   // A visit and an address-bar open of the same page are counted separately,
   // so either request may arrive first.
   for (const kind of ["visit", "typed"] as const) {
@@ -102,6 +108,6 @@ export const browserHistoryData = (store: Store): StoredCategory => ({
   name: "Browsing history",
   description: "Pages visited in Browser tabs, for address bar suggestions.",
   defaultDays: 90,
-  usage: () => store.browserPagesUsage(),
+  usage: (before) => store.browserPagesUsage(before),
   forget: (before) => before === undefined ? store.forgetBrowserPages() : store.forgetBrowserPagesBefore(before),
 });

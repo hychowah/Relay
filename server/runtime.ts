@@ -41,7 +41,12 @@ export async function startWorkspace(dataDir: string, apps: () => RegisteredApp[
   addBugReports(workspace.app, resolve(dataDir, "bug-reports"), store);
   addBrowserHistory(workspace.app, store);
   addHighlights(workspace.app, store);
-  const cleanStoredData = addStoredData(workspace.app, store, [browserHistoryData(store), highlightsData(store)]);
+  const stored = addStoredData(workspace.app, store, [browserHistoryData(store), highlightsData(store)]);
+  // A clean-up that fails must not stop the server or its start.
+  const cleanStoredData = () => {
+    try { stored(); }
+    catch (error) { console.warn("Stored data clean-up failed.", error); }
+  };
   cleanStoredData();
   const cleanTimer = setInterval(cleanStoredData, 60 * 60_000);
   cleanTimer.unref();

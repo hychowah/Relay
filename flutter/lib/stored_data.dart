@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -54,15 +56,19 @@ class _StoredDataDialogState extends State<StoredDataDialog> {
     }
   }
 
-  /// Makes a change on the server, then shows what it left.
-  Future<void> _change(Future<void> Function() change) async {
+  /// Makes a change on the server, then shows what it left. Answers how many
+  /// items the change would delete when the server wants that agreed first:
+  /// nothing was changed then, and the row keeps what the user typed.
+  Future<int> _change(Future<int> Function() change) async {
     try {
-      await change();
+      final older = await change();
       if (mounted) setState(() => error = null);
+      if (older > 0) return older;
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
     }
     await _load();
+    return 0;
   }
 
   @override
@@ -86,10 +92,16 @@ class _StoredDataDialogState extends State<StoredDataDialog> {
             // after the server refused a change.
             key: ValueKey('${kind['id']} $loads'),
             kind: kind,
-            onClear: () =>
-                _change(() => widget.api.clearStoredData(kind['id'] as String)),
-            onAutoClean: (days) => _change(
-              () => widget.api.setAutoClean(kind['id'] as String, days),
+            onClear: () => _change(() async {
+              await widget.api.clearStoredData(kind['id'] as String);
+              return 0;
+            }),
+            onAutoClean: (days, {deleteOlder = false}) => _change(
+              () => widget.api.setAutoClean(
+                kind['id'] as String,
+                days,
+                deleteOlder: deleteOlder,
+              ),
             ),
           ),
       ],
@@ -106,38 +118,55 @@ class _StoredKind extends StatefulWidget {
   });
   final Json kind;
   final VoidCallback onClear;
-  final void Function(int? days) onAutoClean;
+
+  /// Saves the period; answers how many items it would delete now when that
+  /// needs [deleteOlder] first.
+  final Future<int> Function(int? days, {bool deleteOlder}) onAutoClean;
   @override
   State<_StoredKind> createState() => _StoredKindState();
 }
 
 class _StoredKindState extends State<_StoredKind> {
-  // Auto-clean first turned on keeps a month, until the user types another.
-  late final days = TextEditingController(
-    text: '${widget.kind['autoCleanDays'] ?? 30}',
-  );
+  late final int? saved = widget.kind['autoCleanDays'] as int?;
+  late bool on = saved != null;
+  // Nothing is sent while the user types: a period takes effect with Save.
+  late final days = TextEditingController(text: '${saved ?? 30}');
+  // The items a typed period would delete now, shown until the user agrees
+  // or changes the period. A click just after it shows is ignored, so a
+  // double-click on Save does not delete.
+  int? older;
+  Timer? settling;
 
   @override
   void dispose() {
+    settling?.cancel();
     days.dispose();
     super.dispose();
   }
 
-  // The period last sent, so leaving the field after Enter saves it once.
-  late Object? sent = widget.kind['autoCleanDays'];
-
-  void _saveDays() {
+  int? get _typed {
     final typed = int.tryParse(days.text);
-    if (typed == null || typed < 1 || typed == sent) return;
-    sent = typed;
-    widget.onAutoClean(typed);
+    return typed != null && typed >= 1 ? typed : null;
+  }
+
+  Future<void> _save({bool deleteOlder = false}) async {
+    final typed = _typed;
+    if (typed == null) return;
+    final wouldDelete = await widget.onAutoClean(
+      typed,
+      deleteOlder: deleteOlder,
+    );
+    if (!mounted || wouldDelete == 0) return;
+    settling?.cancel();
+    settling = Timer(const Duration(milliseconds: 400), () {});
+    setState(() => older = wouldDelete);
   }
 
   @override
   Widget build(BuildContext context) {
     final kind = widget.kind, colors = Theme.of(context).colorScheme;
     final name = kind['name'] as String, items = kind['items'] as int;
-    final auto = kind['autoCleanDays'] != null;
+    final agree = older;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 8, 6),
       decoration: BoxDecoration(
@@ -175,40 +204,63 @@ class _StoredKindState extends State<_StoredKind> {
           // Wraps on a narrow screen.
           Wrap(
             crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
             children: [
               Switch(
-                value: auto,
-                onChanged: (on) => widget.onAutoClean(
-                  on ? (int.tryParse(days.text) ?? 30).clamp(1, 3650) : null,
-                ),
+                value: on,
+                // Turning it off deletes nothing, so it is saved at once;
+                // turning it on only shows the period to save.
+                onChanged: (value) {
+                  setState(() {
+                    on = value;
+                    older = null;
+                  });
+                  if (!value && saved != null) widget.onAutoClean(null);
+                },
               ),
-              const SizedBox(width: 8),
-              if (!auto)
+              if (!on)
                 const Text('Auto-clean is off: kept until you clear it')
               else ...[
                 const Text('Auto-clean items older than'),
-                const SizedBox(width: 8),
                 SizedBox(
                   width: 58,
-                  child: Focus(
-                    onFocusChange: (focused) {
-                      if (!focused) _saveDays();
-                    },
-                    child: TextField(
-                      controller: days,
-                      textAlign: TextAlign.center,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(4),
-                      ],
-                      decoration: const InputDecoration(isDense: true),
-                      onSubmitted: (_) => _saveDays(),
-                    ),
+                  child: TextField(
+                    controller: days,
+                    textAlign: TextAlign.center,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(4),
+                    ],
+                    decoration: const InputDecoration(isDense: true),
+                    onChanged: (_) => setState(() => older = null),
+                    onSubmitted: (_) => _save(),
                   ),
                 ),
-                const SizedBox(width: 8),
                 const Text('days'),
+                if (agree != null)
+                  TapRegion(
+                    onTapOutside: (_) => setState(() => older = null),
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: colors.error,
+                        foregroundColor: colors.onError,
+                      ),
+                      onPressed: () {
+                        if (settling?.isActive ?? false) return;
+                        _save(deleteOlder: true);
+                      },
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      label: Text(
+                        'Delete $agree older ${agree == 1 ? 'item' : 'items'}',
+                      ),
+                    ),
+                  )
+                else if (_typed != saved)
+                  FilledButton.tonal(
+                    onPressed: _typed == null ? null : _save,
+                    child: const Text('Save'),
+                  ),
               ],
             ],
           ),

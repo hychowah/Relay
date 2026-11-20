@@ -46,6 +46,6 @@ export const highlightsData = (store: Store): StoredCategory => ({
   name: "Highlights",
   description: "Text you highlighted on web pages and in PDFs.",
   defaultDays: null,
-  usage: () => store.highlightsUsage(),
+  usage: (before) => store.highlightsUsage(before),
   forget: (before) => store.forgetHighlights(before),
 });

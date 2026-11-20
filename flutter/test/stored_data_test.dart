@@ -19,7 +19,8 @@ void main() {
   testWidgets('stored data shows each kind, clears it and sets auto-clean', (
     tester,
   ) async {
-    // A stand-in server that keeps what the screen changes.
+    // A stand-in server that keeps what the screen changes. Its highlights
+    // are 100 days old, so a shorter period would delete them.
     final kinds = <Map<String, Object?>>[
       {
         'id': 'browser-history',
@@ -33,7 +34,7 @@ void main() {
         'id': 'highlights',
         'name': 'Highlights',
         'description': 'Text you highlighted.',
-        'items': 1,
+        'items': 3,
         'bytes': 420,
         'autoCleanDays': null,
       },
@@ -50,14 +51,25 @@ void main() {
         if (request.method == 'DELETE') {
           kind['items'] = 0;
           kind['bytes'] = 0;
-        } else {
-          final days = (jsonDecode(request.body) as Map)['autoCleanDays'];
-          if (days is int && days > 3650) {
-            return http.Response('{"error":"Choose 1 to 3650 days."}', 400);
-          }
-          kind['autoCleanDays'] = days;
+          return http.Response('', 204);
         }
-        return http.Response('', 204);
+        final body = jsonDecode(request.body) as Map;
+        final days = body['autoCleanDays'] as int?;
+        if (days != null && days > 3650) {
+          return http.Response('{"error":"Choose 1 to 3650 days."}', 400);
+        }
+        final older = kind['id'] == 'highlights' && days != null && days < 100
+            ? kind['items'] as int
+            : 0;
+        if (older > 0 && body['deleteOlder'] != true) {
+          return http.Response('{"saved":false,"older":$older}', 200);
+        }
+        if (older > 0) {
+          kind['items'] = 0;
+          kind['bytes'] = 0;
+        }
+        kind['autoCleanDays'] = days;
+        return http.Response('{"saved":true,"older":$older}', 200);
       }),
     );
     await tester.pumpWidget(
@@ -65,26 +77,56 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('128 items · 34 KB'), findsOneWidget);
-    expect(find.text('1 item · 420 B'), findsOneWidget);
+    expect(find.text('3 items · 420 B'), findsOneWidget);
     expect(find.text('Auto-clean items older than'), findsOneWidget);
     expect(find.text('Auto-clean is off: kept until you clear it'), findsOne);
+    expect(find.text('Save'), findsNothing);
 
-    // A new number of days is saved once typed.
-    await tester.enterText(find.byType(TextField), '14');
-    await tester.testTextInput.receiveAction(TextInputAction.done);
+    // A new number of days is saved with Save or Enter, not as it is typed.
+    await tester.enterText(find.byType(TextField), '120');
     await tester.pumpAndSettle();
-    expect(calls.last, 'PUT /api/stored-data/browser-history {"autoCleanDays":14}');
+    expect(calls, isEmpty);
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(calls, ['PUT /api/stored-data/browser-history {"autoCleanDays":120}']);
 
-    // Turned on, auto-clean starts at a month; turned off, it keeps all.
+    // Turning auto-clean on sends nothing: it shows the period to save. A
+    // period that would delete items now says how many and needs a second
+    // click, and a double-click on Save is not that click.
     await tester.tap(find.byType(Switch).last);
     await tester.pumpAndSettle();
-    expect(calls.last, 'PUT /api/stored-data/highlights {"autoCleanDays":30}');
+    expect(calls, hasLength(1));
     expect(find.text('Auto-clean items older than'), findsNWidgets(2));
+    await tester.tap(find.text('Save'));
+    await tester.pump();
+    await tester.pump();
+    expect(calls.last, 'PUT /api/stored-data/highlights {"autoCleanDays":30}');
+    await tester.tap(find.text('Delete 3 older items'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(calls, hasLength(2));
+    expect(find.text('3 items · 420 B'), findsOneWidget);
+
+    // Typing another period takes the question back.
+    await tester.enterText(find.byType(TextField).last, '200');
+    await tester.pumpAndSettle();
+    expect(find.text('Delete 3 older items'), findsNothing);
+    await tester.enterText(find.byType(TextField).last, '30');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Delete 3 older items'));
+    await tester.pumpAndSettle();
+    expect(
+      calls.last,
+      'PUT /api/stored-data/highlights {"autoCleanDays":30,"deleteOlder":true}',
+    );
+    expect(find.text('0 items · 0 B'), findsOneWidget);
+
+    // Turning it off keeps everything, so it is saved at once.
     await tester.tap(find.byType(Switch).first);
     await tester.pumpAndSettle();
     expect(calls.last, 'PUT /api/stored-data/browser-history {"autoCleanDays":null}');
 
-    // The server's refusal is shown and the saved period stays.
+    // The server's refusal is shown and the saved period comes back.
     await tester.enterText(find.byType(TextField), '9999');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
@@ -92,11 +134,11 @@ void main() {
     expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, '30');
 
     // Clearing asks for a second click, then shows the kind empty.
-    await tester.tap(find.byTooltip('Clear highlights'));
+    await tester.tap(find.byTooltip('Clear browsing history'));
     await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text('Clear'));
     await tester.pumpAndSettle();
-    expect(calls.last, 'DELETE /api/stored-data/highlights');
-    expect(find.text('0 items · 0 B'), findsOneWidget);
+    expect(calls.last, 'DELETE /api/stored-data/browser-history');
+    expect(find.text('0 items · 0 B'), findsNWidgets(2));
   });
 }

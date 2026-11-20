@@ -137,8 +137,9 @@ any kind the server adds later. Each kind shows how many items it holds and
 their size, and has a clear button. **Auto-clean** forgets a kind's items once
 they are older than the number of days you set; turned off, they are kept
 until you clear them. Browsing history starts at 90 days and highlights start
-with auto-clean off. The server cleans at start, every hour and when you
-change a setting.
+with auto-clean off. A period is saved with **Save**; when it would delete
+items now, the button first says how many and a second click agrees. The
+server cleans at start, every hour and when a period is saved.
 
 On macOS only, select text on a page in a Browser tab and press **Highlight**
 beside the address bar to mark it; select marked text and press it again to
@@ -152,7 +153,9 @@ highlights on the right text, and a view without that text shows none.
 Highlights are painted without changing the page's own elements. Text inside a
 frame, such as an embedded document, cannot be highlighted. Like browsing
 history, highlights are never given to the agent or to app integrations, and
-their requests are left out of bug recordings.
+their requests are left out of bug recordings. A page's own scripts can read
+the highlights kept for that page's address, since they are shown in the page;
+they never get another address's.
 
 On macOS only, a video's fullscreen button works in a Browser tab, also for a
 player embedded from another site that allows fullscreen. In split view the

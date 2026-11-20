@@ -47,7 +47,7 @@ const draw = (page: Page, html: string) => page.evaluate((html) => { document.ge
 
 /** The highlights painted now: their text and the paragraph each is in, once the page has settled. */
 async function painted(page: Page) {
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(1600);
   return page.evaluate(() => [...((CSS as any).highlights.get("relay-highlight") ?? [])].map((range: Range) => ({
     text: range.toString().replace(/\s+/g, " "),
     paragraph: range.startContainer.parentElement!.closest("p")?.id,

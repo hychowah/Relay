@@ -140,29 +140,27 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
       if let agent = webView?.customUserAgent, !agent.isEmpty {
         request.setValue(agent, forHTTPHeaderField: "User-Agent")
       }
-      let session = URLSession(configuration: configuration, delegate: SameAddress(), delegateQueue: nil)
-      let task = session.dataTask(with: request) { [weak self, weak webView] data, response, _ in
-        DispatchQueue.main.async {
-          // A closed viewer has already answered.
-          guard let pdf = self, let answer = pdf.opened else { return }
-          pdf.opened = nil
-          pdf.fetch = nil
-          // A PDF that needs a password stays with WebKit, which asks for it.
-          guard let webView = webView, webView.url == url, let data = data,
-                let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status),
-                let document = PDFDocument(data: data), document.pageCount > 0, !document.isLocked else {
-            answer(nil)
-            return
-          }
-          pdf.show(document, over: webView)
-          let attribute = document.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String
-          let named = attribute?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-          let details: [String: Any] = [
-            "title": named.isEmpty ? url.lastPathComponent : named, "pages": document.pageCount,
-          ]
-          answer(details)
+      let fetched = PDFFetch { [weak self, weak webView] data in
+        // A closed viewer has already answered.
+        guard let pdf = self, let answer = pdf.opened else { return }
+        pdf.opened = nil
+        pdf.fetch = nil
+        // A PDF that needs a password stays with WebKit, which asks for it.
+        guard let webView = webView, webView.url == url, let data = data,
+              let document = PDFDocument(data: data), document.pageCount > 0, !document.isLocked else {
+          answer(nil)
+          return
         }
+        pdf.show(document, over: webView)
+        let attribute = document.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String
+        let named = attribute?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let details: [String: Any] = [
+          "title": named.isEmpty ? url.lastPathComponent : named, "pages": document.pageCount,
+        ]
+        answer(details)
       }
+      let session = URLSession(configuration: configuration, delegate: fetched, delegateQueue: nil)
+      let task = session.dataTask(with: request)
       pdf.fetch = task
       task.resume()
       session.finishTasksAndInvalidate()
@@ -297,14 +295,45 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
   }
 }
 
-/// The viewer's own fetch goes only to the address the tab shows. That address
-/// passed the Browser's rule; a redirect could lead to one that would not, such
-/// as a private address, so a redirected fetch is given up.
-private final class SameAddress: NSObject, URLSessionTaskDelegate {
+/// The viewer's own fetch: it answers, on the main queue, the PDF's bytes or
+/// nil. It goes only to the address the tab shows. That address passed the
+/// Browser's rule; a redirect could lead to one that would not, such as a
+/// private address, so a redirected fetch is given up. A page can also claim
+/// to be a PDF when it is not, so the reply must say it is one and may not
+/// outgrow what the app can hold.
+private final class PDFFetch: NSObject, URLSessionDataDelegate {
+  private static let largest = 256 * 1024 * 1024
+  private let done: (Data?) -> Void
+  private var received = Data()
+
+  init(done: @escaping (Data?) -> Void) {
+    self.done = done
+  }
+
   func urlSession(
     _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
     newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void
   ) {
     completionHandler(nil)
+  }
+
+  func urlSession(
+    _ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+    completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+  ) {
+    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+    let wanted = (200..<300).contains(status) && response.mimeType?.lowercased() == "application/pdf"
+      && response.expectedContentLength <= Int64(PDFFetch.largest)
+    completionHandler(wanted ? .allow : .cancel)
+  }
+
+  func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+    received.append(data)
+    if received.count > PDFFetch.largest { dataTask.cancel() }
+  }
+
+  func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    let fetched = error == nil ? received : nil
+    DispatchQueue.main.async { self.done(fetched) }
   }
 }
