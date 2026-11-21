@@ -10,23 +10,33 @@ user decides otherwise.
 - **WebView.** `webview_flutter` has no Windows implementation.
   `webview_all_windows` 1.5.2 (exact pin) renders WebView2 into a Flutter
   texture, so Relay's dialogs and overlays draw over pages, and it cancels
-  every main-frame navigation until Dart allows it, which keeps the Browser's
-  private-address rule. `lib/windows_web_view.dart` maps the `webview_flutter`
-  calls Relay makes onto it, so `web_page.dart` and the Mac path are unchanged.
-  The package's native code was scanned for network endpoints (only the NuGet
-  download of the WebView2 SDK at build time), not fully reviewed.
-  Rejected: `webview_win_floating` (a native window over Flutter hides Relay's
+  every main-frame navigation until Dart allows it.
+  `lib/windows_web_view.dart` maps the `webview_flutter` calls Relay makes
+  onto it, so `web_page.dart` and the Mac path are unchanged. The package's
+  native code was scanned for network endpoints (only the NuGet download of
+  the WebView2 SDK at build time), not fully reviewed. Rejected:
+  `webview_win_floating` (a native window over Flutter hides Relay's
   overlays), `webview_flutter_windows` (no navigation veto), moving all
-  platforms to `webview_all` (would replace the Mac's WKWebView plugin that the
-  Swift runner depends on).
+  platforms to `webview_all` (would replace the Mac's WKWebView plugin that
+  the Swift runner depends on).
 - **Own HTML page.** WebView2 loads `loadHtmlString` content as a `data:`
   address, which the Browser's rule refused, so its start page never finished.
   The adapter reports it as `about:blank`, as WKWebView and Android do, and
   allows a `data:` main-frame load only right after Relay's own call.
+- **Address rule checked twice.** The package lets the first load after Back,
+  Forward or Reload through unasked, and a same-document move leaves that pass
+  for any later load. So the adapter also asks the app's own check for every
+  address a page starts or moves to, holds page events and channel messages
+  until it passes, and replaces a refused page with a blank one that the app
+  cannot read. In the Windows test the package asked every time (Back after
+  `pushState` by script and by link, a back/forward cache Back, Reload), so
+  this second check is tested only with a simulated unasked load.
+- **Downloads are off**: the package would save them without asking.
 - **Popups** open in the same view (the package default), so they pass the
   same navigation check.
-- **Data.** WebView2 keeps its data in the app's data folder, not beside the
-  program, so a reinstall keeps website sign-ins.
+- **Data.** WebView2 keeps its data (sign-ins, cookies, cache) in
+  `%APPDATA%\Relay\Relay Flutter\WebView2`, not beside the program, so a
+  reinstall keeps it. App pages and Browser tabs share it.
 - **Build.** `tools/build-windows` builds in a temporary copy on the Windows
   drive and installs to `relay.windowsApp`; machine paths live in local git
   config.
@@ -38,6 +48,22 @@ windows, page fullscreen, native selection, page capture, Browser history,
 the Safari user agent and in-app updates. WebView2 offers most of these
 (`takeScreenshot`, document-start scripts, popup and fullscreen events); each
 is a later step if the trial goes well.
+
+## Package limits
+
+Measured on Windows with a loopback probe:
+
+- WebView2 sends a page request even when its start is cancelled, so a
+  refused private page is requested though never shown or read. The Mac rule
+  never covered subresources either.
+- The package cancels every allowed load and starts it again as a plain
+  address. A link request reaches the server twice: first with its Referer,
+  then without. A form POST arrives as a GET without its body, so sign-in
+  forms that post fail.
+
+From the package's code, not measured: 307/308 redirects lose their body; a
+cross-site link carries Strict same-site cookies like a typed address; a
+page's own `history.back()` across documents adds a history entry.
 
 ## Evidence
 
@@ -52,14 +78,20 @@ is a later step if the trial goes well.
   address bar check.
 - The same build steps were run by hand; `tools/build-windows` itself waits
   for its two git config values and has not run end to end.
-- Unverified: a website link or redirect to a private address (the
-  navigation check), page dialogs, typing in pages, sign-ins surviving a
-  reinstall, and sending a chat message.
+- `integration_test/windows_web_view_test.dart` passes on Windows: a link,
+  a server redirect and loads after Back are refused and never shown, a
+  simulated unasked load is replaced by the blocked page, and an attachment
+  saves nothing.
+- Unverified: page dialogs, typing in pages, sign-ins surviving a reinstall,
+  and sending a chat message.
 
 ## Next
 
-1. User trial on Windows: chat, each app, a Browser sign-in, a page confirm
-   dialog, and the unverified items above.
+1. User trial on Windows: chat, each app, a page confirm dialog and the
+   unverified items above. Form sign-ins that post fail while the adapter sets
+   the package's check. Without it the package does not restart loads, so posts
+   should work, and only the second check would guard addresses; then a refused
+   page would load and might show until it is replaced. Neither is measured.
 2. Port the Mac-only features the user wants, starting with page capture.
    Before repeated rebuilds, keep one build folder on the Windows drive so
    builds are incremental.

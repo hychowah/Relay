@@ -344,5 +344,12 @@ git config --local relay.windowsApp 'C:\path\to\Relay Flutter'
 Then run `tools/build-windows`. It builds in a temporary folder on the Windows
 drive with the same `relay.appUrl` and `relay.browserUrl` as Mac builds,
 replaces the program in `relay.windowsApp` and removes the temporary folder.
-Settings and website data stay in the app's data folder under `%APPDATA%`.
-Close the app before rebuilding.
+Settings and website data (sign-ins, cookies, cache, shared by app pages and
+Browser tabs) stay in `%APPDATA%\Relay\Relay Flutter`. Close the app before
+rebuilding.
+
+`integration_test/windows_web_view_test.dart` checks the Browser's address rule
+and that nothing downloads, against a real WebView2 with a loopback fixture and
+a temporary data folder. Run it with `flutter test
+integration_test/windows_web_view_test.dart -d windows` from a copy of
+`flutter/` on the Windows drive.

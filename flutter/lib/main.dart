@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
@@ -32,7 +33,10 @@ import 'transcript_pane.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (Platform.isWindows) await registerWindowsWebView();
+  if (Platform.isWindows) {
+    final support = await getApplicationSupportDirectory();
+    await registerWindowsWebView('${support.path}\\WebView2');
+  }
   final prefs = await SharedPreferences.getInstance();
   final device = prefs.getString('device') ?? const Uuid().v4();
   await prefs.setString('device', device);

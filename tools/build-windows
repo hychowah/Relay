@@ -7,6 +7,7 @@ build replaces the previous one in relay.windowsApp; the app's own data
 (settings, website sign-ins) lives elsewhere and is kept."""
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -19,6 +20,15 @@ def git(*args):
 
 def wsl_path(windows):
     return Path(subprocess.check_output(["wslpath", "-u", windows], text=True).strip())
+
+
+def refuse_if_running():
+    tasks = subprocess.run(
+        ["cmd.exe", "/c", "tasklist", "/FI", "IMAGENAME eq relay_flutter.exe", "/NH"],
+        capture_output=True, text=True, cwd="/mnt/c",
+    ).stdout
+    if "relay_flutter.exe" in tasks:
+        sys.exit("Close Relay Flutter on Windows first; its files are in use.")
 
 
 def main():
@@ -34,7 +44,11 @@ def main():
         ]
     except subprocess.CalledProcessError:
         sys.exit("Set relay.windowsFlutter, relay.windowsApp, relay.appUrl and relay.browserUrl in local git config (see flutter/README.md).")
+    # The build command runs through cmd.exe, which would act on these.
+    if any(re.search(r'[&|<>^"%]', define) for define in defines):
+        sys.exit("relay.appUrl and relay.browserUrl must be plain addresses.")
     exe = app / "relay_flutter.exe"
+    refuse_if_running()
     if app.exists() and any(app.iterdir()) and not exe.exists():
         sys.exit(f"{app} holds other files; relay.windowsApp must be a folder only this app uses.")
     temp = subprocess.check_output(["cmd.exe", "/c", "echo %TEMP%"], text=True, cwd="/mnt/c").strip()
@@ -51,6 +65,7 @@ def main():
             check=True,
         )
         release = build / "flutter/build/windows/x64/runner/Release"
+        refuse_if_running()
         try:
             if app.exists():
                 shutil.rmtree(app)
