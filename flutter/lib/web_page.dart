@@ -14,7 +14,9 @@ import 'browser_transcript.dart';
 import 'page_surface.dart';
 import 'relay_api.dart';
 
-const _readPage = '''JSON.stringify({url:location.href,title:document.title,
+// WebView2 (Windows) shows Relay's own HTML at a data: address where other
+// web views use about:blank; websites cannot open data: in the main frame.
+const _readPage = '''JSON.stringify({url:location.protocol==='data:'?'about:blank':location.href,title:document.title,
  selection:window.__relaySelection||window.getSelection()?.toString().slice(0,4000)||'',
  text:document.body?.innerText.slice(0,24000)||'',
  links:[...document.querySelectorAll('a[href]')].filter(a=>a.getClientRects().length).slice(0,60).map(a=>({text:a.innerText.slice(0,500),url:a.href.slice(0,2000)})),

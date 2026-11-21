@@ -1,6 +1,7 @@
 # Relay Flutter client
 
-Flutter is the main client on the Mac. Windows uses the React browser fallback.
+Flutter is the main client on the Mac. Windows uses the React browser fallback;
+see also the [Windows test build](#windows-test-build).
 Flutter owns tabs, chat and address input; system WebViews render existing apps
 and public websites. The WSL backend owns all model calls and credentials.
 
@@ -323,3 +324,25 @@ picker before publishing so their users can return to Stable.
 Public tabs check top-level navigation to private addresses. See the
 [Flutter plan](../docs/plans/flutter/master-plan.md) for WebView limits, native
 verification and deferred platform work.
+
+## Windows test build
+
+Desktop only. On Windows, `lib/windows_web_view.dart` puts WebView2 (through
+`webview_all_windows`) behind the same `webview_flutter` interface, so the
+rest of the client is unchanged. The [Windows record](../docs/plans/flutter/windows.md)
+lists the Mac-only features that are off there.
+
+The build PC needs Flutter 3.50.0 for Windows, Visual Studio 2022 with
+**Desktop development with C++**, the WebView2 runtime and Windows
+**Developer Mode**, which Flutter needs for plugin symlinks. Configure once in WSL:
+
+```sh
+git config --local relay.windowsFlutter 'C:\path\to\flutter'
+git config --local relay.windowsApp 'C:\path\to\Relay Flutter'
+```
+
+Then run `tools/build-windows`. It builds in a temporary folder on the Windows
+drive with the same `relay.appUrl` and `relay.browserUrl` as Mac builds,
+replaces the program in `relay.windowsApp` and removes the temporary folder.
+Settings and website data stay in the app's data folder under `%APPDATA%`.
+Close the app before rebuilding.

@@ -1,5 +1,5 @@
 name: relay_flutter
-description: "Relay macOS and Android client experiment."
+description: "Relay macOS, Windows and Android client experiment."
 publish_to: 'none'
 
 version: 0.0.16+16
@@ -15,6 +15,10 @@ dependencies:
   http: ^1.6.0
   webview_flutter: ^4.14.1
   webview_flutter_wkwebview: ^3.27.2
+  webview_flutter_platform_interface: ^2.15.1
+  # Windows only; exact pins because this young package changes fast.
+  webview_all_windows: 1.5.2
+  webview_platform_interface: 1.5.2
   shared_preferences: ^2.5.6
   uuid: ^4.6.0
   flutter_markdown_plus: ^1.0.12
@@ -31,7 +35,6 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^6.0.0
-  webview_flutter_platform_interface: ^2.15.1
 
 flutter:
 

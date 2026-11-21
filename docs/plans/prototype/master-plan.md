@@ -27,7 +27,7 @@ storage and export.
 
 | ID | Required behavior |
 | --- | --- |
-| R01 | Flutter on the MacBook is the main client. Maintain chat and app opening in the React browser fallback on Windows. Desktop chat is adjustable on the right, initially 30% wide. Native Android is the long-term goal, with chat overlaid on the app. Phone work and a Flutter Windows build are deferred. |
+| R01 | Flutter on the MacBook is the main client. Maintain chat and app opening in the React browser fallback on Windows. Desktop chat is adjustable on the right, initially 30% wide. Native Android is the long-term goal, with chat overlaid on the app. Phone work is deferred; see the [Flutter Windows test build](../flutter/windows.md). |
 | R02 | Connect apps the user develops. Each owns its screens, can use its own framework, and remains independently usable. |
 | R03 | Register an app by configured address and integration information. Apps can run on the same machine or reachable remote hosts. |
 | R04 | A conversation can span apps and remain open when the user switches apps. |
@@ -336,5 +336,5 @@ The [coding sessions plan](../coding-sessions/master-plan.md) covers handing req
 2. Evaluate sourced Research Web answers, memory correction and forgetting, and retrieval of old details after compaction with the configured real provider.
 3. Establish the Compose executor boundary before enabling any file or terminal tool.
 4. Serve the web page from the app backend so both clients share one set of records.
-5. Defer the Android device trial, Flutter Windows build and phone work until separately requested.
+5. Defer the Android device trial and phone work until separately requested.
 6. Have Analysis Web and Backtest Web serve the Relay protocol from their own projects, then retire the adapter project.

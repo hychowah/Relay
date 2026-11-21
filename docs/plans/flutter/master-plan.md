@@ -255,4 +255,4 @@ real WKWebViews.
    password-protected PDF. Why 0.0.16 lost the selection is unknown; embedded
    PDFs still use that path.
 
-Browser isolation and PDF checks remain open. The Android device trial, Windows Flutter build and phone work each await a separate request.
+Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).

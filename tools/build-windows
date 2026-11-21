@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""Build this checkout's Flutter client for Windows from WSL and install it on this PC.
+
+Windows build tools do not work on WSL paths, so the build runs in a temporary
+copy of flutter/ on the Windows drive, which is removed afterwards. The new
+build replaces the previous one in relay.windowsApp; the app's own data
+(settings, website sign-ins) lives elsewhere and is kept."""
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+def git(*args):
+    return subprocess.check_output(["git", *args], text=True).strip()
+
+
+def wsl_path(windows):
+    return Path(subprocess.check_output(["wslpath", "-u", windows], text=True).strip())
+
+
+def main():
+    if len(sys.argv) != 1:
+        sys.exit("Usage: tools/build-windows")
+    os.chdir(git("rev-parse", "--show-toplevel"))
+    try:
+        flutter = git("config", "--get", "relay.windowsFlutter")
+        app = wsl_path(git("config", "--get", "relay.windowsApp"))
+        defines = [
+            f"--dart-define=RELAY_URL={git('config', '--get', 'relay.appUrl')}",
+            f"--dart-define=BROWSER_URL={git('config', '--get', 'relay.browserUrl')}",
+        ]
+    except subprocess.CalledProcessError:
+        sys.exit("Set relay.windowsFlutter, relay.windowsApp, relay.appUrl and relay.browserUrl in local git config (see flutter/README.md).")
+    exe = app / "relay_flutter.exe"
+    if app.exists() and any(app.iterdir()) and not exe.exists():
+        sys.exit(f"{app} holds other files; relay.windowsApp must be a folder only this app uses.")
+    temp = subprocess.check_output(["cmd.exe", "/c", "echo %TEMP%"], text=True, cwd="/mnt/c").strip()
+    with tempfile.TemporaryDirectory(prefix="relay-build.", dir=wsl_path(temp)) as build:
+        build = Path(build)
+        paths = subprocess.check_output(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "flutter"])
+        for path in filter(None, map(os.fsdecode, paths.split(b"\0"))):
+            if os.path.isfile(path):
+                (build / path).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, build / path)
+        subprocess.run(
+            ["cmd.exe", "/c", f"{flutter}\\bin\\flutter.bat", "build", "windows", "--release", *defines],
+            cwd=build / "flutter",
+            check=True,
+        )
+        release = build / "flutter/build/windows/x64/runner/Release"
+        try:
+            if app.exists():
+                shutil.rmtree(app)
+        except PermissionError:
+            sys.exit("Close Relay Flutter on Windows first; its files are in use.")
+        shutil.copytree(release, app)
+    print(f"Installed {exe}")
+
+
+main()

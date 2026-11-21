@@ -12,6 +12,7 @@ import 'browser_connection.dart';
 import 'browser_transcript.dart';
 import 'relay_api.dart';
 import 'web_page.dart';
+import 'windows_web_view.dart';
 import 'workspace.dart';
 import 'conversation_history.dart';
 import 'provider_settings.dart';
@@ -31,6 +32,7 @@ import 'transcript_pane.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isWindows) await registerWindowsWebView();
   final prefs = await SharedPreferences.getInstance();
   final device = prefs.getString('device') ?? const Uuid().v4();
   await prefs.setString('device', device);
