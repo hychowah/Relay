@@ -80,11 +80,13 @@ against the Flutter deployment's records without making a model request for thos
 Chat supports history/Trash, provider/model selection, conversation thinking effort,
 bots with app scopes, memory editing, forwarding, Markdown, saved sources and activity.
 Devices share one server. The conversation last opened on any device opens on
-each device when it starts or comes back to the front. Each device keeps its own
-tabs and saves them on the server; the new tab page lists the other devices, and
-**Open ⟨device⟩'s tabs here** opens a copy beside the tabs already open. Nothing
-follows live afterwards. Saved tabs, like the browsing history, are not given to
-the agent.
+each device when it starts or comes back to the front, unless that device chose
+or sent in a chat meanwhile. A new chat is not saved until its first message, so
+it stays open on its device but a restart opens the last saved one. Each device
+keeps its own tabs and saves them on the server; the new tab page lists the
+other devices, and **Open ⟨device⟩'s tabs here** opens a copy beside the tabs
+already open. Nothing follows live afterwards. Saved tabs, like the browsing
+history, are not given to the agent.
 Desktop chat width is saved; phones use an overlay with a compact progress/Stop bar.
 **Workspace menu → Appearance** sets Relay's own screens to System (the default),
 Light or Dark, saved per device. System follows the device's appearance as it

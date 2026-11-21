@@ -43,6 +43,9 @@ Future<void> main() async {
   // Open tabs. The key keeps its first name, from when only an update restart
   // saved them, so tabs survive updating from or returning to an older build.
   final session = prefs.getString('updateSession');
+  // One upload at a time, so the server keeps the latest tabs; a failure only
+  // leaves its copy older.
+  var tabsUpload = Future<void>.value();
   final api = RelayApi(
     Uri.parse(
       const String.fromEnvironment(
@@ -68,7 +71,9 @@ Future<void> main() async {
     pendingSession: session == null ? null : jsonDecode(session) as Json,
     storeSession: (session) async {
       await prefs.setString('updateSession', jsonEncode(session));
-      api.saveDeviceTabs(device, deviceName, session);
+      tabsUpload = tabsUpload
+          .then((_) => api.saveDeviceTabs(device, deviceName, session))
+          .catchError((_) {});
     },
     saveConversation: (id) async {
       if (id == null) {

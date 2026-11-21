@@ -564,6 +564,7 @@ class Workspace extends ChangeNotifier {
       'capture': capture != null,
     });
     sending = true;
+    _choices++;
     error = null;
     changed();
     try {
@@ -676,21 +677,35 @@ class Workspace extends ChangeNotifier {
   /// Saves the conversation on this device, and on the server as the one last
   /// opened on any device.
   Future<void> _keepConversation(String? id) async {
+    _choices++;
+    if (id != null) {
+      _current = id;
+      // One write at a time, so the server ends with the latest choice.
+      _currentWrite = _currentWrite
+          .then((_) => api.setCurrentConversation(id))
+          .catchError((_) {});
+    }
     await saveConversation(id);
-    if (id != null) api.setCurrentConversation(_current = id);
   }
 
   // The server's last opened conversation as this device last wrote or read
   // it; only a change by another device moves this one.
   String? _current;
+  Future<void> _currentWrite = Future.value();
+  // Counts this device's own choices of a chat and its sends. A value read
+  // from the server while one happened is older than it and is not followed.
+  int _choices = 0;
 
   /// Opens the conversation another device opened last. The app calls this
   /// when it starts and when it returns to the front; meanwhile each device
   /// keeps the conversation it shows, including a new chat not yet saved.
   Future<void> openCurrentConversation() async {
+    if (sending) return;
+    final choices = _choices;
     try {
       final id = await api.currentConversation();
-      if (id == null || id == _current || _disposed) return;
+      if (_disposed || sending || choices != _choices) return;
+      if (id == null || id == _current) return;
       _current = id;
       if (id != conversationId) await selectConversation(id);
     } catch (_) {
@@ -1059,8 +1074,15 @@ class Workspace extends ChangeNotifier {
     recorder.action('open device tabs', {
       'tabs': (saved['tabs'] as List).length,
     });
-    // The empty tab they were opened from goes, as when an app is chosen.
-    final blank = active?.appId == null ? active : null;
+    // The empty tab they were opened from goes, as when an app is chosen,
+    // unless it is a pane of a split.
+    final blank =
+        active?.appId == null &&
+            !tabs.whereType<SplitTab>().any(
+              (split) => split.layout.contains(active!),
+            )
+        ? active
+        : null;
     final placed = <int, WorkspaceTab>{};
     final restoring = restoreSession(saved, placed);
     final shown = placed[saved['active']];

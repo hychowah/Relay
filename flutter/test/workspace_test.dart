@@ -156,6 +156,7 @@ class Fixture {
             return reply({});
           }
           if (path.endsWith('/messages')) {
+            sentTo = path;
             sent = jsonDecode(request.body) as Json;
             return reply({'id': 'run'});
           }
@@ -181,7 +182,12 @@ class Fixture {
             ]);
           }
           if (path == '/api/current-conversation') {
-            if (request.method == 'GET') return reply({'id': current});
+            if (request.method == 'GET') {
+              // The answer is the value when asked, however late it comes.
+              final value = current;
+              await holdCurrent?.future;
+              return reply({'id': value});
+            }
             current = (jsonDecode(request.body) as Json)['id'] as String;
             return http.Response('', 204);
           }
@@ -221,7 +227,8 @@ class Fixture {
   final savedNewestFirst = <bool>[];
   // The server's conversation last opened on any device, and each device's
   // saved tabs as the server lists them.
-  String? current;
+  String? current, sentTo;
+  Completer<void>? holdCurrent;
   List<Json> devices = [];
   bool offline = false, failRoomRestore = false;
   List<Json> configApps = [...apps];
@@ -276,6 +283,54 @@ void main() {
     await f.w.openCurrentConversation();
     expect(f.w.conversationId, isNull);
     f.w.dispose();
+  });
+
+  test(
+    'following another device never moves a send or undoes a click',
+    () async {
+      final f = Fixture()..current = 'mine';
+      await f.w.start();
+
+      // The app returns to the front as the user sends in the chat shown.
+      f.current = 'other';
+      f.holdCurrent = Completer();
+      final following = f.w.openCurrentConversation();
+      await f.w.send('hello');
+      f.holdCurrent!.complete();
+      await following;
+      expect(f.sentTo, '/api/conversations/mine/messages');
+      expect(f.w.conversationId, 'mine');
+
+      // Or as the user picks a chat.
+      f.holdCurrent = Completer();
+      final again = f.w.openCurrentConversation();
+      await f.w.selectConversation('picked');
+      f.holdCurrent!.complete();
+      await again;
+      expect(f.w.conversationId, 'picked');
+      expect(f.current, 'picked');
+      f.w.dispose();
+    },
+  );
+
+  test('copying tabs from a split\'s empty pane keeps the split', () async {
+    final f = Fixture();
+    addTearDown(f.w.dispose);
+    await f.w.start();
+    final room = await f.w.openApp(f.w.apps[1]);
+    f.w.newTab();
+    final blank = f.w.active!;
+    f.w.dropInSplit(room, blank, SplitSide.right);
+    final split = f.w.shownSplit!;
+    f.w.select(blank);
+    await f.w.openDeviceTabs({
+      'active': 0,
+      'tabs': [
+        {'appId': 'browser', 'url': 'https://news.example/'},
+      ],
+    });
+    expect(f.w.tabs, contains(blank));
+    expect(split.layout.tabs, [blank, room]);
   });
 
   testWidgets('another device\'s tabs open here once, from the new tab page', (

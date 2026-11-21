@@ -69,7 +69,7 @@ page's own `history.back()` across documents adds a history entry.
 
 ## Evidence
 
-- WSL: `flutter analyze` clean; 78 Flutter tests pass (they use fake pages).
+- WSL: `flutter analyze` clean; 80 Flutter tests pass (they use fake pages).
 - Windows: `flutter doctor` passes for Windows (Flutter 3.50.0, Visual Studio
   2022 17.9, Windows SDK 10.0.22621). Both Relay addresses answer from Windows.
 - Windows release build (about 200 s) installed and run against the live
@@ -86,7 +86,7 @@ page's own `history.back()` across documents adds a history entry.
   saves nothing.
 - Unverified: page dialogs, typing in pages, sign-ins surviving a reinstall,
   and sending a chat message.
-- Cross-device chat and tabs: source only. 107 server and 78 Flutter tests
+- Cross-device chat and tabs: source only. 107 server and 80 Flutter tests
   pass; the backend is not deployed and no Mac and Windows run has been made.
 
 ## Next
@@ -96,11 +96,13 @@ page's own `history.back()` across documents adds a history entry.
    comes to the front, a new unsaved chat is not pulled back, and **Open Mac's
    tabs here** copies the Mac's tabs once. Also check Browser history and
    highlights on Windows.
-2. User trial on Windows: chat, each app, a page confirm dialog and the
+2. Ask the user how old device cards go away: a device that reinstalls gets a
+   new id, and its old tabs stay on the server, outside Stored data.
+3. User trial on Windows: chat, each app, a page confirm dialog and the
    unverified items above. Form sign-ins that post fail while the adapter sets
    the package's check. Without it the package does not restart loads, so posts
    should work, and only the second check would guard addresses; then a refused
    page would load and might show until it is replaced. Neither is measured.
-3. Port the Mac-only features the user wants, starting with page capture.
+4. Port the Mac-only features the user wants, starting with page capture.
    Before repeated rebuilds, keep one build folder on the Windows drive so
    builds are incremental.
