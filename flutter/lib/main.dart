@@ -51,7 +51,14 @@ Future<void> main() async {
       ),
     ),
   );
-  final browserHistory = Platform.isMacOS;
+  // Desktop only: Browser history and highlights.
+  final browserHistory = Platform.isMacOS || Platform.isWindows;
+  // Shown to the user's other devices beside the tabs this one saves.
+  final deviceName = Platform.isMacOS
+      ? 'Mac'
+      : Platform.isWindows
+      ? 'Windows PC'
+      : Platform.operatingSystem;
   final workspace = Workspace(
     api: api,
     deviceId: device,
@@ -61,6 +68,7 @@ Future<void> main() async {
     pendingSession: session == null ? null : jsonDecode(session) as Json,
     storeSession: (session) async {
       await prefs.setString('updateSession', jsonEncode(session));
+      api.saveDeviceTabs(device, deviceName, session);
     },
     saveConversation: (id) async {
       if (id == null) {
@@ -276,9 +284,15 @@ class _RelayShellState extends State<RelayShell> {
 
   /// The page shown on the whole screen.
   BrowserSurface? onScreen;
+  // The conversation last opened on another device opens here too.
+  late final AppLifecycleListener _lifecycle;
+
   @override
   void initState() {
     super.initState();
+    _lifecycle = AppLifecycleListener(
+      onResume: () => unawaited(w.openCurrentConversation()),
+    );
     draft = TextEditingController(text: widget.initialDraft);
     draft.addListener(_save);
     w.addListener(_changed);
@@ -309,6 +323,7 @@ class _RelayShellState extends State<RelayShell> {
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     saveTimer?.cancel();
     unawaited(widget.saveDraft(draft.text));
     draft.dispose();
@@ -1104,6 +1119,8 @@ class _RelayShellState extends State<RelayShell> {
               apps: w.allowedApps,
               onChoose: _choose,
               onShow: w.refreshApps,
+              devices: w.otherDevices,
+              onOpenDevice: w.openDeviceTabs,
             ),
           ),
         for (final tab in shown) ...[
@@ -1124,6 +1141,8 @@ class _RelayShellState extends State<RelayShell> {
                 apps: w.allowedApps,
                 onChoose: _choose,
                 onShow: w.refreshApps,
+                devices: w.otherDevices,
+                onOpenDevice: w.openDeviceTabs,
               ),
             ),
           if (tab.report != null && (tab.page == null || tab.error != null))
@@ -1932,10 +1951,16 @@ class NewTabPage extends StatefulWidget {
     required this.apps,
     required this.onChoose,
     required this.onShow,
+    required this.devices,
+    required this.onOpenDevice,
   });
   final List<WorkspaceApp> apps;
   final Future<void> Function(WorkspaceApp) onChoose;
   final Future<void> Function() onShow;
+
+  /// The user's other devices with the tabs each saved last.
+  final Future<List<Json>> Function() devices;
+  final Future<void> Function(Json tabs) onOpenDevice;
   @override
   State<NewTabPage> createState() => _NewTabPageState();
 }
@@ -1943,11 +1968,119 @@ class NewTabPage extends StatefulWidget {
 class _NewTabPageState extends State<NewTabPage> {
   ColorScheme get colors => Theme.of(context).colorScheme;
   String search = '';
+  late final Future<List<Json>> devices = widget.devices();
   @override
   void initState() {
     super.initState();
     unawaited(widget.onShow());
   }
+
+  String _ago(int at) {
+    final minutes = DateTime.now()
+        .difference(DateTime.fromMillisecondsSinceEpoch(at))
+        .inMinutes;
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return '$minutes min ago';
+    if (minutes < 24 * 60) return '${minutes ~/ 60} h ago';
+    return '${minutes ~/ (24 * 60)} days ago';
+  }
+
+  /// What a saved tab shows: a website's host, or its app or report name.
+  String? _tabName(Json tab) {
+    if (tab['split'] != null) return null;
+    final url = tab['url'] as String?;
+    final host = url == null ? null : Uri.tryParse(url)?.host;
+    if (host != null && host.isNotEmpty) return host;
+    final source = tab['source'] as Map?;
+    return source?['title'] as String? ??
+        widget.apps.where((app) => app.id == tab['appId']).firstOrNull?.name;
+  }
+
+  Widget _devices() => FutureBuilder(
+    future: devices,
+    builder: (context, snapshot) {
+      final found = snapshot.data ?? const [];
+      if (found.isEmpty) return const SizedBox.shrink();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 18),
+          Text(
+            'ON YOUR OTHER DEVICES',
+            style: TextStyle(
+              fontSize: 10,
+              letterSpacing: 1.2,
+              fontWeight: FontWeight.w600,
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (final device in found)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Material(
+                color: colors.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: colors.outline),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () => widget.onOpenDevice(device['tabs'] as Json),
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.devices_rounded,
+                          size: 20,
+                          color: colors.primary,
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Open ${device['name']}\'s tabs here',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                [
+                                  _ago(device['updatedAt'] as int),
+                                  ...{
+                                    for (final tab
+                                        in ((device['tabs'] as Json)['tabs']
+                                                as List)
+                                            .cast<Json>())
+                                      ?_tabName(tab),
+                                  },
+                                ].join(' · '),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: colors.onSurfaceVariant,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Icon(Icons.arrow_outward_rounded, size: 17),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    },
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -2086,6 +2219,7 @@ class _NewTabPageState extends State<NewTabPage> {
                     'No matching apps.',
                     style: TextStyle(color: colors.onSurfaceVariant),
                   ),
+                if (search.trim().isEmpty) _devices(),
               ],
             ),
           ),

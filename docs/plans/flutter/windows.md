@@ -43,9 +43,11 @@ user decides otherwise.
 
 ## Off on Windows
 
-Everything behind `Platform.isMacOS`: the PDF viewer and highlights, popup
-windows, page fullscreen, native selection, page capture, Browser history,
-the Safari user agent and in-app updates. WebView2 offers most of these
+Everything behind `Platform.isMacOS`: the PDF viewer and its highlights,
+popup windows, page fullscreen, native selection, page capture, the Safari
+user agent and in-app updates. Browser history and web page highlights are on
+for Windows, from the same server records as the Mac; neither is checked on
+Windows yet. WebView2 offers most of these
 (`takeScreenshot`, document-start scripts, popup and fullscreen events); each
 is a later step if the trial goes well.
 
@@ -67,7 +69,7 @@ page's own `history.back()` across documents adds a history entry.
 
 ## Evidence
 
-- WSL: `flutter analyze` clean; 76 Flutter tests pass (they use fake pages).
+- WSL: `flutter analyze` clean; 78 Flutter tests pass (they use fake pages).
 - Windows: `flutter doctor` passes for Windows (Flutter 3.50.0, Visual Studio
   2022 17.9, Windows SDK 10.0.22621). Both Relay addresses answer from Windows.
 - Windows release build (about 200 s) installed and run against the live
@@ -84,14 +86,21 @@ page's own `history.back()` across documents adds a history entry.
   saves nothing.
 - Unverified: page dialogs, typing in pages, sign-ins surviving a reinstall,
   and sending a chat message.
+- Cross-device chat and tabs: source only. 107 server and 78 Flutter tests
+  pass; the backend is not deployed and no Mac and Windows run has been made.
 
 ## Next
 
-1. User trial on Windows: chat, each app, a page confirm dialog and the
+1. After the backend is deployed and a Mac build published, check on the Mac
+   and Windows: the chat opened last on one device opens on the other when it
+   comes to the front, a new unsaved chat is not pulled back, and **Open Mac's
+   tabs here** copies the Mac's tabs once. Also check Browser history and
+   highlights on Windows.
+2. User trial on Windows: chat, each app, a page confirm dialog and the
    unverified items above. Form sign-ins that post fail while the adapter sets
    the package's check. Without it the package does not restart loads, so posts
    should work, and only the second check would guard addresses; then a refused
    page would load and might show until it is replaced. Neither is measured.
-2. Port the Mac-only features the user wants, starting with page capture.
+3. Port the Mac-only features the user wants, starting with page capture.
    Before repeated rebuilds, keep one build folder on the Windows drive so
    builds are incremental.

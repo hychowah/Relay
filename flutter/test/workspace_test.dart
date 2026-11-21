@@ -180,6 +180,12 @@ class Fixture {
                   page,
             ]);
           }
+          if (path == '/api/current-conversation') {
+            if (request.method == 'GET') return reply({'id': current});
+            current = (jsonDecode(request.body) as Json)['id'] as String;
+            return http.Response('', 204);
+          }
+          if (path == '/api/devices') return reply(devices);
           if (path == '/api/bug-reports') {
             if (offline) return http.Response('Offline', 503);
             bugReport = jsonDecode(request.body) as Json;
@@ -213,6 +219,10 @@ class Fixture {
     );
   }
   final savedNewestFirst = <bool>[];
+  // The server's conversation last opened on any device, and each device's
+  // saved tabs as the server lists them.
+  String? current;
+  List<Json> devices = [];
   bool offline = false, failRoomRestore = false;
   List<Json> configApps = [...apps];
   late Workspace w;
@@ -246,6 +256,79 @@ class Fixture {
 }
 
 void main() {
+  test('the conversation last opened on any device opens here', () async {
+    final f = Fixture()..current = 'elsewhere';
+    await f.w.start();
+    expect(f.w.conversationId, 'elsewhere');
+
+    // Another device opened a newer one while this one stayed in front.
+    f.current = 'later';
+    expect(f.w.conversationId, 'elsewhere');
+    await f.w.openCurrentConversation();
+    expect(f.w.conversationId, 'later');
+
+    await f.w.selectConversation('mine');
+    expect(f.current, 'mine');
+    // A new chat is not current anywhere until its first message saves it,
+    // and returning to the front keeps it.
+    await f.w.newConversation();
+    expect(f.current, 'mine');
+    await f.w.openCurrentConversation();
+    expect(f.w.conversationId, isNull);
+    f.w.dispose();
+  });
+
+  testWidgets('another device\'s tabs open here once, from the new tab page', (
+    tester,
+  ) async {
+    final f = Fixture()
+      ..devices = [
+        {
+          'id': 'device',
+          'name': 'This device',
+          'updatedAt': DateTime.now().millisecondsSinceEpoch,
+          'tabs': {
+            'active': 0,
+            'tabs': [
+              {'appId': 'browser', 'url': 'https://here.example/'},
+            ],
+          },
+        },
+        {
+          'id': 'mac',
+          'name': 'Mac',
+          'updatedAt': DateTime.now()
+              .subtract(const Duration(minutes: 5))
+              .millisecondsSinceEpoch,
+          'tabs': {
+            'active': 1,
+            'tabs': [
+              {'appId': 'browser', 'url': 'https://news.example/today'},
+              {'appId': 'room-layout'},
+            ],
+          },
+        },
+      ];
+    await f.w.start();
+    f.w.newTab();
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    expect(find.text("Open This device's tabs here"), findsNothing);
+    expect(find.text('5 min ago · news.example · Room layout'), findsOneWidget);
+
+    await tester.tap(find.text("Open Mac's tabs here"));
+    await tester.pumpAndSettle();
+    // The empty tab it was opened from goes; the Mac's shown tab shows.
+    expect([for (final tab in f.w.tabs) tab.appId], ['browser', 'room-layout']);
+    expect(f.w.active?.appId, 'room-layout');
+    expect(f.pages.first.navigated, ['restore https://news.example/today']);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   test(
     'saved tabs survive an offline start and reconnect retries a failed tab',
     () async {

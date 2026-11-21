@@ -69,6 +69,14 @@ export interface StoredUsage {
   bytes: number;
 }
 
+export interface Device {
+  id: string;
+  name: string;
+  /** The device's tab session as JSON, as its client saved it. */
+  tabs: string;
+  updatedAt: number;
+}
+
 export class Store {
   private db: DatabaseSync;
 
@@ -124,6 +132,12 @@ export class Store {
       );
       CREATE INDEX IF NOT EXISTS highlights_url ON highlights(url);
       CREATE TABLE IF NOT EXISTS stored_data_cleanup (category TEXT PRIMARY KEY, days INTEGER);
+      CREATE TABLE IF NOT EXISTS devices (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, tabs TEXT NOT NULL, updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS current_conversation (
+        only INTEGER PRIMARY KEY CHECK (only = 1), id TEXT NOT NULL
+      );
     `);
     const columns = this.db.prepare("PRAGMA table_info(conversations)").all();
     if (!columns.some((column) => column.name === "bot_id")) {
@@ -412,6 +426,28 @@ export class Store {
     return this.db.prepare(`SELECT COUNT(*) AS items,
       COALESCE(SUM(LENGTH(CAST(url AS BLOB)) + LENGTH(CAST(data AS BLOB))), 0) AS bytes
       FROM highlights WHERE created_at < ?`).get(before) as unknown as StoredUsage;
+  }
+
+  saveDevice(id: string, name: string, tabs: string, at: number) {
+    this.db.prepare(`INSERT INTO devices VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name, tabs = excluded.tabs, updated_at = excluded.updated_at`).run(id, name, tabs, at);
+  }
+
+  /** Every device's last saved tabs, most recently updated first. */
+  devices(): Device[] {
+    return this.db.prepare("SELECT id, name, tabs, updated_at AS updatedAt FROM devices ORDER BY updated_at DESC")
+      .all() as unknown as Device[];
+  }
+
+  setCurrentConversation(id: string) {
+    this.db.prepare(`INSERT INTO current_conversation VALUES (1, ?)
+      ON CONFLICT(only) DO UPDATE SET id = excluded.id`).run(id);
+  }
+
+  /** The conversation last opened on any device, unless it has since gone to Trash. */
+  currentConversation(): string | undefined {
+    const row = this.db.prepare("SELECT id FROM current_conversation").get();
+    return row && this.conversation(row.id as string) ? row.id as string : undefined;
   }
 
   /** The days a stored-data category is kept: null for ever, undefined when never chosen. */

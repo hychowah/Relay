@@ -79,6 +79,12 @@ against the Flutter deployment's records without making a model request for thos
 
 Chat supports history/Trash, provider/model selection, conversation thinking effort,
 bots with app scopes, memory editing, forwarding, Markdown, saved sources and activity.
+Devices share one server. The conversation last opened on any device opens on
+each device when it starts or comes back to the front. Each device keeps its own
+tabs and saves them on the server; the new tab page lists the other devices, and
+**Open ⟨device⟩'s tabs here** opens a copy beside the tabs already open. Nothing
+follows live afterwards. Saved tabs, like the browsing history, are not given to
+the agent.
 Desktop chat width is saved; phones use an overlay with a compact progress/Stop bar.
 **Workspace menu → Appearance** sets Relay's own screens to System (the default),
 Light or Dark, saved per device. System follows the device's appearance as it
@@ -118,7 +124,8 @@ dialog raised inside a popup window is not shown.
 A click that focuses the Browser address bar selects the whole address, as in
 other browsers; a further click places the caret.
 
-On macOS only, the Browser address bar suggests pages visited before once you
+On the desktop (Windows not yet checked), the Browser address bar suggests
+pages visited before once you
 type in it, best first by how often and how recently each was visited; an
 address opened from the address bar counts more than a followed link, and
 pages the agent opens in a Browser tab count as visits too. As in Chrome, the
@@ -127,7 +134,7 @@ with the filled-in part selected; Backspace or Esc removes it, and a paste
 fills nothing in. Arrow keys and Enter, or a click, open a suggestion. With
 none highlighted, Enter opens the suggested page while its address is filled
 in, and otherwise what was typed. The history is kept on the Relay server, one
-entry per address, so every Mac using that server shares it. The agent and app
+entry per address, so every desktop using that server shares it. The agent and app
 integrations never get it, and history requests are left out of bug recordings
 (the addresses you type are still recorded as navigation). Pages not visited
 for 90 days drop out unless **Stored data** says otherwise.
@@ -142,11 +149,12 @@ with auto-clean off. A period is saved with **Save**; when it would delete
 items now, the button first says how many and a second click agrees. The
 server cleans at start, every hour and when a period is saved.
 
-On macOS only, select text on a page in a Browser tab and press **Highlight**
+On the desktop (Windows not yet checked), select text on a page in a Browser
+tab and press **Highlight**
 beside the address bar to mark it; select marked text and press it again to
 remove the mark. Highlights are kept on the Relay server for the page's
 address (without its #fragment), so they return on the next visit and on
-every Mac. A web page's highlight is the quoted text and a little of the text
+every desktop. A web page's highlight is the quoted text and a little of the text
 around it, not a place in the page: it shows wherever that text is on a page
 with that address, and only while it is there. A page that redraws itself, or
 changes its content under one address as single-page apps do, keeps its

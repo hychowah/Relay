@@ -51,7 +51,9 @@ storage and export.
 A project is proposed to group conversations, memory, outputs, and links to
 relevant app resources. One project may use several apps; one app may serve
 several projects. Project data and conversations are shared across devices;
-open tabs and layouts remain device-specific.
+open tabs and layouts remain device-specific. The conversation last opened
+on any device opens on each device when it starts or returns to the front, and
+a device can open a copy of another device's last saved tabs.
 
 ## App integration expectations
 

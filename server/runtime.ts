@@ -4,6 +4,7 @@ import { createWorkspace, type RegisteredApp } from "./app.ts";
 import { addBugReports } from "./bug-reports.ts";
 import { addBrowserHistory, browserHistoryData } from "./browser-history.ts";
 import { addHighlights, highlightsData } from "./highlights.ts";
+import { addDevices } from "./devices.ts";
 import { addStoredData } from "./stored-data.ts";
 import { startProviderGateway } from "./provider-gateway.ts";
 import { liveProviders } from "../shared/provider.ts";
@@ -41,6 +42,7 @@ export async function startWorkspace(dataDir: string, apps: () => RegisteredApp[
   addBugReports(workspace.app, resolve(dataDir, "bug-reports"), store);
   addBrowserHistory(workspace.app, store);
   addHighlights(workspace.app, store);
+  addDevices(workspace.app, store);
   const stored = addStoredData(workspace.app, store, [browserHistoryData(store), highlightsData(store)]);
   // A clean-up that fails must not stop the server or its start.
   const cleanStoredData = () => {

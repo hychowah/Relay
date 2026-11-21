@@ -152,6 +152,7 @@ class Workspace extends ChangeNotifier {
     try {
       error = null;
       await loadConfig();
+      await openCurrentConversation();
       // The restore adds and selects the tabs before its first await, so the
       // conversation loads while their pages do.
       if (pendingSession != null) restoring = restoreSession(pendingSession!);
@@ -594,7 +595,7 @@ class Workspace extends ChangeNotifier {
           draftEffort,
         );
         draftEffort = null;
-        await saveConversation(conversationId!);
+        await _keepConversation(conversationId);
       }
       final context = permitted && includeContext
           ? tab?.page?.messageContext(
@@ -668,8 +669,33 @@ class Workspace extends ChangeNotifier {
     status = null;
     error = null;
     changed();
-    await saveConversation(id);
+    await _keepConversation(id);
     await refresh();
+  }
+
+  /// Saves the conversation on this device, and on the server as the one last
+  /// opened on any device.
+  Future<void> _keepConversation(String? id) async {
+    await saveConversation(id);
+    if (id != null) api.setCurrentConversation(_current = id);
+  }
+
+  // The server's last opened conversation as this device last wrote or read
+  // it; only a change by another device moves this one.
+  String? _current;
+
+  /// Opens the conversation another device opened last. The app calls this
+  /// when it starts and when it returns to the front; meanwhile each device
+  /// keeps the conversation it shows, including a new chat not yet saved.
+  Future<void> openCurrentConversation() async {
+    try {
+      final id = await api.currentConversation();
+      if (id == null || id == _current || _disposed) return;
+      _current = id;
+      if (id != conversationId) await selectConversation(id);
+    } catch (_) {
+      // This device's own choice stays.
+    }
   }
 
   Future<void> trashConversation(String id) async {
@@ -881,8 +907,13 @@ class Workspace extends ChangeNotifier {
 
   /// Adds every saved tab and selects the saved active one before any page
   /// loads, then loads all pages together without selecting them, so the user
-  /// keeps whatever tab they choose meanwhile.
-  Future<bool> restoreSession(Json saved) async {
+  /// keeps whatever tab they choose meanwhile. [placed] collects the added
+  /// tabs by saved index; the start's own restore keeps them for a retry.
+  Future<bool> restoreSession(
+    Json saved, [
+    Map<int, WorkspaceTab>? placed,
+  ]) async {
+    final restored = placed ?? _restoredTabs;
     final items = (saved['tabs'] as List).cast<Json>();
     // Pages load only once every split has its panes: loading saves the
     // session, which reads each split's layout.
@@ -891,18 +922,18 @@ class Workspace extends ChangeNotifier {
     final splits = <(int, SplitTab, Json)>[];
     for (var index = 0; index < items.length; index++) {
       // A reconnect retries only unfinished tabs, preserving later user changes.
-      if (_restoredTabs.containsKey(index)) continue;
+      if (restored.containsKey(index)) continue;
       final item = items[index];
       if (item['split'] != null) {
         // Its panes are found once every tab is added.
         final split = SplitTab();
-        tabs.add(_restoredTabs[index] = split);
+        tabs.add(restored[index] = split);
         splits.add((index, split, item));
         continue;
       }
       final appId = item['appId'] as String?;
       if (appId == null) {
-        tabs.add(_restoredTabs[index] = WorkspaceTab());
+        tabs.add(restored[index] = WorkspaceTab());
         continue;
       }
       final app = apps.where((app) => app.id == appId).firstOrNull;
@@ -915,7 +946,7 @@ class Workspace extends ChangeNotifier {
           ? null
           : tabs.where((tab) => tab.appId == appId).firstOrNull;
       if (existing != null) {
-        _restoredTabs[index] = existing;
+        restored[index] = existing;
         continue;
       }
       // A source tab takes its name from the saved source, so it can open
@@ -926,7 +957,7 @@ class Workspace extends ChangeNotifier {
         name: source?['title'] as String? ?? app.name,
         isBrowser: app.isBrowser,
       );
-      tabs.add(_restoredTabs[index] = tab);
+      tabs.add(restored[index] = tab);
       loads.add((index, item, tab));
     }
     // An unavailable tab leaves no pane, and a split left with fewer than two
@@ -935,7 +966,7 @@ class Workspace extends ChangeNotifier {
     for (final (index, split, item) in splits) {
       final placed = <WorkspaceTab>{};
       final layout = SplitLayout.fromJson(item['split'], (index) {
-        final tab = _restoredTabs[index];
+        final tab = restored[index];
         return tab is! SplitTab && tabs.contains(tab) && placed.add(tab!)
             ? tab
             : null;
@@ -943,27 +974,33 @@ class Workspace extends ChangeNotifier {
       if (layout is SplitBranch) {
         split
           ..layout = layout
-          ..focus = switch (_restoredTabs[item['focus']]) {
+          ..focus = switch (restored[item['focus']]) {
             final tab? when layout.contains(tab) => tab,
             _ => layout.tabs.first,
           };
       } else {
         tabs.remove(split);
-        _restoredTabs.remove(index);
+        restored.remove(index);
       }
     }
-    final selected = _restoredTabs[saved['active']] ?? tabs.lastOrNull;
+    final selected = restored[saved['active']] ?? tabs.lastOrNull;
     if (active == null && selected != null && tabs.contains(selected)) {
       select(selected);
     }
     changed();
-    final restored = await Future.wait([
-      for (final (index, item, tab) in loads) _restoreTab(index, item, tab),
+    final loaded = await Future.wait([
+      for (final (index, item, tab) in loads)
+        _restoreTab(index, item, tab, restored),
     ]);
-    return complete && !restored.contains(false);
+    return complete && !loaded.contains(false);
   }
 
-  Future<bool> _restoreTab(int index, Json item, WorkspaceTab tab) async {
+  Future<bool> _restoreTab(
+    int index,
+    Json item,
+    WorkspaceTab tab,
+    Map<int, WorkspaceTab> restored,
+  ) async {
     try {
       final source = item['source'] as Json?;
       if (source != null) tab.report = await api.readSource(source);
@@ -993,11 +1030,45 @@ class Workspace extends ChangeNotifier {
     } catch (e) {
       // A tab the user closed while it loaded stays closed.
       if (!tabs.contains(tab)) return true;
-      _restoredTabs.remove(index);
+      restored.remove(index);
       error = 'Could not restore a tab: $e';
       closeTab(tab);
       return false;
     }
+  }
+
+  /// The other devices that saved open tabs, most recently updated first; none
+  /// when the server cannot be reached.
+  Future<List<Json>> otherDevices() async {
+    try {
+      return [
+        for (final device in await api.devices())
+          if (device['id'] != deviceId &&
+              ((device['tabs'] as Json)['tabs'] as List).isNotEmpty)
+            device,
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Opens the tabs another device saved last beside this device's tabs, and
+  /// shows the one it showed. An app tab already open here is reused. It is a
+  /// copy: neither device's tabs follow the other's afterwards.
+  Future<void> openDeviceTabs(Json saved) async {
+    recorder.action('open device tabs', {
+      'tabs': (saved['tabs'] as List).length,
+    });
+    // The empty tab they were opened from goes, as when an app is chosen.
+    final blank = active?.appId == null ? active : null;
+    final placed = <int, WorkspaceTab>{};
+    final restoring = restoreSession(saved, placed);
+    final shown = placed[saved['active']];
+    if (shown != null && tabs.contains(shown)) select(shown);
+    if (blank != null && tabs.contains(blank) && !placed.containsValue(blank)) {
+      closeTab(blank);
+    }
+    await restoring;
   }
 
   @override

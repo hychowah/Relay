@@ -230,6 +230,28 @@ class RelayApi {
   void _quietly(String kind, Json body) =>
       _request<void>('/api/browser-history/$kind', body, 'POST', true).ignore();
 
+  /// Saves this device's open tabs, so another device can open them. Like
+  /// the browsing history it is left out of recordings, and a failure only
+  /// leaves the server's copy older.
+  void saveDeviceTabs(String deviceId, String name, Json tabs) =>
+      _request<void>(
+        '/api/devices/${Uri.encodeComponent(deviceId)}',
+        {'name': name, 'tabs': tabs},
+        'PUT',
+        true,
+      ).ignore();
+
+  /// Every device's last saved tabs, most recently updated first.
+  Future<List<Json>> devices() async =>
+      (await _request<List>('/api/devices', null, null, true)).cast<Json>();
+
+  /// The conversation last opened on any device, if it is not in Trash.
+  Future<String?> currentConversation() async =>
+      (await _request<Json>('/api/current-conversation'))['id'] as String?;
+
+  void setCurrentConversation(String id) =>
+      _request<void>('/api/current-conversation', {'id': id}, 'PUT').ignore();
+
   /// The visited pages that best match [text]; none when the request fails.
   Future<List<({String url, String title})>> browserSuggestions(
     String text,
