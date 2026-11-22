@@ -182,7 +182,9 @@ Relay also checks originating device/tab and its own view token. An applied
 acknowledgement advances the next command's token and app generation, preserving
 original question context in history. A failed presentation may also return its
 actual context and token so a corrected retry uses the current view; the action
-stays failed. Stale/manual changes never advance that chain.
+stays failed. Stale/manual changes never advance that chain. Once its token
+check passes, the Flutter client presents with the open page's own generation,
+so a request sent without context can still present in the app already open.
 Commands remain pending until acknowledged; a server result is not proof of a
 visible change. A disconnected browser does not block the agent indefinitely.
 

@@ -62,10 +62,11 @@ class FakePage extends PageSurface with BrowserSurface {
   int transcriptLoads = 0, timeReads = 0;
   double? time;
   String selection = 'selected passage';
+  int generation = 5;
   @override
   Json get context => {
     'viewId': spec.browser ? 'browser' : 'room',
-    'generation': 5,
+    'generation': generation,
     'selection': selection,
     'state': spec.browser
         ? {'sessionId': spec.sessionId, 'tabId': spec.id}
@@ -749,6 +750,8 @@ void main() {
       expect(f.acks.last['status'], 'failed');
       expect(f.acks.last['viewToken'], f.w.active!.token);
       expect(f.acks.last['context']['generation'], 6);
+      // The page reported the view it was left at with the failure.
+      page.generation = 6;
       page.result = null;
       f.commands = [
         {
@@ -786,6 +789,23 @@ void main() {
     await f.w.refresh();
     expect(f.acks.last['status'], 'stale');
     expect(f.w.active!.appId, isNull);
+  });
+  test('a request without context presents in the app already open', () async {
+    final f = Fixture();
+    addTearDown(f.w.dispose);
+    await f.w.start();
+    final browser = await f.w.openApp(f.w.apps[0]);
+    f.w.includeContext = false;
+    await f.w.send('Open example.com');
+    expect(f.sent!['appContext'], isNull);
+    // The server expects generation 0 when no context was sent.
+    f.commands = [
+      {...f.command('open-site', 'browser'), 'expectedViewToken': null},
+    ];
+    await f.w.refresh();
+    expect(f.acks.last['status'], 'applied');
+    expect(f.w.active, same(browser));
+    expect((browser.page as FakePage).lastCommand!['expectedGeneration'], 5);
   });
   test('bot scope excludes disallowed page context and saved sessions restore tabs', () async {
     final f = Fixture();
