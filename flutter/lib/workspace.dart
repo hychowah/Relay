@@ -831,10 +831,11 @@ class Workspace extends ChangeNotifier {
         await _ack(command, 'stale');
         return;
       }
-      final page = target!.page!;
-      final result = newSurface
-          ? await page.presentOnCurrentView(command.json)
-          : await page.present(command.json);
+      // The checks above already turn away a view the user changed, so the
+      // page's own generation is the baseline: it still catches a change the
+      // page made that has not reached the app yet. The server's value is 0
+      // for a request sent without context, which an open page has passed.
+      final result = await target!.page!.presentOnCurrentView(command.json);
       if (_manualRevision != revision || active != target) {
         await _ack(command, 'stale');
         return;
