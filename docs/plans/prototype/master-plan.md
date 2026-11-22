@@ -43,7 +43,7 @@ storage and export.
 | R14 | Show existing app views and generate new tables, charts, documents, or interactive views. Save generated outputs for reopening. |
 | R15 | Run the workspace/harness in Docker on WSL. Use the user's existing Tailscale connection for other devices. |
 | R16 | Separate agent command execution from service credentials and persistent records. Limit shared files, network access, and resources. |
-| R17 | Treat local app start/stop controls as optional. Existing app addresses and independent launchers suffice initially. |
+| R17 | Start, stop and watch local app servers from Relay, with the host's service manager keeping them running. See the [app servers plan](../app-servers/master-plan.md). |
 | R18 | Preserve an extension path for running backtests and other app actions later. Initial integration emphasizes reading, navigation, and visualization. |
 | R19 | Provide normal chat and reusable bots with individual objectives, scope, allowed apps and memory. Share personal preferences; keep bot knowledge separate. Forward a chosen conversation with a handoff and recoverable source messages. |
 | R20 | Show meaningful app actions while the agent works: search/results, selected evidence and the final focused view with field highlights. Progress reflects actual operations. Keep chat expandable and Stop available; preserve direct manual app use. |
@@ -264,7 +264,7 @@ the interface during execution, then reconnect to the real result/status.
 
 Covers R13–R14, completes R12 and R16.
 
-R17 remains optional and R18 remains a later extension. Android and Windows packages, helper
+R18 remains a later extension. Android and Windows packages, helper
 agents, new backtest execution, live app-data editing, scheduling, public sharing,
 and a third-party marketplace are outside the first prototype commitment.
 
@@ -329,6 +329,8 @@ Defer read/write effects to the first write, access scopes and versioned migrati
 The [Flutter handoff](../flutter/master-plan.md#next) covers installing and reviewing Stable 0.0.16 on the Mac, with its checks for tab restore, the transcript pane and the app list refresh, and the split view. It also lists the Mac checks for the capture animation, the Browser's PDF viewer, highlights and Stored data, which are not in Stable yet; the last three need the backend deployed first. The Browser now connects on the Relay port, not 3251: deploy the backend and publish Stable together, since Stable 0.0.16 loses page reads and transcripts until it updates, then check both on the Mac. On the next preview teardown, use the [worktree removal command](../../../flutter/README.md#publish-a-worktree-test-build).
 
 The [coding sessions plan](../coding-sessions/master-plan.md) covers handing requests to Claude Code or Codex sessions through a coding app in its own project.
+
+The [app servers plan](../app-servers/master-plan.md) covers starting, stopping and watching local app servers from Relay.
 
 1. Verify a sourced two-app question on the user's saved records from the Mac.
    Both stock adapters have run as local services, registered with the live
