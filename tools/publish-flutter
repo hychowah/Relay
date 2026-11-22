@@ -90,7 +90,7 @@ def main():
                 snapshot.seek(0)
                 subprocess.run([ssh, f"tar -xzf - -C {remote}"], stdin=snapshot, check=True)
             # The app has no built-in server address: the environment or local git config supplies it.
-            addresses = {"RELAY_URL": "relay.appUrl", "BROWSER_URL": "relay.browserUrl", "RELAY_UPDATE_URL": None}
+            addresses = {"RELAY_URL": "relay.appUrl", "RELAY_UPDATE_URL": None}
             for key, setting in addresses.items():
                 value = os.environ.get(key)
                 if not value and setting:

@@ -38,15 +38,12 @@ def main():
     try:
         flutter = git("config", "--get", "relay.windowsFlutter")
         app = wsl_path(git("config", "--get", "relay.windowsApp"))
-        defines = [
-            f"--dart-define=RELAY_URL={git('config', '--get', 'relay.appUrl')}",
-            f"--dart-define=BROWSER_URL={git('config', '--get', 'relay.browserUrl')}",
-        ]
+        defines = [f"--dart-define=RELAY_URL={git('config', '--get', 'relay.appUrl')}"]
     except subprocess.CalledProcessError:
-        sys.exit("Set relay.windowsFlutter, relay.windowsApp, relay.appUrl and relay.browserUrl in local git config (see flutter/README.md).")
+        sys.exit("Set relay.windowsFlutter, relay.windowsApp and relay.appUrl in local git config (see flutter/README.md).")
     # The build command runs through cmd.exe, which would act on these.
     if any(re.search(r'[&|<>^"%]', define) for define in defines):
-        sys.exit("relay.appUrl and relay.browserUrl must be plain addresses.")
+        sys.exit("relay.appUrl must be a plain address.")
     exe = app / "relay_flutter.exe"
     refuse_if_running()
     if app.exists() and any(app.iterdir()) and not exe.exists():

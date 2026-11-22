@@ -29,8 +29,8 @@ its own temporary Room Layout fixture:
 node tests/flutter-host.smoke.mjs
 ```
 
-The backend listens on 3250 (Relay) and 3251 (Browser broker), with its own
-`runtime/flutter/` data. Default mode is scripted. To use the saved DeepSeek connection,
+The backend listens on 3250, with its own `runtime/flutter/` data.
+Default mode is scripted. To use the saved DeepSeek connection,
 set `RELAY_PROVIDER_DIR` to import the existing private provider settings once;
 subsequent provider changes belong to this deployment.
 Keys remain in WSL and existing provider VPN checks apply. No keys go in Dart defines.
@@ -53,19 +53,17 @@ A Mac build needs full Xcode and Flutter's macOS plugin toolchain. Android needs
 its SDK/device. The official WebView plugin does not support Linux, so WSL tests
 use fake page surfaces and separately exercise the real HTML app bridge.
 
-For remote devices, forward both WSL ports through the private tailnet and
-set `FLUTTER_RELAY_ORIGIN` and `FLUTTER_BROWSER_ORIGIN` when
-starting the backend to their device-reachable origins. Give the app the same
-origins once in WSL:
+For remote devices, forward the WSL port through the private tailnet and set
+`FLUTTER_RELAY_ORIGIN` to its device-reachable origin when starting the
+backend. Give the app the same origin once in WSL:
 
 ```sh
 git config --local relay.appUrl http://<device-reachable-host>:<relay-port>
-git config --local relay.browserUrl http://<device-reachable-host>:<browser-port>
 ```
 
 The app has no built-in server address. `tools/publish-flutter` builds every
-published app with these two values as `RELAY_URL` and `BROWSER_URL`. A build
-without them talks to `127.0.0.1` and cannot reach its backend or its update feed.
+published app with this value as `RELAY_URL`. A build without it talks to
+`127.0.0.1` and cannot reach its backend or its update feed.
 
 `Relay Flutter.app` uses the private `/flutter-updates/` release channel.
 
@@ -326,7 +324,7 @@ git config --local relay.macSSH /absolute/path/to/ssh-mac
 The SSH wrapper runs a supplied command on the build Mac and passes stdin/stdout
 through. The build Mac needs the Flutter SDK at the path `tools/publish-flutter` uses. Client-only
 previews use the usual backend. For a server change, run its test backend with
-separate data and set `RELAY_URL` and, if needed, `BROWSER_URL` when publishing.
+separate data and set `RELAY_URL` when publishing.
 The update feed stays at its usual private origin. Set `RELAY_UPDATE_URL` only
 to change the feed itself. Worktrees based on an older client must bring in the
 picker before publishing so their users can return to Stable.
@@ -352,7 +350,7 @@ git config --local relay.windowsApp 'C:\path\to\Relay Flutter'
 ```
 
 Then run `tools/build-windows`. It builds in a temporary folder on the Windows
-drive with the same `relay.appUrl` and `relay.browserUrl` as Mac builds,
+drive with the same `relay.appUrl` as Mac builds,
 replaces the program in `relay.windowsApp` and removes the temporary folder.
 Settings and website data (sign-ins, cookies, cache, shared by app pages and
 Browser tabs) stay in `%APPDATA%\Relay\Relay Flutter`. Close the app before

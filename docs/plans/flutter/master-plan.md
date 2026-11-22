@@ -17,7 +17,7 @@ Flutter owns tabs and chat; official system WebViews render apps and public page
 `PageSurface` separates native view lifetime from workspace/context policy.
 The existing v2 bridge runs in an app-owned iframe; saved reports use the existing
 v1 bridge. Preserve device/window/view-token/generation checks and manual
-interruption. Browser connects to its existing broker via an outbound WebSocket.
+interruption. Browser connects to Relay via an outbound WebSocket.
 The client registers its app-control channel on hosted app views. Tabs retain views until closed.
 
 The implemented workflows include the following.
@@ -79,8 +79,8 @@ header. Replies group activity, Markdown and saved sources by turn.
 
 Flutter 3.50.0 / Dart 3.14.0, pinned dependencies. Bundle identity:
 `app.relay.flutterExperiment`. Building a package does not replace the installed
-app. The backend entry is `tools/flutter-experiment.ts`; it listens on 3250
-(Relay) and 3251 (Browser). Research is registered at its own server with
+app. The backend entry is `tools/flutter-experiment.ts`; it listens on 3250.
+Research is registered at its own server with
 `trustedNative: true` for PDF embedding, and its launcher allows the Flutter
 origin. SDK locations, the Mac build setup, services and addresses are in the
 local machine notes named in AGENTS.md. The Flutter README holds build, test

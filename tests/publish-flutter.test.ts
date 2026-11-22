@@ -78,7 +78,6 @@ test('one tool publishes test builds and Stable with their stored files, and Sta
   git('config', 'relay.flutterReleases', releases);
   git('config', 'relay.macSSH', join(mac, 'ssh'));
   git('config', 'relay.appUrl', 'http://relay.test');
-  git('config', 'relay.browserUrl', 'http://browser.test');
 
   const publish = (argument: string) => spawnSync(resolve('tools/publish-flutter'), [argument], options);
   const feed = () => readdirSync(releases).filter(file => !file.startsWith('.')).sort();

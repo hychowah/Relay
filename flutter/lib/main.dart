@@ -88,12 +88,7 @@ Future<void> main() async {
     },
   );
   final connection = BrowserConnection(
-    Uri.parse(
-      const String.fromEnvironment(
-        'BROWSER_URL',
-        defaultValue: 'http://127.0.0.1:3251',
-      ),
-    ),
+    api.origin,
     workspace.browserSessionId,
     workspace.browserTab,
     (_) => workspace.changed(),
