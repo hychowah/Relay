@@ -175,11 +175,12 @@ Covers C07 in practice. Read those rules before this phase starts.
    chat code from the checkout the running hapi was built from, and Relay's
    apps file no longer marks it trusted. Read-only checks against the real
    hapi passed: a session's snapshot (104 blocks, no token), the workspaces,
-   the session list. Fixes on 2026-11-23: it sends into terminal-attached
-   Claude Code sessions through hapi's live input, and a workspace opens in
-   about 0.1 s because hapi's 5.5 s scan for conversations started outside it
-   is remembered and refreshed in the background. The backend that passes the theme on is deployed since
-   2026-11-23 and Mac test build `pre-0-0-18` sends it; whether the screen
+   the session list. Since 2026-11-23 conversations started outside hapi
+   are read from their Claude Code and Codex transcripts, because hapi's copy
+   froze silently whenever its terminal attachment ended; hapi is used only
+   when the user sends, stops, answers or changes a setting. A workspace opens
+   in about 0.2 s. Sending to an outside conversation is unverified. The backend that passes the theme on is deployed since
+   2026-11-23 and Stable 0.0.18 sends it; whether the screen
    shows Relay's colours is unverified.
 2. One Mac check of phase 2's three "Done when" items together: a real
    session in the scratch target is started, approved and answered; the
