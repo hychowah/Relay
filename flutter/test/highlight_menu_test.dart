@@ -1,6 +1,37 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:relay_flutter/highlight_menu.dart';
+import 'package:relay_flutter/page_surface.dart';
+import 'package:relay_flutter/relay_api.dart';
+import 'package:relay_flutter/window_capture.dart';
+
+/// A page that shows its menu over itself, as a Browser tab does.
+class _Page extends PageSurface {
+  _Page(this.menu);
+  final HighlightMenu menu;
+  @override
+  Widget get widget => Stack(
+    fit: StackFit.expand,
+    children: [
+      const ColoredBox(color: Colors.white),
+      menu,
+    ],
+  );
+  @override
+  String get title => 'Page';
+  @override
+  String get url => 'https://example.com/';
+  @override
+  Json? get context => null;
+  @override
+  Future<void> get ready async {}
+  @override
+  Future<Json> present(Json command) async => {};
+  @override
+  void cancel(String commandId) {}
+  @override
+  void dispose() {}
+}
 
 void main() {
   testWidgets('the highlight menu sits by its text, inside the page', (
@@ -15,21 +46,21 @@ void main() {
             child: SizedBox(
               width: 600,
               height: 400,
-              child: Stack(
-                children: [
+              child: PageSlot(
+                page: _Page(
                   HighlightMenu(
                     at: at,
                     color: color,
                     onColor: chosen.add,
                     onRemove: color == null ? null : () => removed++,
                   ),
-                ],
+                ),
               ),
             ),
           ),
         ),
       );
-      final page = tester.getTopLeft(find.byType(Stack));
+      final page = tester.getTopLeft(find.byType(PageSlot));
       final box = find.descendant(
         of: find.byType(HighlightMenu),
         matching: find.byType(Material),

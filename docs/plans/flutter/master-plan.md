@@ -254,8 +254,7 @@ real WKWebViews.
    (the question must carry the selection); highlight on a few real sites,
    one a single-page app; and open **Stored data**. Unverified: a
    password-protected PDF. Why 0.0.16 lost the selection is unknown; embedded
-   PDFs still use that path. The highlight menu passed it on the second Mac;
-   after a backend deploy, check by hand that clicks over a PDF reach it;
-   drag-selecting.
+   PDFs still use that path. After a backend deploy, also check the
+   highlight menu, with clicks over a PDF, and drag-selecting.
 
 Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).
