@@ -53,7 +53,7 @@ with `html:false`. The terminal is drawn by `@xterm/xterm` and its fit add-on.
 | `hapi.ts` | All of hapi's API: sign-in (JWT cached, signs in again on 401), routes, events, terminal socket | `sessions()`, `session(id)` (the latest 200 raw messages, agent state, metadata), `send`, `resume`, `approve`, `deny`, `abort`, `setSettings`, `events(signal)` (yields changed session ids), `openTerminal` (step 3), and the existing `start` and `openOutside`. Error text is safe to show and never contains the token. It no longer groups sessions. |
 | `conversation.ts` | hapi's block shapes and tool names | `toBlocks(messages, agentState) → {blocks, contextUsed}`. The block kinds are `user`, `agent`, `step` and `note`. A `step` has a title, state and duration, and optionally a `diff`, an `output`, an `approval:{requestId,state}` and child `steps`. A `note` is an event, an error or thinking. Common Claude and Codex tools get titles; any other tool shows its name and a short input summary. |
 | `diff.ts` | How diffs are made | `Diff = {file, added, removed, hunks:[{lines:[{kind,text,oldLine?,newLine?}]}]}`, built with jsdiff: `fromStrings(old,new)` (50 ms limit; over it, or over 2,000 lines, only counts) and `fromPatch(text)` for unified diffs (Codex now, `git diff` in step 2). The page has one diff renderer. |
-| `workspace.ts` | git | `worktrees(target)` returns branch, folder, last change, and from step 2 the added, removed and file counts. Also `changes(target, worktree)` and `fileDiff(target, worktree, file)`. A session belongs to the worktree whose path equals its hapi folder. |
+| `workspace.ts` | git | `worktrees(target)` returns branch and folder (the fresh check behind "+" and Changes); `lastChange(folder)` and `changes(folder)` (files with status and +/−, untracked files counted as files) feed the bar; `fileDiff(folder, change)` takes a checked change. A session belongs to the worktree whose path equals its hapi folder. |
 | `server.ts` | The HTTP boundary; **every check happens here, once** | Relay protocol routes (unchanged) plus the screen API. Session grouping moves here from `hapi.ts`. |
 | `build.ts` | How hapi's chat code is bundled | `HAPI_SOURCE_DIR` → `build/hapi-chat.js` |
 | `view/` | Drawing | `main.js` (bridge, view routing, stream, snapshot fetch), `bar.js`, `session.js`, `changes.js`, `terminal.js`, `ui.js` (htm, Markdown, diff), `view.css` (uses `var(--relay-*, fallback)`) |
@@ -158,9 +158,10 @@ existing `/api/*` middleware.
      happens, pass `mode` in the view URL) and that "Open in hapi ↗" opens the
      external browser.
 2. **Worktree tree and Changes tab.**
-   - `workspace.ts` gains counts: `git diff HEAD --numstat` plus untracked
-     files, so "Clean" means nothing uncommitted. It also gains `changes()`
-     and `fileDiff()`, which reuses `diff.ts`'s `fromPatch()`.
+   - `workspace.ts` gains `changes()` (`git diff HEAD --numstat` plus
+     untracked files, so "Clean" means nothing uncommitted) and `fileDiff()`,
+     which reuses `diff.ts`'s `fromPatch()`. The bar route adds the counts,
+     so session events never run git per worktree.
    - The page gets the tree (branch, "Updated …", +/− or Clean, running dot,
      "N active"), the Changes tab with its count, and the sessions filter.
    - Two tests on a temporary git repository: the counts and the change list,
