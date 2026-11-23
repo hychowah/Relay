@@ -107,9 +107,9 @@ now run from their own user units, enabled at boot, using their existing
 launch commands unchanged. Analysis Web's unit signals only its supervisor, as
 Ctrl+C does, so a stop leaves running analysis jobs alone; a stop freed both
 ports and a start served both sites and the Analysis adapter. Its Windows
-launcher must no longer be used. Still to do with the deploy: list all six
-units in the servers file, and check that Backtest Web's tailnet forward
-still works when the site is started without its own launcher.
+launcher must no longer be used. The servers file lists all six units since
+the deploy. Still to check: Backtest Web's tailnet forward when the site is
+started without its own launcher (Next 1).
 
 Covers S01–S08 and S10.
 
@@ -165,8 +165,17 @@ Checked on the reworked code:
   removed and no unit named zz* remains.
 
 Enable and disable against a real unit were checked only in the first build,
-before this rework, and here with the fake runner. Not yet verified: the Mac
-run and the backend under the live `relay-app` service.
+before this rework, and here with the fake runner.
+
+Live on 2026-11-23: the backend was deployed at `f8299ce` with
+`RELAY_SERVERS_FILE` naming a private file that lists the six app units.
+Under the live `relay-app` service the list showed all six with their real
+states (Backtest Web stopped, its switch not available), a log read returned
+lines, a request naming a foreign Host got 403 and a non-JSON POST got 415,
+and the list answered through the tailnet address. No unit was started,
+stopped, enabled or disabled through the live backend. Mac test build
+`app-servers` is published from the same commit. Not yet verified: the Mac
+run.
 
 Limit: each systemctl or journalctl call has its own 15-second limit, so a
 start can outlast the client's 20 seconds; the client then shows a timeout
@@ -174,7 +183,9 @@ while systemd carries on, and the next list read shows the real state.
 
 ## Next
 
-1. Merge and deploy the backend with `RELAY_SERVERS_FILE` set (listing the six
-   app units), then one Mac check (Phase 1 Done when).
+1. Install test build `app-servers` on the Mac and make the one Mac check:
+   every Mac item of Phase 1 Done when, and also start Backtest Web from the
+   screen and check that its tailnet address answers. The screen reaches
+   Stable with the next release the user asks for.
 2. Phase 2 (S09): confirm with the user that it is still wanted before
    building it.

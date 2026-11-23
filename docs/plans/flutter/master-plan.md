@@ -169,7 +169,7 @@ PDF viewer, highlights, Stored data, the chat and tabs shared across devices,
 and the Browser on Relay's own port, so older builds cannot read pages or
 transcripts. Analysis, 81 Flutter tests and 107 backend tests passed on its
 commit; the feed serves it with its commit and the download matches its hash.
-The backend was last deployed on 2026-11-23 at `acad2d8`; the Browser socket
+The backend was last deployed on 2026-11-23 at `f8299ce`; the Browser socket
 opened through the tailnet address from Windows. The user tried its test
 build on the Mac before the release; which checks below that covered is not
 recorded, and the native Mac workflow was not rerun.
