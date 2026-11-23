@@ -163,15 +163,15 @@ unready. Reading the code shows that each WKWebView starts loading when its page
 is created, before it is shown; no Mac run has yet confirmed that hidden tabs
 load on the real WebViews.
 
-Stable 0.0.17 (build 17) was published from `main` on 2026-11-23. It adds the
-PDF viewer, highlights, Stored data, the chat and tabs shared across devices,
-and the Browser on Relay's own port, so older builds cannot read pages or
-transcripts. Analysis, 81 Flutter tests and 107 backend tests passed on its
-commit; the feed serves it with its commit and the download matches its hash.
-The backend was last deployed on 2026-11-23 at `ea0fa4d`; the Browser socket
-opened through the tailnet address from Windows. The user tried its test
-build on the Mac before the release; which checks below that covered is not
-recorded, and the native Mac workflow was not rerun.
+Stable 0.0.17 and 0.0.18 were published from `main` on 2026-11-23. 0.0.17
+adds the PDF viewer, highlights, Stored data, the chat and tabs shared across
+devices, and the Browser on Relay's own port. 0.0.18 adds App servers, the
+highlight menu, the whole-window bug screenshot, the theme sent to apps and a
+poll error that clears itself. Analysis, 93 Flutter tests and 122 backend tests
+passed on its commit. The backend was last deployed on 2026-11-23 at
+`ea0fa4d`; the Browser socket opened through the tailnet address from
+Windows. The user asked for both releases; which checks below they made is
+not recorded, and the native Mac workflow was not rerun.
 
 Browser popups (desktop only): webview_flutter_wkwebview 3.27.2 loaded a
 page's new window into its opener, which broke sign-in popups. A forwarding UI
@@ -182,22 +182,22 @@ real WKWebViews.
 
 ## Next
 
-1. Install Stable 0.0.17 on the Mac. Check that tabs, the chat panel and the
+1. Install Stable 0.0.18 on the Mac. Check that tabs, the chat panel and the
    window come back after a restart, and that its first start removes the
    update folders beside the app and the older downloads.
 2. Republishing a test build's name leaves its earlier ZIP in the release
    folder on WSL. Remove it at publish time if that folder grows.
-3. Review Stable 0.0.17 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`. The suite's longest waits, on tab switches, are candidates for a smoothness fix. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
+3. Review Stable 0.0.18 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`. The suite's longest waits, on tab switches, are candidates for a smoothness fix. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
 4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable since 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified. The capture animation is in Stable 0.0.17: on the Mac, check that the flash and the flight to the composer run smoothly over a real page, and that the thumbnail takes over without a jump.
 5. On the Mac, try the record button and **Bug reports** against the live
    backend: save, view, mark solved and delete. The screenshot now covers the
-   whole window (in test build `pre-0-0-18`): check that it shows the chat,
-   the tabs, a split and a Browser comment over a page, note its size, and
-   that pages still click and scroll. Fake-page widget tests cover it.
+   whole window (in Stable 0.0.18; a 2026-11-23 report pictured tabs, banner
+   and an app page): check the chat, a split and a Browser comment over a page, note
+   its size, and that pages still click and scroll.
 6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 7. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
 8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.
-9. Restart Stable 0.0.17 on the Mac with a Browser tab and two or more app tabs open. Check that the last active tab shows first, the hidden tabs finish loading (none closed by the 20 s limit), and the chat history appears without waiting for them.
+9. Restart Stable 0.0.18 on the Mac with a Browser tab and two or more app tabs open. Check that the last active tab shows first, the hidden tabs finish loading (none closed by the 20 s limit), and the chat history appears without waiting for them.
 10. Check `browser.transcript` in WKWebView on the Mac with a short and an hour-long YouTube video, note how long each page takes against the 7-second limit, then ask about one through the real agent. Its page script passed against live YouTube only in headless Chromium with a Safari user agent. In the transcript pane, check on the Mac: opening it loads the hour-long transcript and scrolls smoothly; a drag selection survives clicking into the composer and reaches the question; moving to another video reloads it; a newer selection on the page replaces the transcript's; it stays hidden for other pages and narrow windows, and still loads in chat-only mode. For following, check that the highlight moves while the video plays, moves within a second of a seek, stays still while paused and during an ad, and still follows after moving to another video in the same tab; that scrolling the pane by hand or selecting there stops the scrolling while the highlight keeps moving; and that **Follow video** resumes it without losing the kept selection. An earlier draft of the play-time script, with an extra in-page navigation check, passed live in headless Chromium (play, seek, pause, in-page navigation; no ad appeared); the committed shorter script was not run live, and only a fake page tests the pane.
 11. Try the split tab on the Mac with real WKWebViews: the drop highlight at
    each edge, three or more panes both ways, one click selecting a dimmed
@@ -254,7 +254,7 @@ real WKWebViews.
    selection), and open **Stored data**. Unverified: a password-protected
    PDF. Why 0.0.16 lost the selection is unknown; embedded PDFs still use
    that path. Rerun `highlight_clicks_test.dart` (not run since its last
-   edits); in the next build, make the README's by-hand highlight checks and
+   edits); in Stable 0.0.18, make the README's by-hand highlight checks and
    check drag smoothness, then mark the 2026-11-23 report solved.
 
 Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).
