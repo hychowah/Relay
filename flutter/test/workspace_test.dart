@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Directory, File;
 import 'dart:math' show max;
 import 'dart:ui' as ui;
 
@@ -9,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:relay_flutter/app_updates.dart';
 import 'package:relay_flutter/main.dart';
 import 'package:relay_flutter/page_surface.dart';
 import 'package:relay_flutter/relay_api.dart';
@@ -1931,6 +1933,43 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+  testWidgets('a dot marks the workspace menu while an update is ready', (
+    tester,
+  ) async {
+    final f = Fixture();
+    final updates = AppUpdates(
+      origin: Uri.parse('http://localhost'),
+      version: '0.0.1',
+      directory: Directory.systemTemp,
+    );
+    await tester.pumpWidget(
+      RelayApp(workspace: f.w, saveDraft: (_) async {}, updates: updates),
+    );
+    await tester.pumpAndSettle();
+    final dots = find.byWidgetPredicate(
+      (widget) => widget is Badge && widget.isLabelVisible,
+    );
+    expect(dots, findsNothing);
+
+    updates.download = File('ready');
+    updates.changed();
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: find.byTooltip('Workspace menu'), matching: dots),
+      findsOneWidget,
+    );
+    await tester.tap(find.byTooltip('Workspace menu'));
+    await tester.pumpAndSettle();
+    expect(find.text('Update ready'), findsOneWidget);
+    expect(dots, findsNWidgets(2));
+
+    updates.download = null;
+    updates.changed();
+    await tester.pumpAndSettle();
+    expect(find.text('Updates'), findsOneWidget);
+    expect(dots, findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets(
     'chat can reverse mid-slide and reduced motion closes immediately',
     (tester) async {

@@ -1492,7 +1492,10 @@ class _RelayShellState extends State<RelayShell> {
             tooltip: 'Workspace menu',
             onPressed: () =>
                 controller.isOpen ? controller.close() : controller.open(),
-            icon: const Icon(Icons.tune_rounded),
+            icon: Badge(
+              isLabelVisible: widget.updates?.ready ?? false,
+              child: const Icon(Icons.tune_rounded),
+            ),
           ),
           menuChildren: [
             const MenuLabel('WORKSPACE'),
@@ -1537,11 +1540,14 @@ class _RelayShellState extends State<RelayShell> {
               child: const Text('Newest tab first'),
             ),
             _menuItem('stored', 'Stored data', Icons.storage_rounded),
-            if (widget.updates != null)
-              _menuItem(
-                'updates',
-                widget.updates!.ready ? 'Update ready' : 'Updates',
-                Icons.system_update_alt_rounded,
+            if (widget.updates case final updates?)
+              MenuItemButton(
+                leadingIcon: Badge(
+                  isLabelVisible: updates.ready,
+                  child: const Icon(Icons.system_update_alt_rounded, size: 17),
+                ),
+                onPressed: () => _menu('updates'),
+                child: Text(updates.ready ? 'Update ready' : 'Updates'),
               ),
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 5),
