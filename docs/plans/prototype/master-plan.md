@@ -47,6 +47,7 @@ storage and export.
 | R18 | Preserve an extension path for running backtests and other app actions later. Initial integration emphasizes reading, navigation, and visualization. |
 | R19 | Provide normal chat and reusable bots with individual objectives, scope, allowed apps and memory. Share personal preferences; keep bot knowledge separate. Forward a chosen conversation with a handoff and recoverable source messages. |
 | R20 | Show meaningful app actions while the agent works: search/results, selected evidence and the final focused view with field highlights. Progress reflects actual operations. Keep chat expandable and Stop available; preserve direct manual app use. |
+| R21 | Each Mac Browser tab can route through WSL's NordVPN. See the [Browser VPN plan](../browser-vpn/master-plan.md). |
 
 A project is proposed to group conversations, memory, outputs, and links to
 relevant app resources. One project may use several apps; one app may serve
@@ -330,7 +331,9 @@ The [Flutter handoff](../flutter/master-plan.md#next) covers installing and revi
 
 The [coding sessions plan](../coding-sessions/master-plan.md) covers handing requests to Claude Code or Codex sessions through a coding app in its own project.
 
-The [app servers plan](../app-servers/master-plan.md) covers starting, stopping and watching local app servers from Relay. Phase 1 is deployed and in Mac test build `app-servers`; its Mac check is next.
+Phase 1 of the [app servers plan](../app-servers/master-plan.md) (R17) is deployed and in Mac test build `app-servers`; its Mac check is next.
+
+Phase 1 of the [Browser VPN plan](../browser-vpn/master-plan.md) is next.
 
 1. Verify a sourced two-app question on the user's saved records from the Mac.
    Both stock adapters have run as local services, registered with the live
