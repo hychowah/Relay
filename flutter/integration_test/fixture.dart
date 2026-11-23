@@ -187,7 +187,10 @@ Future<void> _serve((SendPort, Fixture) message) async {
         <!doctype html><meta charset="utf-8"><title>Fixture</title>
         <style>main { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px } article { padding: 12px; border: 1px solid }</style>
         <main>${List.generate(100, (i) => '<article>Fixture item $i with a wrapping description.</article>').join()}</main>
-        <script>onload = () => RelayHost.postMessage(JSON.stringify({
+        <script>
+        // Relay sends its theme to a ready app view; public/flutter-host.html defines this.
+        window.relayPresent = () => {};
+        onload = () => RelayHost.postMessage(JSON.stringify({
           version: 2, type: 'relay.ready', token: new URL(location.href).searchParams.get('view')
         }));</script>''');
     } else {
