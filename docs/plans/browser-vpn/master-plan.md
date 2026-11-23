@@ -222,8 +222,11 @@ Test build `browser-vpn` was republished from `9227f06`, with the fixes.
 
 ## Next
 
+Both phases are in `main` (`80cdd68`); the proxy is live.
+
 1. The user tries test build `browser-vpn` for the hand checks in Phase 2
-   (switching both ways, a popup, a PDF, a plain `http://` page, sign-in
-   kept after a restart).
-2. Merge Phase 2; the switch reaches Stable with the next release the user
-   asks for. Then close out this plan.
+   (switching both ways, a popup, a PDF, sign-in kept after a restart), and
+   the VPN-down message while NordVPN in WSL is off.
+2. The switch reaches Stable with the next release the user asks for. Then
+   close out this plan and retire the Phase 2 worktree, which retires the
+   test build.
