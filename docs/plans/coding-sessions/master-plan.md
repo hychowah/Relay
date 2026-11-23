@@ -133,7 +133,7 @@ model and probes.
 3. **Terminal tab.** Done when typing in a session's terminal works on the
    Mac.
 
-Assumed until the user says otherwise:
+Agreed with the user on 2026-11-23:
 - "Open workspace…" lists the configured targets plus "Recent sessions in all
   projects";
 - counts and changes are uncommitted work compared with HEAD;
@@ -145,8 +145,7 @@ Assumed until the user says otherwise:
 Reading sessions for the Relay agent, and follow-up drafts the user sends from
 the screen. Covers C05–C06.
 
-- Operations to list sessions and read one. Proposed, to confirm before
-  building: title, project name, agent, status (running, waiting for approval,
+- Operations to list sessions and read one, agreed on 2026-11-23: title, project name, agent, status (running, waiting for approval,
   idle, finished), waiting approvals, recent messages and the result. Never the
   tool's token or address, or folder paths.
 - A follow-up draft shows as a card on the session screen; only the user's
@@ -164,13 +163,11 @@ Covers C07 in practice. Read those rules before this phase starts.
 
 ## Next
 
-1. Confirm phase 2's assumptions and what the agent may read about a session
-   (phase 3).
-2. Build phase 2 step 1 in the coding app's project, starting with the
+1. Build phase 2 step 1 in the coding app's project, starting with the
    design's first probe: does hapi's chat reducer bundle and run in Node? The
    theme goes into Relay core in the same step.
-3. After step 1 passes on the Mac, the user drops `trustedNative` from the
+2. After step 1 passes on the Mac, the user drops `trustedNative` from the
    coding app's entry in Relay's apps file.
-4. Suggested on 2026-11-19, not yet agreed: show in Relay's tab bar and in the
+3. Suggested on 2026-11-19, not yet agreed: show in Relay's tab bar and in the
    conversation when a session waits for approval or finishes (display only),
    and send a Browser selection or capture to a session as a draft.
