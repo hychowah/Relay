@@ -317,7 +317,7 @@ while required Mac/browser, live-provider, or integration checks remain missing.
 The configured DeepSeek token is authorized for testing. Live requests require
 the host's NordVPN connection unless that check is off. A DeepSeek reply
 and Claude and DeepSeek model discovery passed.
-Claude replies and live OpenAI use remain unverified. See the [provider record](phases/phase-01/working/provider-connections.md).
+Claude replies remain unverified; the user reports OpenAI works. See the [provider record](phases/phase-01/working/provider-connections.md).
 The [Phase 02 evidence](phases/phase-02/README.md) covers Research and Room on
 protocol v2, with v1 saved evidence retained. The [presentation evaluation](phases/phase-02/working/presentation-explanations.md)
 records explanation and restoration checks. Docker recreation and second-device

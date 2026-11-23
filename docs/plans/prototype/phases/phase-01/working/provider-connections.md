@@ -120,15 +120,21 @@ Limits:
   fails at OpenAI.
 - Flutter builds up to Stable 0.0.18 do not list OpenAI and cannot choose it;
   a choice made on the web page applies only to the web page service. After a
-  newer client chooses OpenAI for the Flutter backend, an older client's
-  provider settings may show an empty choice.
+  newer client chooses OpenAI for the Flutter backend, as is now the case on
+  the live one, an older client's provider settings may show an empty choice
+  (not seen yet).
 - Like the Claude test, the OpenAI round trip depends on polling time and fails
   if `RELAY_VPN_CHECK=off` is set while tests run.
 
-Unverified without a real key: any real OpenAI request or model list, that
-`gpt-6.2-sol` is available to the key, the order of `/v1/models`, stateless
-storage with encrypted reasoning on the chosen model, real stream and error
-shapes, and whether OpenAI's addresses route through `nordlynx`.
+On 2026-11-23 the user reported that they had tested the GPT API and that it
+works; where and how is not recorded. Seen right after: the Mac was running
+test build `pre-0-0-19`, the only build that lists OpenAI, and the Flutter
+backend's config route reported the OpenAI mode with model `gpt-6.1-terra`.
+Which checks the user made (an image, a tool call, a long reply) is not
+recorded. Still unverified: that `gpt-6.2-sol` is available to
+the key, the order of `/v1/models`, stateless storage with encrypted reasoning
+across a long conversation, error shapes, and whether OpenAI's addresses route
+through `nordlynx`.
 
 ## Next
 
@@ -137,12 +143,10 @@ remaining provider-readiness check. OpenAI at `2d7d489` was deployed on
 2026-11-23 to both services: `relay` serves the web page from the main
 checkout, and `relay-app` (relay-live) is the Flutter backend. They keep
 separate provider settings, so a key saved through one does not reach the
-other. After the restarts both services' config routes still reported the
-Anthropic mode, and the web page's served script lists OpenAI; no key was
-entered and nothing was sent to OpenAI. The Flutter client needs a new build
-to list OpenAI (see Limits). Next, save an OpenAI key in the web page's Model
-connection, load models and send one short reply; this needs the user's key
-and approval of the small spend. The Flutter backend's OpenAI path stays
-unverified until a client build lists OpenAI.
+other. Now the Flutter backend holds the OpenAI mode (see the user's report
+above), so the rollback limit applies to it, and builds up to Stable 0.0.18
+meet the older-client limit. The web page service is on Anthropic and its
+served page lists OpenAI; choosing OpenAI there is untried and waits for the
+user to want it. No other OpenAI step remains.
 Treat the documented precheck and OS egress guarantee separately; the observed
 disabled kill switch has not been enabled by this change.
