@@ -75,6 +75,76 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+  for (final listsDefault in [true, false]) {
+    testWidgets(
+      'an OpenAI list with non-chat models first '
+      '${listsDefault ? 'keeps the default model' : 'leaves the model unchosen'}',
+      (tester) async {
+        Json? saved;
+        final ids = [
+          'text-embedding-3-large',
+          'tts-1',
+          'whisper-1',
+          'dall-e-3',
+          'gpt-6.1-terra',
+          if (listsDefault) 'gpt-6.2-sol',
+        ];
+        final w = Workspace(
+          api: RelayApi(
+            Uri.parse('http://localhost'),
+            client: MockClient((request) async {
+              final path = request.url.path;
+              Object data;
+              if (path == '/api/settings/provider/models') {
+                data = {
+                  'models': [
+                    for (final id in ids) {'id': id, 'name': id},
+                  ],
+                };
+              } else if (path == '/api/config') {
+                data = {
+                  'apps': [],
+                  'provider': {'mode': 'openai'},
+                };
+              } else if (path == '/api/bots') {
+                data = [];
+              } else {
+                if (request.method == 'POST') {
+                  saved = jsonDecode(request.body) as Json;
+                }
+                data = {
+                  'mode': 'openai',
+                  'model': 'gpt-6.2-sol',
+                  'hasKey': true,
+                };
+              }
+              return http.Response(jsonEncode(data), 200);
+            }),
+          ),
+          deviceId: 'test',
+          pages: (_, _) => throw UnimplementedError(),
+          saveConversation: (_) async {},
+        );
+        addTearDown(w.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(body: ProviderSettings(workspace: w)),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final save = find.widgetWithText(FilledButton, 'Save');
+        if (listsDefault) {
+          await tester.tap(save);
+          await tester.pumpAndSettle();
+          expect(saved?['model'], 'gpt-6.2-sol');
+        } else {
+          expect(find.text('Choose a model'), findsOneWidget);
+          expect(tester.widget<FilledButton>(save).onPressed, isNull);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
   testWidgets('bot editor saves only apps that are still registered', (
     tester,
   ) async {

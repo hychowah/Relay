@@ -81,6 +81,8 @@ test("OpenAI's native Responses adapter completes a Relay tool round trip throug
       assert.equal(request.key,"Bearer synthetic-openai-key");
       assert.equal(request.body.model,"gpt-6.2-sol");
       assert.equal(request.body.reasoning?.effort,undefined,"Relay offers no OpenAI effort, so a requested Max is not sent");
+      // Reasoning counts against the cap; OpenAI advises reserving at least 25,000 tokens.
+      assert.ok(request.body.max_output_tokens === undefined || request.body.max_output_tokens >= 25_000);
     }
     assert.ok(JSON.stringify(state.messages).includes("OpenAI tool round trip completed."));
     assert.equal((await readFile(checksFile, "utf8")).trim().split("\n").length, 2,

@@ -37,6 +37,12 @@ export const defaultModels = Object.fromEntries(Object.entries(providers).map(([
 export const reasoningEfforts = ["default", "none", "low", "high", "max"] as const;
 export type ReasoningEffort = typeof reasoningEfforts[number];
 
+// A provider's list can include models that cannot chat (OpenAI lists embedding and
+// speech models), so an unlisted choice falls back to the default, never the first entry.
+export function pickListedModel(mode: ProviderMode, current: string, models: {id: string}[]): string {
+  return [current, defaultModels[mode]].find(id => models.some(model => model.id === id)) ?? "";
+}
+
 export function supportsImageInput(mode: ProviderMode): boolean {
   return mode === "anthropic" || mode === "openai";
 }

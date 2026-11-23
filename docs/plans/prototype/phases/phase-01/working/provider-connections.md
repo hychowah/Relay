@@ -85,7 +85,15 @@ unpaginated `/v1/models` list, which gives IDs only. Image input is on. The
 default is `gpt-6.2-sol`, the mid-price model in OpenAI's current list. Like
 Claude, OpenAI has no thinking-effort control and runs on OpenAI's default; its
 documented values differ by model and none was checked live. The 200,000-token
-context limit matches Claude to keep each step's cost bounded.
+context limit matches Claude to keep each step's cost bounded. OpenCode sends
+OpenAI no `max_output_tokens`, so the 8,192 output limit only shapes compaction;
+reasoning counts against any cap and OpenAI advises reserving 25,000 tokens.
+
+OpenAI's model list includes embedding, speech and image models. After loading
+models, the web page keeps the current model if listed, then the provider
+default; Flutter keeps the saved or default model the server sends. Otherwise,
+for every provider, the model stays unchosen and Save is disabled; neither
+client picks the first entry.
 
 OpenCode's built-in OpenAI plugin switches the connection to WebSocket unless a
 transport is set. The gateway relays HTTP POST only, so the harness sets
@@ -98,12 +106,27 @@ tool round trip with an image through the gateway. Both model calls passed the
 VPN check, the key stayed out of OpenCode's configuration, and a Disconnected
 status blocked the next call with the NordVPN message. Request bodies for all
 three adapters carry no `transport` field. Discovery tests cover OpenAI
-authentication and VPN blocking. The full suite (123 tests), the build, Flutter
-analyze and the Flutter settings tests passed.
+authentication and VPN blocking. Model-choice tests use an OpenAI list with
+non-chat models first. Flutter's runs the dialog and fails with the old
+first-entry fallback; the web test covers `pickListedModel`, not the rendered
+dialog. The full suite (124 tests), the build, Flutter analyze and
+all 95 Flutter tests passed.
 
-Unverified: any real OpenAI request, key or model list, that `gpt-6.2-sol` is
-available to the user's key, and whether OpenAI's addresses route through
-`nordlynx`. OpenAI's model list also includes non-chat models such as embeddings.
+Limits:
+- Rollback: a backend older than this change fails to start while
+  `provider.json` holds mode `openai`. Switch the provider away from OpenAI
+  before rolling back.
+- Screenshots are allowed for every OpenAI model; a model without image input
+  fails at OpenAI.
+- Flutter builds up to Stable 0.0.18 do not list OpenAI. After OpenAI is chosen
+  from the web page, their provider settings may show an empty choice.
+- Like the Claude test, the OpenAI round trip depends on polling time and fails
+  if `RELAY_VPN_CHECK=off` is set while tests run.
+
+Unverified without a real key: any real OpenAI request or model list, that
+`gpt-6.2-sol` is available to the key, the order of `/v1/models`, stateless
+storage with encrypted reasoning on the chosen model, real stream and error
+shapes, and whether OpenAI's addresses route through `nordlynx`.
 
 ## Next
 
@@ -111,4 +134,5 @@ Refresh Relay to use the model picker. A real Claude conversation is the
 remaining provider-readiness check. For OpenAI, after merge and deployment,
 save a key in Model connection, load models and send one short reply; this
 needs the user's key and approval of the small spend. Treat the documented
-precheck and OS egress guarantee separately; the observed disabled kill switch has not been enabled by this change.
+precheck and OS egress guarantee separately; the observed disabled kill switch
+has not been enabled by this change.

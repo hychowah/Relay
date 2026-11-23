@@ -81,8 +81,10 @@ class _ProviderSettingsState extends State<ProviderSettings> {
       if (!mounted || current != request) return;
       setState(() {
         models = result;
+        // The server sends the saved or default model. Lists can include models
+        // that cannot chat (OpenAI's do), so never fall back to the first entry.
         if (!models.any((m) => m['id'] == settings!['model'])) {
-          settings!['model'] = models.firstOrNull?['id'];
+          settings!['model'] = null;
         }
       });
     } catch (e) {
@@ -173,6 +175,7 @@ class _ProviderSettingsState extends State<ProviderSettings> {
                 DropdownButtonFormField<String>(
                   key: ValueKey('${settings!['mode']}:${settings!['model']}'),
                   initialValue: settings!['model'] as String?,
+                  hint: const Text('Choose a model'),
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Model'),
                   items: models
@@ -230,7 +233,12 @@ class _ProviderSettingsState extends State<ProviderSettings> {
         child: const Text('Close'),
       ),
       FilledButton(
-        onPressed: loading || saving || models.isEmpty || widget.workspace.busy
+        onPressed:
+            loading ||
+                saving ||
+                models.isEmpty ||
+                settings?['model'] == null ||
+                widget.workspace.busy
             ? null
             : save,
         child: const Text('Save'),
