@@ -171,20 +171,21 @@ Covers C07 in practice. Read those rules before this phase starts.
 
 ## Next
 
-1. Deploy, with the user's word for each live step:
-   - the orchestrator merges this Relay branch (the theme and this plan),
-     deploys the backend and publishes a client build that sends the theme;
-   - merge the coding app's `workspace-screen` into its main checkout, which
-     the live service runs; install dependencies; make the service build
-     first (`node build.ts`) with `HAPI_SOURCE_DIR` set to the clean checkout
-     the running hapi was built from; restart it;
-   - drop `trustedNative` from the coding app's entry in Relay's apps file.
+1. The coding app runs phase 2 since 2026-11-23: its service builds hapi's
+   chat code from the checkout the running hapi was built from, and Relay's
+   apps file no longer marks it trusted. Read-only checks against the real
+   hapi passed: a session's snapshot (104 blocks, no token), the workspaces,
+   the session list. The theme reaches it after the orchestrator deploys the
+   backend and publishes a client build, on the user's word there.
 2. One Mac check of phase 2's three "Done when" items together: a real
    session in the scratch target is started, approved and answered; the
    tree's counts and a worktree's changes match git; the terminal takes
    typing; in light and dark, beside the chat.
-3. Then phase 3 (check-back). At phase 2's handoff, rewrite the Phase 1 frame
+3. Listing sessions takes about 5.5 s, probably hapi's scan for conversations
+   started outside it. If the bar feels slow, scan those only when the bar
+   opens or the workspace changes.
+4. Then phase 3 (check-back). At phase 2's handoff, rewrite the Phase 1 frame
    text above and remove the phase 2 design note.
-4. Suggested on 2026-11-19, not yet agreed: show in Relay's tab bar and in the
+5. Suggested on 2026-11-19, not yet agreed: show in Relay's tab bar and in the
    conversation when a session waits for approval or finishes (display only),
    and send a Browser selection or capture to a session as a draft.
