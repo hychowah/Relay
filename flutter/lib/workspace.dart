@@ -158,7 +158,8 @@ class Workspace extends ChangeNotifier {
         'url': tab.page?.url,
         'context': tab.page?.context,
       });
-      if (active == tab) _manual();
+      // A tab loading its address again is not the user changing the view.
+      if (active == tab && tab.unloaded == null) _manual();
     }
     changed();
   }
@@ -296,40 +297,39 @@ class Workspace extends ChangeNotifier {
   List<WorkspaceTab> get _shown => shownSplit?.layout.tabs ?? [?active];
 
   /// Whether [tab] should unload to free memory: a loaded Browser tab off
-  /// screen for [unloadAfter]. The rule is kept here alone so that a
-  /// different one can replace it.
+  /// screen and silent for [unloadAfter]. The rule is kept here alone so that
+  /// a different one can replace it.
   bool _shouldUnload(WorkspaceTab tab) =>
       tab.isBrowser &&
       tab.page != null &&
+      tab.unloaded == null &&
       !_shown.contains(tab) &&
       tab.hidden >= unloadAfter!;
 
-  /// Adds [step] to each off-screen tab's hidden time and unloads the tabs
-  /// [_shouldUnload] picks, except one playing sound. Time the computer
-  /// sleeps does not count.
+  /// Asks each off-screen loaded Browser tab every [step] whether it plays
+  /// sound, counts the time it has been off screen and silent, and unloads
+  /// the tabs [_shouldUnload] picks. Time the computer sleeps does not count.
   Future<void> _unloadHidden(Duration step) async {
     if (_unloading || _disposed) return;
     _unloading = true;
     try {
-      final shown = _shown;
-      for (final tab in tabs) {
-        tab.hidden = shown.contains(tab) ? Duration.zero : tab.hidden + step;
-      }
-      for (final tab in tabs.where(_shouldUnload).toList()) {
-        final page = tab.page!;
+      for (final tab in tabs.toList()) {
+        final page = tab.page;
+        if (!tab.isBrowser ||
+            page == null ||
+            tab.unloaded != null ||
+            _shown.contains(tab)) {
+          tab.hidden = Duration.zero;
+          continue;
+        }
         final playing = await page.browser!
             .playing()
             .timeout(const Duration(seconds: 2))
             .catchError((_) => false);
-        if (playing) {
-          // Its time off screen counts again from when it falls silent.
-          tab.hidden = Duration.zero;
-          continue;
-        }
         // The user may have shown or closed the tab meanwhile.
-        if (tab.page != page || !tabs.contains(tab) || !_shouldUnload(tab)) {
-          continue;
-        }
+        if (tab.page != page || !tabs.contains(tab)) continue;
+        tab.hidden = playing ? Duration.zero : tab.hidden + step;
+        if (!_shouldUnload(tab)) continue;
         recorder.action('unload tab', {'tab': tab.title});
         tab.unloaded = (url: page.url, title: page.title);
         tab.page = null;
@@ -355,6 +355,9 @@ class Workspace extends ChangeNotifier {
     final unloaded = tab.unloaded!;
     tab.hidden = Duration.zero;
     tab.error = null;
+    // A start page left by a failed network switch.
+    tab.page?.dispose();
+    tab.page = null;
     try {
       if (await _loadPage(tab) && unloaded.url != 'about:blank') {
         await tab.page!.browser!.navigate(unloaded.url, restoring: true);
@@ -631,22 +634,42 @@ class Workspace extends ChangeNotifier {
     return true;
   }
 
+  /// An unloaded tab loads its address again instead.
   Future<void> browserAction(String action) async {
     recorder.action('browser $action');
     _manual();
+    final tab = active;
     try {
-      await active?.page?.browser?.browserAction(action);
+      if (tab?.unloaded != null) {
+        await _reload(tab!);
+      } else {
+        await tab?.page?.browser?.browserAction(action);
+      }
     } catch (e) {
       error = e.toString();
     }
     changed();
   }
 
+  /// An unloaded tab goes to [text] once a reload under way has ended; after
+  /// a failed one it starts afresh there.
   Future<void> navigate(String text) async {
     recorder.action('browser navigate', {'address': text});
     try {
       _manual();
-      await active?.page?.browser?.navigate(text);
+      final tab = active;
+      if (tab != null && tab.unloaded != null) {
+        await tab.reloading;
+        if (tab.unloaded != null) {
+          tab.unloaded = null;
+          tab.error = null;
+          // A start page left by a failed network switch.
+          tab.page?.dispose();
+          tab.page = null;
+          await _loadPage(tab);
+        }
+      }
+      await tab?.page?.browser?.navigate(text);
       error = null;
     } catch (e) {
       error = e.toString();
@@ -980,6 +1003,10 @@ class Workspace extends ChangeNotifier {
         final app = apps.where((app) => app.id == command.appId).firstOrNull;
         if (app == null) throw StateError('App is unavailable.');
         target = await openApp(app, manual: false, requireAppView: true);
+      }
+      if (target != null && target.unloaded != null) {
+        await _reload(target);
+        if (target.unloaded != null) throw StateError(target.error!);
       }
       await target?.page?.ready.timeout(const Duration(seconds: 20));
       if (_manualRevision != revision || active != target) {

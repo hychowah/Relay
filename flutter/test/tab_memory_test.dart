@@ -119,6 +119,9 @@ void main() {
       WorkspaceTab(appId: 'browser', isBrowser: true)..page = hidden,
       WorkspaceTab(appId: 'browser', isBrowser: true)
         ..unloaded = (url: 'https://example.com', title: 'Unloaded'),
+      WorkspaceTab(appId: 'browser', isBrowser: true)
+        ..unloaded = (url: 'https://example.org', title: 'Failed')
+        ..error = 'Could not load https://example.org again: offline',
     ];
     final reading = (
       app: 180 << 20,
@@ -182,6 +185,11 @@ void main() {
     await hover('Unloaded');
     expect(
       find.text('Unloaded to free memory; click to load it again.'),
+      findsOneWidget,
+    );
+    await hover('Failed');
+    expect(
+      find.text('Could not load https://example.org again: offline'),
       findsOneWidget,
     );
   });

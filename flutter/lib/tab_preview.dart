@@ -102,7 +102,12 @@ class _TabPreviewState extends State<TabPreview> {
             ),
           if (widget.tab.unloaded != null)
             Text(
-              'Unloaded to free memory; click to load it again.',
+              widget.tab.reloading != null
+                  ? 'Loading again…'
+                  : widget.tab.error ??
+                        'Unloaded to free memory; click to load it again.',
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
               style: small,
             )
           else if (page != null)

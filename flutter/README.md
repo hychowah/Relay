@@ -111,7 +111,8 @@ for 30 minutes unloads to free its memory, unless its page plays sound; its time
 off screen counts from when it falls silent. It keeps its address and title, and
 loads again, without a new history visit, when shown or when the agent reads it.
 If that load fails, as when the network is not back after waking, the tab stays
-unloaded with the error, and clicking it tries again. On the Mac WebKit says
+unloaded with the error; clicking it, Reload, Go or the agent showing a view in
+it tries again. A VPN tab loads again on the VPN. On the Mac WebKit says
 whether a page plays sound; on Windows only the page's own audio and video
 elements are seen. The agent's first read of an unloaded tab waits for the page,
 so a slow page can run past the read's time limit; reading again works. On
@@ -258,9 +259,9 @@ Trash cleanup deletes it with the conversation.
 `npm run test:mac -- <name>_test.dart`, from the repository root on WSL, runs
 one self-contained integration test on the Mac against real WKWebViews:
 `popup_windows_test.dart` (with its own loopback fixture),
-`tab_memory_test.dart`, which checks each tab's memory figure, reports what a
-reading costs, pictures a hidden tab and plays silent audio to check the
-playing-sound rule,
+`tab_memory_test.dart` (about three minutes), which checks each tab's memory
+figure, reports what a reading costs, pictures a tab hidden for two minutes and
+plays silent audio to check the playing-sound rule,
 `video_fullscreen_test.dart`, which puts the test window into macOS fullscreen
 for a few seconds, `pdf_viewer_test.dart`, which opens one arXiv paper as
 a PDF and as a web page and so needs the internet on the Mac, or
@@ -316,12 +317,14 @@ app, and the strip redraws only when a shown figure changes. A tab's process
 comes from WebKit's private `_webProcessIdentifier`, so a WebKit update can make
 the figures disappear.
 
-Also on macOS, resting the pointer on a tab for half a second shows its card:
-the title, a small picture of the page when the tab is off screen, and the
-memory of that page, of all pages and of Relay itself, or that the tab is
-unloaded. The card captures the picture, 240 points wide, and reads the memory
-once as it opens. The picture is kept only in the card's memory, never saved or
-sent, and is gone when the card closes.
+Also on macOS, resting the pointer on an app's or a website's tab for half a
+second shows its card: the title, a small picture of the page when the tab is
+off screen (none for a PDF in Relay's viewer), and the memory of its web process
+(whole, when tabs share one), of all pages and of Relay itself. An unloaded tab's
+card says so, or that it is loading again, or why loading failed. The card
+captures the picture, 240 points wide, and reads the memory once as it opens.
+The picture is kept only in the card's memory, never saved or sent, and is gone
+when the card closes.
 
 ## Mac updates
 

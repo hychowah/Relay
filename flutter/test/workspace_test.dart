@@ -960,7 +960,10 @@ void main() {
     expect(room.page, isNotNull, reason: 'App tabs stay loaded.');
     expect(f.w.session()['tabs'][0]['url'], 'https://example.com/desk');
 
-    // Its time off screen counts again from when it falls silent.
+    // A tab that plays for almost an hour counts its time from when it falls
+    // silent.
+    await tester.pump(const Duration(minutes: 28));
+    expect(listening.page, isNotNull);
     (listening.page as FakePage).sound = false;
     await tester.pump(const Duration(minutes: 2));
     expect(listening.page, isNotNull);
@@ -983,6 +986,49 @@ void main() {
     expect(reading.page, isNotNull);
     expect(room.page, isNotNull);
     expect(listening.page, isNull);
+  });
+  testWidgets('Reload, Go and an agent view load an unloaded tab first', (
+    tester,
+  ) async {
+    final f = Fixture(unloadAfter: const Duration(minutes: 30));
+    addTearDown(f.w.dispose);
+    addTearDown(() => FakePage.navigateError = null);
+    await f.w.loadConfig();
+    f.w.conversationId = 'conversation';
+    final reading = await f.w.openApp(f.w.apps[0]);
+    final room = await f.w.openApp(f.w.apps[1]);
+    // Each time it is shown while the network is down, so it stays unloaded.
+    Future<void> failedWhileShown() async {
+      f.w.select(room);
+      await tester.pump(const Duration(minutes: 31));
+      FakePage.navigateError = StateError('No network');
+      f.w.select(reading);
+      await tester.pump();
+      FakePage.navigateError = null;
+      expect(
+        (reading.page, reading.unloaded?.url),
+        (null, 'https://example.com/desk'),
+      );
+    }
+
+    await failedWhileShown();
+    await f.w.browserAction('reload');
+    expect((reading.page as FakePage).navigated, [
+      'restore https://example.com/desk',
+    ]);
+
+    await failedWhileShown();
+    await f.w.navigate('https://example.org/next');
+    expect(reading.unloaded, isNull);
+    expect((reading.page as FakePage).navigated, ['https://example.org/next']);
+
+    await failedWhileShown();
+    f.commands = [f.command('agent-view', 'browser')];
+    await f.w.refresh();
+    expect(f.acks.last['status'], 'applied');
+    expect((reading.page as FakePage).navigated, [
+      'restore https://example.com/desk',
+    ]);
   });
   testWidgets('an unloaded tab keeps its address until it loads again', (
     tester,

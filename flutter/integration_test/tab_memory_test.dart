@@ -114,28 +114,18 @@ void main() {
     );
     expect(micros, lessThan(5000), reason: 'A reading must stay cheap.');
 
-    // A hidden tab's hover-card picture: small, and of the page itself.
+    // A hover-card picture of a tab hidden for two minutes, while WebKit
+    // slows its page: small, and of the page as it is now. It was red on
+    // screen and turns blue once hidden.
     await controller(heavy).runJavaScript(
       "document.documentElement.style.background = 'rgb(200, 0, 0)'",
     );
     await show(heavyHidden: true);
+    final hiddenAt = DateTime.now();
     await tester.pump(const Duration(milliseconds: 300));
-    final bytes = await heavy.preview();
-    expect(bytes, isNotNull, reason: 'A hidden tab must give a picture.');
-    final picture = (await (await ui.instantiateImageCodec(
-      bytes!,
-    )).getNextFrame()).image;
-    final pixels = (await picture.toByteData())!;
-    final middle =
-        4 * (picture.width * (picture.height ~/ 2) + picture.width ~/ 2);
-    final (red, green) = (pixels.getUint8(middle), pixels.getUint8(middle + 1));
-    // ignore: avoid_print
-    print(
-      'TAB PREVIEW hidden tab: ${picture.width}x${picture.height}, '
-      '${bytes.length ~/ 1024} KB, middle red $red green $green',
+    await controller(heavy).runJavaScript(
+      "document.documentElement.style.background = 'rgb(0, 0, 200)'",
     );
-    expect(picture.width, inInclusiveRange(240, 480));
-    expect((red > 150, green < 80), (true, true), reason: 'The page is red.');
 
     // Silent looping audio counts as playing sound, so its tab stays loaded.
     // It is never added to the page, which only WebKit's own flag can see.
@@ -157,5 +147,27 @@ void main() {
       () => light.browser!.playing(),
       'A page playing audio must count as playing sound',
     );
+
+    final left =
+        const Duration(minutes: 2) - DateTime.now().difference(hiddenAt);
+    if (left > Duration.zero) await Future<void>.delayed(left);
+    await tester.pump();
+    final bytes = await heavy.preview();
+    expect(bytes, isNotNull, reason: 'A hidden tab must give a picture.');
+    final picture = (await (await ui.instantiateImageCodec(
+      bytes!,
+    )).getNextFrame()).image;
+    final pixels = (await picture.toByteData())!;
+    final middle =
+        4 * (picture.width * (picture.height ~/ 2) + picture.width ~/ 2);
+    final (red, blue) = (pixels.getUint8(middle), pixels.getUint8(middle + 2));
+    // ignore: avoid_print
+    print(
+      'TAB PREVIEW tab hidden ${DateTime.now().difference(hiddenAt).inSeconds} s: '
+      '${picture.width}x${picture.height}, ${bytes.length ~/ 1024} KB, '
+      'middle red $red blue $blue',
+    );
+    expect(picture.width, inInclusiveRange(240, 480));
+    expect((blue > 150, red < 80), (true, true), reason: 'The page is blue.');
   });
 }

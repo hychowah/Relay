@@ -326,6 +326,8 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
       return chip;
     }
     return Tooltip(
+      // The chip already says its title; the card is for the pointer.
+      excludeFromSemantics: true,
       richMessage: WidgetSpan(child: card(tab, shown)),
       waitDuration: const Duration(milliseconds: 500),
       padding: const EdgeInsets.all(10),

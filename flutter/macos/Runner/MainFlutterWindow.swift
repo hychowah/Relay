@@ -136,8 +136,8 @@ class MainFlutterWindow: NSWindow {
         return
       }
       // A preview is a small picture for the tab's hover card, kept only in
-      // Flutter's memory while the card shows; a PDF in Relay's viewer gives
-      // its full-size picture, which the card scales down.
+      // Flutter's memory while the card shows. A PDF in Relay's viewer gives
+      // none, rather than a full-size picture encoded on every hover.
       if call.method == "snapshot" || call.method == "selection" || call.method == "preview" {
         guard let registry = flutterViewController, let identifier = call.arguments as? NSNumber,
               let view = FWFWebViewFlutterWKWebViewExternalAPI.webView(
@@ -149,7 +149,9 @@ class MainFlutterWindow: NSWindow {
         }
         // A PDF shown in Relay's own viewer answers for the page under it.
         if let pdf = BrowserPDF.shown(on: view) {
-          if call.method == "selection" {
+          if call.method == "preview" {
+            result(nil)
+          } else if call.method == "selection" {
             result(pdf.selection)
           } else if let png = pdf.snapshot() {
             result(FlutterStandardTypedData(bytes: png))
