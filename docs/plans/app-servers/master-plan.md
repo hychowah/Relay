@@ -174,8 +174,10 @@ states (Backtest Web stopped, its switch not available), a log read returned
 lines, a request naming a foreign Host got 403 and a non-JSON POST got 415,
 and the list answered through the tailnet address. No unit was started,
 stopped, enabled or disabled through the live backend. Mac test build
-`app-servers` is published from the same commit. Not yet verified: the Mac
-run.
+`app-servers` is published from the same commit, and the later test build
+`pre-0-0-18` also has the screen. The backend runs `ea0fa4d` since later that
+day; there the list still answered, and a foreign Host still got 403. Not yet
+verified: the Mac run.
 
 Limit: each systemctl or journalctl call has its own 15-second limit, so a
 start can outlast the client's 20 seconds; the client then shows a timeout
@@ -183,7 +185,7 @@ while systemd carries on, and the next list read shows the real state.
 
 ## Next
 
-1. Install test build `app-servers` on the Mac and make the one Mac check:
+1. Install test build `pre-0-0-18` on the Mac and make the one Mac check:
    every Mac item of Phase 1 Done when, and also start Backtest Web from the
    screen and check that its tailnet address answers. The screen reaches
    Stable with the next release the user asks for.

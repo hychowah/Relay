@@ -175,8 +175,9 @@ Covers C07 in practice. Read those rules before this phase starts.
    chat code from the checkout the running hapi was built from, and Relay's
    apps file no longer marks it trusted. Read-only checks against the real
    hapi passed: a session's snapshot (104 blocks, no token), the workspaces,
-   the session list. The theme reaches it after the orchestrator deploys the
-   backend and publishes a client build, on the user's word there.
+   the session list. The backend that passes the theme on is deployed since
+   2026-11-23 and Mac test build `pre-0-0-18` sends it; whether the screen
+   shows Relay's colours is unverified.
 2. One Mac check of phase 2's three "Done when" items together: a real
    session in the scratch target is started, approved and answered; the
    tree's counts and a worktree's changes match git; the terminal takes

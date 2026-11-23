@@ -168,7 +168,7 @@ PDF viewer, highlights, Stored data, the chat and tabs shared across devices,
 and the Browser on Relay's own port, so older builds cannot read pages or
 transcripts. Analysis, 81 Flutter tests and 107 backend tests passed on its
 commit; the feed serves it with its commit and the download matches its hash.
-The backend was last deployed on 2026-11-23 at `f8299ce`; the Browser socket
+The backend was last deployed on 2026-11-23 at `ea0fa4d`; the Browser socket
 opened through the tailnet address from Windows. The user tried its test
 build on the Mac before the release; which checks below that covered is not
 recorded, and the native Mac workflow was not rerun.
@@ -191,9 +191,9 @@ real WKWebViews.
 4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable since 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified. The capture animation is in Stable 0.0.17: on the Mac, check that the flash and the flight to the composer run smoothly over a real page, and that the thumbnail takes over without a jump.
 5. On the Mac, try the record button and **Bug reports** against the live
    backend: save, view, mark solved and delete. The screenshot now covers the
-   whole window (not yet in Stable): check that it shows the chat, the tabs, a
-   split and a Browser comment over a page, note its size, and that pages
-   still click and scroll. Fake-page widget tests cover it.
+   whole window (in test build `pre-0-0-18`): check that it shows the chat,
+   the tabs, a split and a Browser comment over a page, note its size, and
+   that pages still click and scroll. Fake-page widget tests cover it.
 6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 7. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
 8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.
@@ -254,7 +254,7 @@ real WKWebViews.
    (the question must carry the selection); highlight on a few real sites,
    one a single-page app; and open **Stored data**. Unverified: a
    password-protected PDF. Why 0.0.16 lost the selection is unknown; embedded
-   PDFs still use that path. After a backend deploy, also check the
+   PDFs still use that path. In test build `pre-0-0-18`, also check the
    highlight menu, with clicks over a PDF, and drag-selecting.
 
 Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).

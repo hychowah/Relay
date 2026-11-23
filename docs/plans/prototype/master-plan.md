@@ -327,11 +327,11 @@ Tailscale checks for Relay and Research Web remain open prototype exits.
 
 Defer read/write effects to the first write, access scopes and versioned migrations to projects, and network policy injection to the Docker executor. Revisit server acknowledgement checks if bridge ownership changes, and new tool statuses or a run-oriented harness when existing lifecycles fall short.
 
-The [Flutter handoff](../flutter/master-plan.md#next) covers installing and reviewing Stable 0.0.17 on the Mac, with its checks for tab restore, the transcript pane and the app list refresh, and the split view. It also lists the Mac checks for the capture animation, the Browser's PDF viewer, highlights and Stored data, which are in Stable since 0.0.17, published on 2026-11-23. The backend, last deployed at `f8299ce` the same day, connects the Browser on the Relay port, not 3251: builds older than 0.0.17, and a Windows app built before `acad2d8`, cannot read pages or transcripts. The Windows checks wait until the user returns to Windows. On the next preview teardown, use the [worktree removal command](../../../flutter/README.md#publish-a-worktree-test-build).
+The [Flutter handoff](../flutter/master-plan.md#next) covers installing and reviewing Stable 0.0.17 on the Mac, with its checks for tab restore, the transcript pane and the app list refresh, and the split view. It also lists the Mac checks for the capture animation, the Browser's PDF viewer, highlights and Stored data, which are in Stable since 0.0.17, published on 2026-11-23. The backend, last deployed at `ea0fa4d` the same day, connects the Browser on the Relay port, not 3251: builds older than 0.0.17, and a Windows app built before `acad2d8`, cannot read pages or transcripts. The Windows checks wait until the user returns to Windows. On the next preview teardown, use the [worktree removal command](../../../flutter/README.md#publish-a-worktree-test-build).
 
 The [coding sessions plan](../coding-sessions/master-plan.md) covers handing requests to Claude Code or Codex sessions through a coding app in its own project. Its Next section holds the current step.
 
-Phase 1 of the [app servers plan](../app-servers/master-plan.md) (R17) is deployed and in Mac test build `app-servers`; its Mac check is next.
+Phase 1 of the [app servers plan](../app-servers/master-plan.md) (R17) is deployed and in Mac test build `pre-0-0-18`; its Mac check is next.
 
 1. Verify a sourced two-app question on the user's saved records from the Mac.
    Both stock adapters have run as local services, registered with the live
