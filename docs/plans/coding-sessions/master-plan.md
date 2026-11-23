@@ -175,18 +175,18 @@ Covers C07 in practice. Read those rules before this phase starts.
    chat code from the checkout the running hapi was built from, and Relay's
    apps file no longer marks it trusted. Read-only checks against the real
    hapi passed: a session's snapshot (104 blocks, no token), the workspaces,
-   the session list. The backend that passes the theme on is deployed since
+   the session list. Fixes on 2026-11-23: it sends into terminal-attached
+   Claude Code sessions through hapi's live input, and a workspace opens in
+   about 0.1 s because hapi's 5.5 s scan for conversations started outside it
+   is remembered and refreshed in the background. The backend that passes the theme on is deployed since
    2026-11-23 and Mac test build `pre-0-0-18` sends it; whether the screen
    shows Relay's colours is unverified.
 2. One Mac check of phase 2's three "Done when" items together: a real
    session in the scratch target is started, approved and answered; the
    tree's counts and a worktree's changes match git; the terminal takes
    typing; in light and dark, beside the chat.
-3. Listing sessions takes about 5.5 s, probably hapi's scan for conversations
-   started outside it. If the bar feels slow, scan those only when the bar
-   opens or the workspace changes.
-4. Then phase 3 (check-back). At phase 2's handoff, rewrite the Phase 1 frame
+3. Then phase 3 (check-back). At phase 2's handoff, rewrite the Phase 1 frame
    text above and remove the phase 2 design note.
-5. Suggested on 2026-11-19, not yet agreed: show in Relay's tab bar and in the
+4. Suggested on 2026-11-19, not yet agreed: show in Relay's tab bar and in the
    conversation when a session waits for approval or finishes (display only),
    and send a Browser selection or capture to a session as a draft.
