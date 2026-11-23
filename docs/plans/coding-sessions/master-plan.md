@@ -180,7 +180,7 @@ Covers C07 in practice. Read those rules before this phase starts.
    froze silently whenever its terminal attachment ended; hapi is used only
    when the user sends, stops, answers or changes a setting. A workspace opens
    in about 0.2 s. Sending to an outside conversation is unverified. The backend that passes the theme on is deployed since
-   2026-11-23 and Mac test build `pre-0-0-18` sends it; whether the screen
+   2026-11-23 and Stable 0.0.18 sends it; whether the screen
    shows Relay's colours is unverified.
 2. One Mac check of phase 2's three "Done when" items together: a real
    session in the scratch target is started, approved and answered; the
