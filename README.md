@@ -128,13 +128,17 @@ python3 tools/check_records.py
 reproduce the problem, then press the red record button again and describe it.
 The recording holds your actions, each server request and reply (a repeated
 poll reply is kept once; Browser history and highlight requests are left out), error
-messages, the open tabs and a screenshot of the current page. The service saves
-it as `bug-reports/<time>-<id>.json` (with a `.png`) in `RELAY_DATA_DIR`, adds its own record of the conversation and replaces
-API keys and other secret fields with `[redacted]`. Reports contain conversation
-text, so they stay with the runtime data, outside the repository. Choose **Bug
-reports** in the workspace menu to read them: each shows its description, screenshot
-and a timeline of events that expand to their full details. Mark a report solved
-with the circle beside it (click again to reopen it); the header counts open and
+messages, the open tabs and a screenshot of the whole window, at most 2,000
+pixels on its longest side, with each shown page's own snapshot in place (a page
+that cannot be captured shows as a grey area marked "Page not captured"). Pixels
+are not redacted, so the picture shows whatever was on screen. The service saves
+it as `bug-reports/<time>-<id>.json` (with a `.png`) in `RELAY_DATA_DIR`, adds
+its own record of the conversation and replaces API keys and other secret
+fields with `[redacted]`. Reports contain conversation text, so they stay with
+the runtime data, outside the repository. Choose **Bug reports** in the
+workspace menu to read them: each shows its description, screenshot (click it
+to open it full size) and a timeline of events that expand to their full
+details. Mark a report solved with the circle beside it (click again to reopen it); the header counts open and
 solved reports. The bin button deletes the report and its screenshot. The status
 is saved as `status` (`open` or `solved`) in the report file.
 

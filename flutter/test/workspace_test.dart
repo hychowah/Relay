@@ -17,6 +17,7 @@ import 'package:relay_flutter/workspace.dart';
 import 'package:relay_flutter/capture_flight.dart';
 import 'package:relay_flutter/region_capture.dart';
 import 'package:relay_flutter/split_layout.dart';
+import 'package:relay_flutter/window_capture.dart';
 import 'package:relay_flutter/workspace_tabs.dart';
 
 const apps = [
@@ -1130,9 +1131,13 @@ void main() {
             matching: find.byType(Stack),
           )
           .first;
+      // The slot's capture picture is painted under the page, not over it.
       final inPage = find
           .descendant(
-            of: find.byKey(ValueKey('page-${tab.id}')),
+            of: find.ancestor(
+              of: find.byKey(ValueKey('page-${tab.id}')),
+              matching: find.byType(PageSlot),
+            ),
             matching: find.byWidgetPredicate((_) => true),
           )
           .evaluate()
@@ -1544,17 +1549,95 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
-  testWidgets('the toolbar record button starts and finishes a bug recording', (
+  testWidgets('a bug report pictures the whole window with its page in place', (
     tester,
   ) async {
     final f = Fixture();
-    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await f.w.start();
+    tester.view.physicalSize = const Size(3000, 1600);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await f.w.openApp(f.w.apps[1]);
+    final page = f.pages.last;
+    page.frame = await tester.runAsync(() async {
+      final recorder = ui.PictureRecorder();
+      Canvas(recorder).drawColor(Colors.blue, BlendMode.src);
+      final image = await recorder.endRecording().toImage(80, 60);
+      final png = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      return png!.buffer.asUint8List();
+    });
+    await tester.pumpWidget(
+      RelayApp(workspace: f.w, initialDraft: '', saveDraft: (_) async {}),
+    );
+    await tester.pumpAndSettle();
+    final shown = tester.getRect(find.byKey(ValueKey('page-${page.spec.id}')));
+    final panel = tester.getRect(
+      find.byKey(const ValueKey('conversation-panel')),
+    );
+
+    // The window picture is made by the engine, outside the test's clock.
+    Future<void> settle(Finder until) async {
+      for (var i = 0; i < 100 && until.evaluate().isEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+    }
+
+    // The saved picture's width and its colours in the page and the chat.
+    Future<(int, List<int>, List<int>)> record() async {
+      await tester.tap(find.byTooltip('Record a bug'));
+      await tester.pump();
+      expect(f.w.recorder.recording, isTrue);
+      // A second click during the capture must not start another one.
+      await tester.tap(find.byTooltip('Recording a bug. Stop and save'));
+      await tester.tap(find.byTooltip('Recording a bug. Stop and save'));
+      await settle(find.text('Save bug report'));
+      await tester.pumpAndSettle();
+      expect(find.text('Save bug report'), findsOneWidget);
+      await tester.tap(find.text('Save on server'));
+      await tester.pumpAndSettle();
+      expect(f.w.recorder.recording, isFalse);
+      final png = base64Decode(f.bugReport!['screenshot'] as String);
+      return (await tester.runAsync(() async {
+        final image = await decodeFrame(png);
+        final pixels = (await image.toByteData())!.buffer.asUint8List();
+        final scale = image.width / 1500;
+        List<int> at(Offset point) {
+          final i =
+              ((point.dy * scale).round() * image.width +
+                  (point.dx * scale).round()) *
+              4;
+          return pixels.sublist(i, i + 3);
+        }
+
+        final result = (
+          image.width,
+          at(shown.topLeft + shown.size.bottomRight(Offset.zero) * .75),
+          at(panel.center),
+        );
+        image.dispose();
+        return result;
+      }))!;
+    }
+
+    final (width, inPage, inChat) = await record();
+    expect(width, 2000, reason: 'the longest side is capped');
+    expect(inPage, [0x21, 0x96, 0xf3], reason: 'the page snapshot in place');
+    expect(inChat, isNot(inPage), reason: 'the chat panel is in the picture');
+
+    page.frame = null;
+    final (_, notCaptured, _) = await record();
+    expect(notCaptured, [0xd4, 0xd4, 0xd4]);
+    expect(find.text('Page not captured'), findsNothing, reason: 'cleared');
+
     await tester.tap(find.byTooltip('Record a bug'));
     await tester.pump();
-    expect(f.w.recorder.recording, isTrue);
     await tester.tap(find.byTooltip('Recording a bug. Stop and save'));
-    await tester.pumpAndSettle();
-    expect(find.text('Save bug report'), findsOneWidget);
+    await settle(find.text('Save bug report'));
     await tester.tap(find.text('Discard'));
     await tester.pumpAndSettle();
     expect(f.w.recorder.recording, isFalse);

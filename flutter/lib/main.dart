@@ -28,6 +28,7 @@ import 'page_surface.dart';
 import 'region_capture.dart';
 import 'split_layout.dart';
 import 'stored_data.dart';
+import 'window_capture.dart';
 import 'bug_reports.dart';
 import 'capture_flight.dart';
 import 'transcript_pane.dart';
@@ -179,19 +180,21 @@ class _RelayAppState extends State<RelayApp> {
     theme: workspaceTheme(Brightness.light),
     darkTheme: workspaceTheme(Brightness.dark),
     themeMode: themeMode,
-    builder: (context, child) => Theme(
-      data: MediaQuery.sizeOf(context).width < 900
-          ? Theme.of(context).copyWith(
-              visualDensity: VisualDensity.standard,
-              iconButtonTheme: IconButtonThemeData(
-                style: IconButton.styleFrom(
-                  minimumSize: const Size(44, 44),
-                  iconSize: 20,
+    builder: (context, child) => WindowCapture(
+      child: Theme(
+        data: MediaQuery.sizeOf(context).width < 900
+            ? Theme.of(context).copyWith(
+                visualDensity: VisualDensity.standard,
+                iconButtonTheme: IconButtonThemeData(
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(44, 44),
+                    iconSize: 20,
+                  ),
                 ),
-              ),
-            )
-          : Theme.of(context),
-      child: child!,
+              )
+            : Theme.of(context),
+        child: child!,
+      ),
     ),
     home: RelayShell(
       workspace: widget.workspace,
@@ -267,7 +270,7 @@ class _RelayShellState extends State<RelayShell> {
   final messagesScroll = ScrollController();
   Timer? saveTimer;
   ({String appId, Uint8List bytes})? capture;
-  bool capturing = false;
+  bool capturing = false, reportingBug = false;
   ({WorkspaceTab tab, ui.Image image, bool reopenChat})? selecting;
   // The composer's thumbnail, and the captured picture on its way there.
   final captureSlot = GlobalKey();
@@ -469,38 +472,43 @@ class _RelayShellState extends State<RelayShell> {
       w.recorder.start();
       return;
     }
-    // Capture before the dialog so the picture shows what the user saw.
-    final page = w.active?.page;
-    Uint8List? screenshot;
-    if (page != null && page.canCapture) {
+    // Another click while a report is captured or asked about does nothing;
+    // a second capture would clear the first one's page pictures.
+    if (reportingBug) return;
+    reportingBug = true;
+    try {
+      // Capture before the dialog so the picture shows what the user saw.
+      Uint8List? screenshot;
       try {
-        screenshot = await page.snapshot();
+        screenshot = await captureWindow(context);
       } catch (_) {
         /* The report is still useful without a picture. */
       }
-    }
-    if (!mounted) return;
-    final window = '${MediaQuery.sizeOf(context)}';
-    final answer = await askBugReport(context, w.recorder.events.length);
-    if (answer == null) return;
-    if (!answer.save) {
-      w.recorder.stop();
-      return;
-    }
-    final file = await w.saveBugReport(
-      answer.description,
-      screenshot: screenshot,
-      client: {
-        'app': widget.updates?.installedLabel,
-        'window': window,
-        'chatOpen': chatOpen,
-        'chatOnly': chatOnly,
-        'chatWidth': chatWidth,
-      },
-    );
-    if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Bug report saved: $file')));
+      if (!mounted) return;
+      final window = '${MediaQuery.sizeOf(context)}';
+      final answer = await askBugReport(context, w.recorder.events.length);
+      if (answer == null) return;
+      if (!answer.save) {
+        w.recorder.stop();
+        return;
+      }
+      final file = await w.saveBugReport(
+        answer.description,
+        screenshot: screenshot,
+        client: {
+          'app': widget.updates?.installedLabel,
+          'window': window,
+          'chatOpen': chatOpen,
+          'chatOnly': chatOnly,
+          'chatWidth': chatWidth,
+        },
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Bug report saved: $file')));
+      }
+    } finally {
+      reportingBug = false;
     }
   }
 
@@ -1111,7 +1119,7 @@ class _RelayShellState extends State<RelayShell> {
                         bottom: frame,
                         child: Offstage(
                           offstage: !rects.containsKey(tab),
-                          child: tab.page!.widget,
+                          child: PageSlot(page: tab.page!),
                         ),
                       ),
                     ],
