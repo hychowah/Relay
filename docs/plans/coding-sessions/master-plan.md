@@ -177,9 +177,12 @@ Covers C07 in practice. Read those rules before this phase starts.
    hapi passed: a session's snapshot (104 blocks, no token), the workspaces,
    the session list. Since 2026-11-23 conversations started outside hapi
    are read from their Claude Code and Codex transcripts, because hapi's copy
-   froze silently whenever its terminal attachment ended; hapi is used only
-   when the user sends, stops, answers or changes a setting. A workspace opens
-   in about 0.2 s. Sending to an outside conversation is unverified. The backend that passes the theme on is deployed since
+   froze silently whenever its terminal attachment ended. Claude Code sessions
+   are started (`claude --bg`, auto mode by default) and continued (`claude
+   stop`, then `claude --bg --resume`) with Claude Code's own commands, so they
+   show in the user's TUI; hapi's screen-reading input is no longer used.
+   Codex and hapi-started sessions still act through hapi. A workspace opens
+   in about 0.2 s. A real send through the screen is unverified. The backend that passes the theme on is deployed since
    2026-11-23 and Stable 0.0.18 sends it; whether the screen
    shows Relay's colours is unverified.
 2. One Mac check of phase 2's three "Done when" items together: a real
