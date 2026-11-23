@@ -142,9 +142,34 @@ judged by the IPv4 ranges they carry or refused.
   for the proxy's lookups but the home provider's for WSL's own resolver.
   The output logged no destinations.
 
+Deployed 2026-11-23: `relay-app` runs `main` `78b5b35`, with the user's
+word. On the live service with the real check: loopback, the tailnet address
+and a home-network address got 403, a malformed target 400, a public site
+200; through the proxy an IP-check service showed WSL's VPN address, not
+Windows' home one; a tunnel from Windows through the tailnet worked; the
+journal shows no destinations.
+
 Unverified: the real check's 503 while NordVPN is down, the 502 when a
 target refuses the connection, and that shutdown closes open tunnels (added
 after a bug review; checked in the code only).
+
+## Phase 2 evidence (2026-11-23)
+
+Built on branch `worktree-agent-a37299c0db1d05c50`. WebRTC is off through
+WebKit's private `_setPeerConnectionEnabled:`; a script that deleted
+`RTCPeerConnection` was dropped because a fresh frame or popup gets it back.
+
+- `flutter analyze` clean, `flutter test` 95 pass (VPN switch and saved
+  flag, a VPN tab kept after a failed restore, the VPN address rule).
+- Second Mac: the client built and `popup_windows_test.dart` passed before
+  the WebRTC change; a Swift script there showed the private setting, set
+  on an existing view before its first load, removes WebRTC from the page
+  and a fresh frame.
+- MacBook, one run of `browser_vpn_test.dart` against the deployed backend
+  (this build included the last Swift change): passed. A VPN tab's address
+  differed from a normal tab's; WebRTC was gone from the VPN tab, fresh
+  frame included, and present in a normal tab. Nothing was left on the Mac.
+- Test build `browser-vpn` published from `f5634ba`.
 
 ## Limits
 
@@ -156,9 +181,6 @@ after a bug review; checked in the code only).
   network. Turning the Kill Switch on would close this; that is the user's
   choice and outside this plan.
 - WebRTC is off in VPN tabs, so video calls do not work there.
-- Unverified until the Mac run: that WebKit applies a proxy set on the
-  profile after the view exists but before its first load. If it does not,
-  set the proxy inside the patched creation option instead.
 - `RELAY_VPN_CHECK=off` turns the proxy into a plain relay over WSL's
   network. The live service does not set it.
 - A tunnel tries only the first address of a name, so a dead first address
@@ -171,7 +193,8 @@ after a bug review; checked in the code only).
 
 ## Next
 
-1. Deploy `relay-app` (Phase 1 is in `main`); the restart stops in-flight
-   replies.
-2. Run `browser_vpn_test.dart` once on the MacBook, then merge Phase 2 and
-   publish a test build for the hand checks.
+1. The user tries test build `browser-vpn` for the hand checks in Phase 2
+   (switching both ways, a popup, a PDF, a plain `http://` page, sign-in
+   kept after a restart).
+2. Merge Phase 2; the switch reaches Stable with the next release the user
+   asks for. Then close out this plan.
