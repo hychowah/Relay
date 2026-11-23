@@ -1,4 +1,5 @@
 // Desktop only (macOS): the card shown while the pointer rests on a tab.
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:material_ui/material_ui.dart';
@@ -39,6 +40,16 @@ class _TabPreviewState extends State<TabPreview> {
       ? Future.value()
       : widget.read().then<MemoryReading?>((r) => r, onError: (_) => null);
 
+  // Flutter's image cache would keep every hover's picture; the card takes
+  // its own out when it closes.
+  ImageProvider? image;
+
+  @override
+  void dispose() {
+    unawaited(image?.evict());
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -66,14 +77,16 @@ class _TabPreviewState extends State<TabPreview> {
               builder: (context, shot) => switch (shot.data) {
                 final bytes? => ClipRRect(
                   borderRadius: BorderRadius.circular(6),
-                  child: Image.memory(
-                    bytes,
+                  child: Image(
+                    image: image ??= ResizeImage(
+                      MemoryImage(bytes),
+                      width: (240 * MediaQuery.devicePixelRatioOf(context))
+                          .round(),
+                    ),
                     width: 240,
                     height: 135,
                     fit: BoxFit.cover,
                     alignment: Alignment.topCenter,
-                    cacheWidth: (240 * MediaQuery.devicePixelRatioOf(context))
-                        .round(),
                   ),
                 ),
                 null when shot.connectionState == ConnectionState.done =>

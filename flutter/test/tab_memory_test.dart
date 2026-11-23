@@ -168,6 +168,11 @@ void main() {
     );
 
     await hover('Shown');
+    expect(
+      imageCache.currentSize + imageCache.liveImageCount,
+      0,
+      reason: 'A closed card leaves no picture in the image cache.',
+    );
     expect(shown.previews, 0, reason: 'A tab on screen needs no picture.');
     expect(
       find.text('Memory 100 MB · all pages 512 MB · Relay 180 MB'),
