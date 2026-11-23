@@ -76,7 +76,7 @@ existing `/api/*` middleware.
 | `POST /api/sessions/:id/settings {model?,effort?,permissionMode?}` | Composer menu |
 | `POST /api/sessions {targetId, agent, worktree, text}` | New session from "+". It shares one `start()` (with the refused, unclear and created-but-unsent outcomes) with draft Start; only draft Start keeps a record and starts at most once. |
 | `GET /api/workspaces/:t/worktrees/changes?worktree=…`, `…/file?worktree=…&file=…` | Step 2 |
-| `POST /api/sessions/:id/terminal` → `{terminalId}`; `GET /api/terminals/:id/output` (SSE); `POST …/input`, `…/resize` | Step 3. Using SSE plus POST keeps the existing origin and JSON checks, with no WebSocket server. The terminal closes when its output stream closes. |
+| `POST /api/sessions/:id/terminal` → `{terminalId}`; `GET /api/terminals/:id/output` (SSE); `POST …/input`, `…/resize` | Step 3. Using SSE plus POST keeps the existing origin and JSON checks, with no WebSocket server. The terminal opens the first time its tab is chosen, stays alive (hidden) while the session is shown, and closes when its output stream closes; each open signs in fresh, and closing always tells hapi to close the shell. Terminal input is passed through (hapi checks it). The CSP allows inline styles, which xterm needs. |
 
 ## Error model
 

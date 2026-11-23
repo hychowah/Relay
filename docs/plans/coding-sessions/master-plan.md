@@ -133,6 +133,14 @@ model and probes.
 3. **Terminal tab.** Done when typing in a session's terminal works on the
    Mac.
 
+Built in source on 2026-11-23 in the coding app's branch `workspace-screen`
+(steps 1–3), with the theme in Relay. Evidence: 23 stand-in tests and the type
+check pass; headless runs against a stand-in showed each view at full and
+narrow width; each step had an audit and a bug review, and a first-principles
+review covered all three. Not yet verified: any action against the real hapi
+(send, resume, approve, "+", the terminal), the Mac client, light mode in the
+Mac and typing speed in its WebView.
+
 Agreed with the user on 2026-11-23:
 - "Open workspace…" lists the configured targets plus "Recent sessions in all
   projects";
@@ -163,11 +171,20 @@ Covers C07 in practice. Read those rules before this phase starts.
 
 ## Next
 
-1. Build phase 2 step 1 in the coding app's project, starting with the
-   design's first probe: does hapi's chat reducer bundle and run in Node? The
-   theme goes into Relay core in the same step.
-2. After step 1 passes on the Mac, the user drops `trustedNative` from the
-   coding app's entry in Relay's apps file.
-3. Suggested on 2026-11-19, not yet agreed: show in Relay's tab bar and in the
+1. Deploy, with the user's word for each live step:
+   - the orchestrator merges this Relay branch (the theme and this plan),
+     deploys the backend and publishes a client build that sends the theme;
+   - merge the coding app's `workspace-screen` into its main checkout, which
+     the live service runs; install dependencies; make the service build
+     first (`node build.ts`) with `HAPI_SOURCE_DIR` set to the clean checkout
+     the running hapi was built from; restart it;
+   - drop `trustedNative` from the coding app's entry in Relay's apps file.
+2. One Mac check of phase 2's three "Done when" items together: a real
+   session in the scratch target is started, approved and answered; the
+   tree's counts and a worktree's changes match git; the terminal takes
+   typing; in light and dark, beside the chat.
+3. Then phase 3 (check-back). At phase 2's handoff, rewrite the Phase 1 frame
+   text above and remove the phase 2 design note.
+4. Suggested on 2026-11-19, not yet agreed: show in Relay's tab bar and in the
    conversation when a session waits for approval or finishes (display only),
    and send a Browser selection or capture to a session as a draft.
