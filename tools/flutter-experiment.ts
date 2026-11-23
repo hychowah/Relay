@@ -7,14 +7,11 @@ import {appRegistry} from '../server/app-registry.ts';
 import {startWorkspace} from '../server/runtime.ts';
 import {createBrowser} from '../server/browser.ts';
 import {ProviderSettingsStore} from '../server/provider-settings.ts';
+import {addAppServers} from '../server/app-servers.ts';
 
 const relayOrigin = process.env.FLUTTER_RELAY_ORIGIN || 'http://127.0.0.1:3250';
-const browserOrigin = process.env.FLUTTER_BROWSER_ORIGIN || 'http://127.0.0.1:3251';
-const broker = createBrowser();
-const browser = serve({fetch:broker.app.fetch, hostname:'127.0.0.1', port:3251});
-broker.attach(browser);
-const apps = appRegistry(process.env.RELAY_APPS_FILE,
-  [{id:'browser',name:'Browser',serverUrl:'http://127.0.0.1:3251',browserUrl:browserOrigin}]);
+const browser = createBrowser();
+const apps = appRegistry(process.env.RELAY_APPS_FILE, [browser.app]);
 const dataDir = process.env.RELAY_DATA_DIR || 'runtime/flutter';
 mkdirSync(dataDir, {recursive:true});
 // Import service settings once; subsequent changes belong to this experiment.
@@ -29,10 +26,14 @@ if (process.env.RELAY_PROVIDER_DIR && !existsSync(`${dataDir}/provider.json`)) {
 }
 const workspace = await startWorkspace(dataDir, apps);
 workspace.app.route('/', flutterReleases(`${dataDir}/releases`));
+addAppServers(workspace.app, process.env.RELAY_SERVERS_FILE, {
+  hosts: [new URL(relayOrigin).host, '127.0.0.1:3250', 'localhost:3250'],
+});
 workspace.app.use('/flutter-host.html', async (c, next) => {c.header('Cache-Control', 'no-store'); await next();});
 workspace.app.use('/*', serveStatic({root:'./public'}));
 const server = serve({fetch:workspace.app.fetch, hostname:'127.0.0.1', port:3250});
+browser.attach(server);
 console.log(`Flutter experiment: ${relayOrigin}`);
-async function close() {server.close();broker.close();browser.close();await workspace.close();}
+async function close() {server.close();browser.close();await workspace.close();}
 process.once('SIGTERM',()=>void close());
 process.once('SIGINT',()=>void close());

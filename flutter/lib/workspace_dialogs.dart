@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'relay_api.dart';
 import 'workspace.dart';
+import 'workspace_style.dart';
 
 class WorkspaceDialog extends StatelessWidget {
   const WorkspaceDialog({
@@ -321,10 +322,10 @@ class _MemoryDialogState extends State<MemoryDialog> {
                 title: Text(entry['key'] as String),
                 subtitle: Text(entry['content'] as String),
                 onTap: () => edit(entry),
-                trailing: IconButton(
+                trailing: ConfirmDeleteButton(
                   tooltip: 'Forget memory',
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => forget(entry),
+                  label: 'Forget',
+                  onConfirmed: () => forget(entry),
                 ),
               ),
               if (entry['sourceConversationId'] != null)
@@ -539,7 +540,7 @@ Future<({bool save, String description})?> askBugReport(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '$events recorded events, a screenshot of the current page and '
+            '$events recorded events, a screenshot of the window and '
             'the server record of this conversation will be saved.',
           ),
           const SizedBox(height: 12),

@@ -6,8 +6,8 @@ import 'browser_transcript.dart';
 import 'page_surface.dart';
 import 'relay_api.dart';
 
-/// The desktop Browser's link to the Browser service: only scoped page reads
-/// and video transcript pages travel this socket.
+/// The desktop Browser's link to Relay: only scoped page reads and video
+/// transcript pages travel this socket.
 class BrowserConnection {
   BrowserConnection(this.origin, this.sessionId, this.browser, this.changed);
   final Uri origin;

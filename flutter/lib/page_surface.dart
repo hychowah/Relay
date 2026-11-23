@@ -74,16 +74,38 @@ abstract class PageSurface {
   void dispose();
 }
 
+const pdfZoomActions = ['zoomOut', 'zoomIn', 'zoomFit'];
+
 mixin BrowserSurface {
   Future<Json> read();
   Future<Json> loadTranscript();
 
   /// The video's play time in seconds, or null when no video content plays.
   Future<double?> playbackTime();
-  Future<void> navigate(String text);
+
+  /// A [restoring] load reopens a saved tab; its page is not a new visit.
+  Future<void> navigate(String text, {bool restoring = false});
   bool get canGoBack => false;
   bool get canGoForward => false;
   Future<void> browserAction(String action) async {}
+
+  /// Whether the `highlight` action of [browserAction] works here: it marks
+  /// the selected text in yellow. Relay's menu by the selection also
+  /// recolours and removes.
+  bool get canHighlight => false;
+
+  /// Desktop only. Whether the tab shows a PDF in the Mac's own PDF viewer,
+  /// which takes the [pdfZoomActions] through [browserAction].
+  bool get pdf => false;
+
+  /// Desktop only. Whether the page shows an element fullscreen, such as a
+  /// video. The element fills the page's own view, so in a split pane it
+  /// fills that pane.
+  bool get fullScreen => false;
+
+  /// Desktop only. Shows the page on the whole screen, or stops; stopping
+  /// also ends the page's fullscreen.
+  Future<void> fillScreen(bool on) async {}
 }
 
 typedef PageFactory = PageSurface Function(

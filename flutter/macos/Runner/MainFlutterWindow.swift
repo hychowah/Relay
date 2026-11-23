@@ -4,6 +4,11 @@ import WebKit
 import webview_flutter_wkwebview
 
 class MainFlutterWindow: NSWindow {
+  /// The Browser tab whose fullscreen page fills the screen, and whether
+  /// Relay put the window into macOS fullscreen for it.
+  private var screenPage: Int64?
+  private var ownsFullScreen = false
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -20,7 +25,51 @@ class MainFlutterWindow: NSWindow {
     let browser = FlutterMethodChannel(
       name: "app.relay/browser", binaryMessenger: flutterViewController.engine.binaryMessenger
     )
-    browser.setMethodCallHandler { [weak flutterViewController] call, result in
+    browser.setMethodCallHandler { [weak self, weak flutterViewController] call, result in
+      if call.method == "documentStartScript" || call.method == "fillScreen" {
+        guard let registry = flutterViewController, let window = self,
+              let arguments = call.arguments as? [String: Any],
+              let identifier = arguments["view"] as? NSNumber else {
+          result(FlutterError(code: call.method, message: "The page has no web view.", details: nil))
+          return
+        }
+        if let on = arguments["on"] as? Bool {
+          window.fillScreen(identifier.int64Value, on)
+        } else if let source = arguments["source"] as? String,
+                  let view = FWFWebViewFlutterWKWebViewExternalAPI.webView(
+                    forIdentifier: identifier.int64Value, withPluginRegistry: registry
+                  ) {
+          view.configuration.userContentController.addUserScript(
+            WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: false)
+          )
+        }
+        result(nil)
+        return
+      }
+      if call.method == "popups" || call.method == "closePopups" {
+        guard let registry = flutterViewController, let identifier = call.arguments as? NSNumber,
+              let view = FWFWebViewFlutterWKWebViewExternalAPI.webView(
+                forIdentifier: identifier.int64Value, withPluginRegistry: registry
+              ) else {
+          result(FlutterError(code: "popups", message: "The page has no web view.", details: nil))
+          return
+        }
+        result(call.method == "popups"
+          ? BrowserPopups.install(on: view, channel: browser) : BrowserPopups.close(on: view))
+        return
+      }
+      if call.method == "pdf" {
+        guard let registry = flutterViewController, let arguments = call.arguments as? [String: Any],
+              let identifier = arguments["view"] as? NSNumber,
+              let view = FWFWebViewFlutterWKWebViewExternalAPI.webView(
+                forIdentifier: identifier.int64Value, withPluginRegistry: registry
+              ) else {
+          result(nil)
+          return
+        }
+        BrowserPDF.perform(arguments, on: view, identifier: identifier.int64Value, channel: browser, result: result)
+        return
+      }
       if call.method == "snapshot" || call.method == "selection" {
         guard let registry = flutterViewController, let identifier = call.arguments as? NSNumber,
               let view = FWFWebViewFlutterWKWebViewExternalAPI.webView(
@@ -28,6 +77,17 @@ class MainFlutterWindow: NSWindow {
               ), !view.bounds.isEmpty else {
           if call.method == "selection" { result(nil); return }
           result(FlutterError(code: "capture", message: "Open the page before capturing it.", details: nil))
+          return
+        }
+        // A PDF shown in Relay's own viewer answers for the page under it.
+        if let pdf = BrowserPDF.shown(on: view) {
+          if call.method == "selection" {
+            result(pdf.selection)
+          } else if let png = pdf.snapshot() {
+            result(FlutterStandardTypedData(bytes: png))
+          } else {
+            result(FlutterError(code: "capture", message: "Page capture failed.", details: nil))
+          }
           return
         }
         if call.method == "selection" {
@@ -66,6 +126,45 @@ class MainFlutterWindow: NSWindow {
       result(safari?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
     }
 
+    // Leaving macOS fullscreen by hand also ends the page's fullscreen.
+    NotificationCenter.default.addObserver(
+      forName: NSWindow.didExitFullScreenNotification, object: self, queue: .main
+    ) { [weak self] _ in
+      guard let window = self else { return }
+      window.ownsFullScreen = false
+      if window.screenPage != nil {
+        window.screenPage = nil
+        browser.invokeMethod("leftScreen", arguments: nil)
+      }
+    }
+
     super.awakeFromNib()
+  }
+
+  /// Puts the window into macOS fullscreen for a Browser tab's fullscreen
+  /// page, and takes it back out only if Relay put it there.
+  private func fillScreen(_ page: Int64, _ on: Bool) {
+    let full = styleMask.contains(.fullScreen)
+    if on {
+      screenPage = page
+      if !full {
+        ownsFullScreen = true
+        toggleFullScreen(nil)
+      }
+    } else if screenPage == page {
+      screenPage = nil
+      if ownsFullScreen {
+        ownsFullScreen = false
+        if full { toggleFullScreen(nil) }
+      }
+    }
+  }
+
+  // Browser popups never outlive the window whose tabs opened them.
+  override func close() {
+    for window in NSApp.windows where window.identifier == BrowserPopups.windowIdentifier {
+      window.close()
+    }
+    super.close()
   }
 }

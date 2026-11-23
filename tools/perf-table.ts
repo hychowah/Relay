@@ -1,5 +1,5 @@
-// Shared by `npm run perf` and `npm run perf:ui`: finding the previous saved
-// run and printing an aligned table.
+// Shared by the `npm run perf*` tools: finding the previous saved run and
+// printing an aligned table.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 

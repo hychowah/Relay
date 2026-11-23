@@ -1,5 +1,5 @@
-// The per-scenario summary of the UI smoothness suite, separate from the test
-// so that WSL unit tests can check its arithmetic.
+// The per-scenario summary of the Mac performance suites, separate from the
+// tests so that WSL unit tests can check its arithmetic.
 import 'dart:math';
 import 'dart:ui' show FramePhase, FrameTiming;
 

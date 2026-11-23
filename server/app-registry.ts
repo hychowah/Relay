@@ -23,18 +23,17 @@ const identity = ({ id, name, serverUrl, browserUrl, trustedNative }: AppRegistr
   JSON.stringify([id, name, serverUrl, browserUrl ?? null, trustedNative === true]);
 
 /**
- * Returns a function giving the current apps: the fixed registrations, then
- * the operator's apps file. The file is read now and on each call, and applied
- * only when its text changed; comparing text avoids coarse modification-time
- * resolution at a small file's cost. Unchanged entries keep their integration,
- * so open views and calls continue. A file that cannot be read or applied keeps
+ * Returns a function giving the current apps: the fixed built-in apps, then
+ * the operator's apps file, which cannot reuse a built-in id. The file is read
+ * now and on each call, and applied only when its text changed; comparing
+ * text avoids coarse modification-time resolution at a small file's cost.
+ * Unchanged entries keep their integration, so open views and calls continue. A file that cannot be read or applied keeps
  * the last good list and is reported once in the log.
  */
-export function appRegistry(file: string | undefined, fixed: AppRegistration[] = []): () => RegisteredApp[] {
-  const base = fixed.map(HttpIntegration.register);
-  if (!file) return () => base;
+export function appRegistry(file: string | undefined, fixed: RegisteredApp[] = []): () => RegisteredApp[] {
+  if (!file) return () => fixed;
   const reserved = new Set(fixed.map(({ id }) => id));
-  let current = base;
+  let current = fixed;
   let entries = new Map<string, RegisteredApp>();
   let seen: string | undefined;
   const read = () => {
@@ -59,7 +58,7 @@ export function appRegistry(file: string | undefined, fixed: AppRegistration[] =
         next.set(key, app);
       }
       entries = next;
-      current = [...base, ...next.values()];
+      current = [...fixed, ...next.values()];
       if (loaded) console.log(`Apps file ${file} reloaded: ${next.size} apps.`);
     } catch (error) {
       console.error(`Apps file ${file} was not applied: ${error instanceof Error ? error.message.replace(/\.$/, "") : error}. Keeping the previous ${current.length} apps.`);

@@ -19,7 +19,7 @@ The Flutter macOS release archive was 19.7 MB. That measures distribution
 size. Relay had no Flutter runtime performance measurements when the platform was chosen.
 
 The pinned webview_flutter 4.14.1 plugin supports Android, iOS and macOS. Relay
-has no Windows platform folder. The plugin lacks subresource interception, a
+had no Windows platform folder. The plugin lacks subresource interception, a
 download API and separate data stores. JavaScript channel reachability from
 sandboxed subframes and behavior on a physical Android device are unverified.
 
@@ -30,6 +30,5 @@ sandboxed subframes and behavior on a physical Android device are unverified.
 - Remove Electron source from this branch. Its services and worktree were removed
   the same day.
 - Rules shared by clients belong in the service. Each client presents their results.
-- A Flutter Windows build and a physical Android trial each require a separate
-  request. Phone work is deferred. Merging the web page's records with the
+- A physical Android trial requires a separate request. Phone work is deferred. Merging the web page's records with the
   Flutter app's also requires a separate request.

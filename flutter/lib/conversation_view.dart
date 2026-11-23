@@ -699,9 +699,17 @@ class _CaptureNote extends StatelessWidget {
 }
 
 class SavedReport extends StatelessWidget {
-  const SavedReport({super.key, required this.report, this.error});
+  const SavedReport({
+    super.key,
+    required this.report,
+    this.error,
+    this.onServers,
+  });
   final Json report;
   final String? error;
+
+  /// Opens the App servers screen, offered when the app view could not open.
+  final VoidCallback? onServers;
   @override
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(24),
@@ -713,6 +721,18 @@ class SavedReport extends StatelessWidget {
       if (error != null)
         Text(
           'The saved evidence is available. Its app view could not open: $error',
+        ),
+      if (error != null && onServers != null)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: OutlinedButton.icon(
+              onPressed: onServers,
+              icon: const Icon(Icons.dns_outlined),
+              label: const Text('App servers'),
+            ),
+          ),
         ),
       ...(report['sections'] as List).cast<Json>().map(
         (s) => Padding(

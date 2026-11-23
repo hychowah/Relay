@@ -28,12 +28,7 @@ void main() {
       saveConversation: (_) async {},
     );
     final connection = BrowserConnection(
-      Uri.parse(
-        const String.fromEnvironment(
-          'BROWSER_URL',
-          defaultValue: 'http://127.0.0.1:3251',
-        ),
-      ),
+      workspace.api.origin,
       workspace.browserSessionId,
       workspace.browserTab,
       (_) {},

@@ -2,6 +2,10 @@ import { resolve } from "node:path";
 import { Store } from "./store.ts";
 import { createWorkspace, type RegisteredApp } from "./app.ts";
 import { addBugReports } from "./bug-reports.ts";
+import { addBrowserHistory, browserHistoryData } from "./browser-history.ts";
+import { addHighlights, highlightsData } from "./highlights.ts";
+import { addDevices } from "./devices.ts";
+import { addStoredData } from "./stored-data.ts";
 import { startProviderGateway } from "./provider-gateway.ts";
 import { liveProviders } from "../shared/provider.ts";
 import { Harness } from "./harness.ts";
@@ -36,6 +40,18 @@ export async function startWorkspace(dataDir: string, apps: () => RegisteredApp[
     },
   );
   addBugReports(workspace.app, resolve(dataDir, "bug-reports"), store);
+  addBrowserHistory(workspace.app, store);
+  addHighlights(workspace.app, store);
+  addDevices(workspace.app, store);
+  const stored = addStoredData(workspace.app, store, [browserHistoryData(store), highlightsData(store)]);
+  // A clean-up that fails must not stop the server or its start.
+  const cleanStoredData = () => {
+    try { stored(); }
+    catch (error) { console.warn("Stored data clean-up failed.", error); }
+  };
+  cleanStoredData();
+  const cleanTimer = setInterval(cleanStoredData, 60 * 60_000);
+  cleanTimer.unref();
 
   async function startAgent({ mode, model, reasoningEffort, apiKey }: ProviderUpdate) {
     const gateway = mode === "fixture" ? undefined : await startProviderGateway(liveProviders[mode], apiKey!);
@@ -103,6 +119,7 @@ export async function startWorkspace(dataDir: string, apps: () => RegisteredApp[
     ...workspace,
     async close() {
       clearInterval(trashTimer);
+      clearInterval(cleanTimer);
       await workspace.close();
       await agent.close();
       store.close();

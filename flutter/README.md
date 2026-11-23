@@ -1,6 +1,7 @@
 # Relay Flutter client
 
-Flutter is the main client on the Mac. Windows uses the React browser fallback.
+Flutter is the main client on the Mac. Windows uses the React browser fallback;
+see also the [Windows test build](#windows-test-build).
 Flutter owns tabs, chat and address input; system WebViews render existing apps
 and public websites. The WSL backend owns all model calls and credentials.
 
@@ -28,8 +29,8 @@ its own temporary Room Layout fixture:
 node tests/flutter-host.smoke.mjs
 ```
 
-The backend listens on 3250 (Relay) and 3251 (Browser broker), with its own
-`runtime/flutter/` data. Default mode is scripted. To use the saved DeepSeek connection,
+The backend listens on 3250, with its own `runtime/flutter/` data.
+Default mode is scripted. To use the saved DeepSeek connection,
 set `RELAY_PROVIDER_DIR` to import the existing private provider settings once;
 subsequent provider changes belong to this deployment.
 Keys remain in WSL and existing provider VPN checks apply. No keys go in Dart defines.
@@ -48,23 +49,24 @@ The backend applies changes to that file without a restart; the app picker,
 App library and Bots dialog show them when they open. See
 [Registration](../docs/integration.md#registration).
 
+`RELAY_SERVERS_FILE` optionally names the app servers the App servers screen
+controls; see [Manage app servers](../README.md#manage-app-servers).
+
 A Mac build needs full Xcode and Flutter's macOS plugin toolchain. Android needs
 its SDK/device. The official WebView plugin does not support Linux, so WSL tests
 use fake page surfaces and separately exercise the real HTML app bridge.
 
-For remote devices, forward both WSL ports through the private tailnet and
-set `FLUTTER_RELAY_ORIGIN` and `FLUTTER_BROWSER_ORIGIN` when
-starting the backend to their device-reachable origins. Give the app the same
-origins once in WSL:
+For remote devices, forward the WSL port through the private tailnet and set
+`FLUTTER_RELAY_ORIGIN` to its device-reachable origin when starting the
+backend. Give the app the same origin once in WSL:
 
 ```sh
 git config --local relay.appUrl http://<device-reachable-host>:<relay-port>
-git config --local relay.browserUrl http://<device-reachable-host>:<browser-port>
 ```
 
 The app has no built-in server address. `tools/publish-flutter` builds every
-published app with these two values as `RELAY_URL` and `BROWSER_URL`. A build
-without them talks to `127.0.0.1` and cannot reach its backend or its update feed.
+published app with this value as `RELAY_URL`. A build without it talks to
+`127.0.0.1` and cannot reach its backend or its update feed.
 
 `Relay Flutter.app` uses the private `/flutter-updates/` release channel.
 
@@ -78,22 +80,122 @@ against the Flutter deployment's records without making a model request for thos
 
 Chat supports history/Trash, provider/model selection, conversation thinking effort,
 bots with app scopes, memory editing, forwarding, Markdown, saved sources and activity.
+Devices share one server. The conversation last opened on any device opens on
+each device when it starts or comes back to the front, unless that device chose
+or sent in a chat meanwhile. A new chat is not saved until its first message, so
+it stays open on its device but a restart opens the last saved one. Each device
+keeps its own tabs and saves them on the server; the new tab page lists the
+other devices, and **Open ⟨device⟩'s tabs here** opens a copy beside the tabs
+already open. Nothing follows live afterwards. Saved tabs, like the browsing
+history, are not given to the agent.
 Desktop chat width is saved; phones use an overlay with a compact progress/Stop bar.
 **Workspace menu → Appearance** sets Relay's own screens to System (the default),
 Light or Dark, saved per device. System follows the device's appearance as it
 changes. Pages from apps and websites keep their own look, and the Mac title bar
-follows macOS.
+follows macOS. **Newest tab first**, in the same menu, off by default and saved per device,
+slides each tab you click or open, or the agent opens, to the left end of the strip.
 Browser and app tabs retain their views until closed. Every start, including an
 update restart, reopens the previous tabs and their views, the conversation, the
 draft and the chat panel as it was left; the Mac window keeps its size and position.
 The last active tab shows first, and the other tabs load together in the background.
 A tab that cannot be restored is reported; **Reconnect** retries it during that run.
 All pages share WebKit's persistent website data, which keeps cookies between starts.
-On desktop only, drag a tab onto the left or right half of the page to show two
-tabs side by side; click a pane to select it. Drag the divider between them to
-resize the panes, or double-click it to return to half and half. Click the
-button in the middle of the divider, drag a split tab back onto the tab strip,
-or close one, to end the split. Narrow windows show only the selected tab.
+On desktop only, drag a tab onto a page to split it. A new split tab opens in
+the tab strip. The page's edge nearest the pointer (left, right, top or bottom)
+is where the tab goes, and the highlighted half shows it. Drop more tabs onto
+any pane to split it again, side by side or stacked; dropping a tab that is
+already in the split moves it. The split tab has an accent outline and a small
+map of its panes, with the last selected pane filled. Click a pane to select it. Drag a divider to
+resize its two sides, or double-click it to return to half and half. Click an
+app's own tab to show it full screen, and the split tab to return to the split.
+Closing the split tab ends the split and keeps every app open. Drag a tab from
+the split back onto the tab strip to take it out; closing an app's tab takes it
+out of every split. Narrow windows show only the selected tab.
+
+On macOS only, a page in a Browser tab that opens a sized window on a user
+action (`window.open` with a width or height), as **Continue with Google**
+does, gets its own popup window titled with the site's host, beside its tab.
+The page and its popup can talk to each other and share sign-in. The popup
+closes when its page closes it, when the user closes it, or when its tab or the
+main window closes. Popup pages follow the Browser's address rule, and windows
+that pages open without a user action stay blocked. Any other new window, such
+as a link that opens a new tab, loads in the same tab as before, so a sign-in
+that opens an unsized window loses its opener.
+App views keep sending a new window's address to the default browser. A page
+dialog raised inside a popup window is not shown.
+
+A click that focuses the Browser address bar selects the whole address, as in
+other browsers; a further click places the caret.
+
+On the desktop (Windows not yet checked), the Browser address bar suggests
+pages visited before once you
+type in it, best first by how often and how recently each was visited; an
+address opened from the address bar counts more than a followed link, and
+pages the agent opens in a Browser tab count as visits too. As in Chrome, the
+best suggestion's address fills in after what you type when it starts with it,
+with the filled-in part selected; Backspace or Esc removes it, and a paste
+fills nothing in. Arrow keys and Enter, or a click, open a suggestion. With
+none highlighted, Enter opens the suggested page while its address is filled
+in, and otherwise what was typed. The history is kept on the Relay server, one
+entry per address, so every desktop using that server shares it. The agent and app
+integrations never get it, and history requests are left out of bug recordings
+(the addresses you type are still recorded as navigation). Pages not visited
+for 90 days drop out unless **Stored data** says otherwise.
+
+**Workspace menu → Stored data** lists what the Relay server keeps as you
+work, for every device that uses it: browsing history and highlights now, and
+any kind the server adds later. Each kind shows how many items it holds and
+their size, and has a clear button. **Auto-clean** forgets a kind's items once
+they are older than the number of days you set; turned off, they are kept
+until you clear them. Browsing history starts at 90 days and highlights start
+with auto-clean off. A period is saved with **Save**; when it would delete
+items now, the button first says how many and a second click agrees. The
+server cleans at start, every hour and when a period is saved.
+
+On the desktop (Windows not yet checked), select text on a page or PDF in a
+Browser tab: once the mouse is released, a menu of colours shows beside it,
+and a colour marks the text. Click marked text for the same menu, with its
+colour ticked, to change the colour or remove the mark (a second click on
+**Remove** confirms). The menu hides while the page scrolls or a PDF zooms.
+**Highlight** beside the address bar marks the selected text in yellow.
+Highlights are kept on the Relay server for the page's address (without its
+#fragment), so they return on the next visit and on every desktop. A web page's highlight is the quoted text and a little of the text
+around it, not a place in the page: it shows wherever that text is on a page
+with that address, and only while it is there. A page that redraws itself, or
+changes its content under one address as single-page apps do, keeps its
+highlights on the right text, and a view without that text shows none.
+Highlights are painted without changing the page's own elements. Text inside a
+frame, such as an embedded document, cannot be highlighted. Like browsing
+history, highlights are never given to the agent or to app integrations, and
+their requests are left out of bug recordings. A page's own scripts can read
+the highlights kept for that page's address, since they are shown in the page;
+they never get another address's.
+
+On macOS only, a video's fullscreen button works in a Browser tab, also for a
+player embedded from another site that allows fullscreen. In split view the
+video fills its own pane. A tab shown alone takes the whole screen: the tab
+strip, address bar and chat hide and the window enters macOS fullscreen.
+Escape, the player's own button, or leaving macOS fullscreen ends it, and so
+does another tab opening, or the player leaving the page. As in a browser, only
+a click or key press can start it, and each one starts it once. A video in a
+popup window fills only that window.
+
+On macOS only, a PDF opened in a Browser tab shows in the Mac's own PDF viewer
+(PDFKit, as in Preview) in place of WebKit's. **Zoom out**, **Zoom in** and
+**Fit to width** appear beside the address bar, and a pinch zooms too.
+**Highlight** works as on web pages; a PDF's highlight also keeps where its
+lines are drawn, so a PDF that changes under the same address can show old
+highlights in the wrong place. Text selected in the PDF shows in the chat's
+page context at once and goes with the next question. The agent's
+`browser.read` gets the PDF's text from the page in view onward, with that
+page's number and the page count. A link in the PDF opens in the tab, under
+the Browser's address rule.
+Relay fetches the PDF a second time for this viewer, with the tab's cookies
+and only from the address the tab shows: a redirect is not followed. If the
+fetch fails, or the PDF needs a password, WebKit's own view stays, without
+these features. A PDF embedded inside a web page keeps the page's own viewer.
+The viewer reads the PDF in Relay's own process, which is not sandboxed, where
+WebKit reads it in its sandboxed web process.
 
 On macOS, select page or PDF text and ask a question with page context enabled.
 With a YouTube video open in a Browser tab, ask about the video: the agent reads
@@ -112,16 +214,43 @@ Image input currently uses Claude. The service keeps a sent screenshot with its
 message, so reopening the chat shows it again; Trash hides it and the 24-hour
 Trash cleanup deletes it with the conversation.
 
-### Measure UI smoothness
+### Mac checks
 
-Run `npm run perf:ui` from the repository root on WSL now and then; it has no pass
-or fail. For about three minutes a test window shows on the Mac: leave the Mac
-unused, with the window visible and Reduce Motion off. The test app has its own
-bundle id, `app.relay.flutterPerf`, and the run removes its data afterwards.
-Scenarios: the chat panel, typing, tab switching, the transcript pane, scrolling a
-2,000-message conversation and a streaming reply. Results go to
-`tmp/perf/ui-*.json` and are compared with the last run. They cover only
-Flutter's part of each frame.
+`npm run test:mac -- <name>_test.dart`, from the repository root on WSL, runs
+one self-contained integration test on the Mac against real WKWebViews:
+`popup_windows_test.dart` (with its own loopback fixture),
+`video_fullscreen_test.dart`, which puts the test window into macOS fullscreen
+for a few seconds, or `pdf_viewer_test.dart`, which opens one arXiv paper as
+a PDF and as a web page and so needs the internet on the Mac. Like the
+smoothness suite below, it builds a temporary copy under its own bundle id,
+`app.relay.flutterTest`, and removes the copy and the test app's data
+afterwards. It refuses `workflow_test.dart`,
+which uses the Flutter deployment's records.
+
+### Measure performance
+
+Run these from the repository root on WSL now and then; they have no pass or
+fail. `npm run perf:ui` measures smoothness. For about three minutes a test
+window shows on the Mac: leave the Mac unused, with the window visible and
+Reduce Motion off. The test app has its own bundle id, `app.relay.flutterPerf`,
+and the run removes its data afterwards. Scenarios: the chat panel, typing, tab
+switching, the transcript pane, scrolling a 2,000-message conversation and a
+streaming reply. Results go to `tmp/perf/ui-*.json` and are compared with the
+last run. They cover only Flutter's part of each frame.
+
+`npm run perf:stress` uses the same test app for about five minutes. It repeats
+opening and closing ten web tabs, switching through 20 conversations and
+opening the transcript pane, and reports memory growth per cycle after warm-up.
+It then streams a long reply into a 10,000-message conversation with 15 tabs
+open while scrolling and switching tabs, and reports smoothness and memory.
+Results go to `tmp/perf/stress-*.json`.
+
+`npm run perf:mem` reads the memory of the installed app and its WebKit
+processes, adds it to `tmp/perf/mem.jsonl` and shows recent readings; run it
+during a day of use to see growth. It only reads the process list and memory
+figures. Memory is the physical footprint that Activity Monitor shows. WebKit
+processes count for the app whose launchd domain started them, so other apps'
+pages are excluded; WebKit's shared GPU and networking processes count in full.
 
 ## Mac updates
 
@@ -129,10 +258,23 @@ Downloads run at startup and hourly. Workspace menu → Updates shows progress;
 **Install and restart** remains manual and waits for this window's agent work.
 The package is checked against the release hash, bundle signature, identity and
 version before replacement. The previous app is kept only until the new version
-starts; that version then removes it, with older downloads and launch receipts
-on the Mac. Every published Stable package stays in the served release directory
-on WSL for recovery. The app uses ad-hoc signing outside the App Store. It is not
+starts; that version then removes it, with older launch receipts on the Mac.
+Downloads are removed once a check finds the installed build current. Every
+published Stable package stays in the served release directory on WSL for
+recovery. The app uses ad-hoc signing outside the App Store. It is not
 sandboxed so it can replace its own bundle; WebKit still owns web-content processes.
+
+Updates download only changed files. Publishing stores each file of the app once
+in the release directory's `files/` folder, compressed and named by the SHA-256
+of its content, with a list of the build's files, symlinks and executable flags
+that the manifest's `fileList` names. The app reuses its own unchanged files and
+downloads the rest, usually the compiled Dart code and the app binary: about
+7 MB instead of the 20 MB ZIP. Finished files are kept if the connection drops.
+Install builds the app beside the current one from these files, checking each
+against the list, then runs the same signature and identity checks. A release
+without a list, or an app with an older updater, uses the ZIP. Publishing and
+worktree removal delete stored files that neither `latest.json` nor a listed
+test build uses; ZIPs are not touched.
 
 Set the served release directory once in WSL. Linked worktrees share this Git setting.
 
@@ -187,7 +329,7 @@ git config --local relay.macSSH /absolute/path/to/ssh-mac
 The SSH wrapper runs a supplied command on the build Mac and passes stdin/stdout
 through. The build Mac needs the Flutter SDK at the path `tools/publish-flutter` uses. Client-only
 previews use the usual backend. For a server change, run its test backend with
-separate data and set `RELAY_URL` and, if needed, `BROWSER_URL` when publishing.
+separate data and set `RELAY_URL` when publishing.
 The update feed stays at its usual private origin. Set `RELAY_UPDATE_URL` only
 to change the feed itself. Worktrees based on an older client must bring in the
 picker before publishing so their users can return to Stable.
@@ -195,3 +337,32 @@ picker before publishing so their users can return to Stable.
 Public tabs check top-level navigation to private addresses. See the
 [Flutter plan](../docs/plans/flutter/master-plan.md) for WebView limits, native
 verification and deferred platform work.
+
+## Windows test build
+
+Desktop only. On Windows, `lib/windows_web_view.dart` puts WebView2 (through
+`webview_all_windows`) behind the same `webview_flutter` interface, so the
+rest of the client is unchanged. The [Windows record](../docs/plans/flutter/windows.md)
+lists the Mac-only features that are off there.
+
+The build PC needs Flutter 3.50.0 for Windows, Visual Studio 2022 with
+**Desktop development with C++**, the WebView2 runtime and Windows
+**Developer Mode**, which Flutter needs for plugin symlinks. Configure once in WSL:
+
+```sh
+git config --local relay.windowsFlutter 'C:\path\to\flutter'
+git config --local relay.windowsApp 'C:\path\to\Relay Flutter'
+```
+
+Then run `tools/build-windows`. It builds in a temporary folder on the Windows
+drive with the same `relay.appUrl` as Mac builds,
+replaces the program in `relay.windowsApp` and removes the temporary folder.
+Settings and website data (sign-ins, cookies, cache, shared by app pages and
+Browser tabs) stay in `%APPDATA%\Relay\Relay Flutter`. Close the app before
+rebuilding.
+
+`integration_test/windows_web_view_test.dart` checks the Browser's address rule
+and that nothing downloads, against a real WebView2 with a loopback fixture and
+a temporary data folder. Run it with `flutter test
+integration_test/windows_web_view_test.dart -d windows` from a copy of
+`flutter/` on the Windows drive.

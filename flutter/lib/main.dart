@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
@@ -11,43 +13,69 @@ import 'browser_connection.dart';
 import 'browser_transcript.dart';
 import 'relay_api.dart';
 import 'web_page.dart';
+import 'windows_web_view.dart';
 import 'workspace.dart';
 import 'conversation_history.dart';
 import 'provider_settings.dart';
 import 'workspace_dialogs.dart';
 import 'app_library.dart';
+import 'app_servers.dart';
 import 'app_updates.dart';
 import 'conversation_view.dart';
 import 'workspace_style.dart';
 import 'workspace_tabs.dart';
+import 'page_surface.dart';
 import 'region_capture.dart';
+import 'split_layout.dart';
+import 'stored_data.dart';
+import 'window_capture.dart';
 import 'bug_reports.dart';
 import 'capture_flight.dart';
 import 'transcript_pane.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isWindows) {
+    final support = await getApplicationSupportDirectory();
+    await registerWindowsWebView('${support.path}\\WebView2');
+  }
   final prefs = await SharedPreferences.getInstance();
   final device = prefs.getString('device') ?? const Uuid().v4();
   await prefs.setString('device', device);
   // Open tabs. The key keeps its first name, from when only an update restart
   // saved them, so tabs survive updating from or returning to an older build.
   final session = prefs.getString('updateSession');
-  final workspace = Workspace(
-    api: RelayApi(
-      Uri.parse(
-        const String.fromEnvironment(
-          'RELAY_URL',
-          defaultValue: 'http://127.0.0.1:3250',
-        ),
+  // One upload at a time, so the server keeps the latest tabs; a failure only
+  // leaves its copy older.
+  var tabsUpload = Future<void>.value();
+  final api = RelayApi(
+    Uri.parse(
+      const String.fromEnvironment(
+        'RELAY_URL',
+        defaultValue: 'http://127.0.0.1:3250',
       ),
     ),
+  );
+  // Desktop only: Browser history and highlights.
+  final browserHistory = Platform.isMacOS || Platform.isWindows;
+  // Shown to the user's other devices beside the tabs this one saves.
+  final deviceName = Platform.isMacOS
+      ? 'Mac'
+      : Platform.isWindows
+      ? 'Windows PC'
+      : Platform.operatingSystem;
+  final workspace = Workspace(
+    api: api,
     deviceId: device,
-    pages: createWebPage,
+    pages: (spec, changed) =>
+        createWebPage(spec, changed, records: browserHistory ? api : null),
     conversationId: prefs.getString('conversation'),
     pendingSession: session == null ? null : jsonDecode(session) as Json,
     storeSession: (session) async {
       await prefs.setString('updateSession', jsonEncode(session));
+      tabsUpload = tabsUpload
+          .then((_) => api.saveDeviceTabs(device, deviceName, session))
+          .catchError((_) {});
     },
     saveConversation: (id) async {
       if (id == null) {
@@ -56,14 +84,13 @@ Future<void> main() async {
         await prefs.setString('conversation', id);
       }
     },
+    newestTabFirst: prefs.getBool('newestTabFirst') ?? false,
+    saveNewestTabFirst: (value) async {
+      await prefs.setBool('newestTabFirst', value);
+    },
   );
   final connection = BrowserConnection(
-    Uri.parse(
-      const String.fromEnvironment(
-        'BROWSER_URL',
-        defaultValue: 'http://127.0.0.1:3251',
-      ),
-    ),
+    api.origin,
     workspace.browserSessionId,
     workspace.browserTab,
     (_) => workspace.changed(),
@@ -103,6 +130,7 @@ Future<void> main() async {
         await prefs.setString('themeMode', mode.name);
       },
       onClose: connection.close,
+      browserHistory: browserHistory,
     ),
   );
   unawaited(workspace.start());
@@ -122,6 +150,7 @@ class RelayApp extends StatefulWidget {
     this.saveThemeMode,
     this.onClose,
     this.updates,
+    this.browserHistory = false,
   });
   final Workspace workspace;
   final String initialDraft;
@@ -134,6 +163,10 @@ class RelayApp extends StatefulWidget {
   final Future<void> Function(ThemeMode)? saveThemeMode;
   final VoidCallback? onClose;
   final AppUpdates? updates;
+
+  /// Desktop only: Browser tabs keep the server's browsing history, and the
+  /// address bar suggests pages from it.
+  final bool browserHistory;
   @override
   State<RelayApp> createState() => _RelayAppState();
 }
@@ -147,19 +180,21 @@ class _RelayAppState extends State<RelayApp> {
     theme: workspaceTheme(Brightness.light),
     darkTheme: workspaceTheme(Brightness.dark),
     themeMode: themeMode,
-    builder: (context, child) => Theme(
-      data: MediaQuery.sizeOf(context).width < 900
-          ? Theme.of(context).copyWith(
-              visualDensity: VisualDensity.standard,
-              iconButtonTheme: IconButtonThemeData(
-                style: IconButton.styleFrom(
-                  minimumSize: const Size(44, 44),
-                  iconSize: 20,
+    builder: (context, child) => WindowCapture(
+      child: Theme(
+        data: MediaQuery.sizeOf(context).width < 900
+            ? Theme.of(context).copyWith(
+                visualDensity: VisualDensity.standard,
+                iconButtonTheme: IconButtonThemeData(
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(44, 44),
+                    iconSize: 20,
+                  ),
                 ),
-              ),
-            )
-          : Theme.of(context),
-      child: child!,
+              )
+            : Theme.of(context),
+        child: child!,
+      ),
     ),
     home: RelayShell(
       workspace: widget.workspace,
@@ -176,6 +211,7 @@ class _RelayAppState extends State<RelayApp> {
       },
       onClose: widget.onClose,
       updates: widget.updates,
+      browserHistory: widget.browserHistory,
     ),
   );
 }
@@ -194,6 +230,7 @@ class RelayShell extends StatefulWidget {
     required this.onThemeMode,
     this.onClose,
     this.updates,
+    this.browserHistory = false,
   });
   final Workspace workspace;
   final String initialDraft;
@@ -206,6 +243,7 @@ class RelayShell extends StatefulWidget {
   final ValueChanged<ThemeMode> onThemeMode;
   final VoidCallback? onClose;
   final AppUpdates? updates;
+  final bool browserHistory;
   @override
   State<RelayShell> createState() => _RelayShellState();
 }
@@ -215,10 +253,24 @@ class _RelayShellState extends State<RelayShell> {
   Workspace get w => widget.workspace;
   late final TextEditingController draft;
   final address = TextEditingController();
+  final addressFocus = FocusNode();
+  bool pickedSuggestion = false, addressWasFocused = false;
+
+  /// The inline fill-in: what the user typed, the whole address shown, with
+  /// the filled-in rest selected after the typed text, and the page's URL.
+  ({String typed, String text, String url})? fill;
+
+  /// The last edit was a deletion or a paste, or Esc removed the fill-in
+  /// (which also hides the list); each lasts until the user's next edit.
+  bool noFill = false, escaped = false;
+
+  /// The latest suggestions request, kept so that filling in, which changes
+  /// the text but not the query, does not ask again until the page changes.
+  ({String query, Future<List<_Suggestion>> pages})? asked;
   final messagesScroll = ScrollController();
   Timer? saveTimer;
   ({String appId, Uint8List bytes})? capture;
-  bool capturing = false;
+  bool capturing = false, reportingBug = false;
   ({WorkspaceTab tab, ui.Image image, bool reopenChat})? selecting;
   // The composer's thumbnail, and the captured picture on its way there.
   final captureSlot = GlobalKey();
@@ -226,13 +278,25 @@ class _RelayShellState extends State<RelayShell> {
   late bool chatOpen = widget.initialChatOpen, savedChatOpen = chatOpen;
   bool chatOnly = false;
   bool transcriptOpen = false;
+
+  /// The pane a tab is being dragged over and the side it would take.
+  (WorkspaceTab, SplitSide)? dropping;
   ({String pane, String text, String page})? transcriptSelection;
   late double chatWidth = widget.initialChatWidth;
   int lastPresentation = 0;
   String? lastPageUrl;
+
+  /// The page shown on the whole screen.
+  BrowserSurface? onScreen;
+  // The conversation last opened on another device opens here too.
+  late final AppLifecycleListener _lifecycle;
+
   @override
   void initState() {
     super.initState();
+    _lifecycle = AppLifecycleListener(
+      onResume: () => unawaited(w.openCurrentConversation()),
+    );
     draft = TextEditingController(text: widget.initialDraft);
     draft.addListener(_save);
     w.addListener(_changed);
@@ -263,10 +327,12 @@ class _RelayShellState extends State<RelayShell> {
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     saveTimer?.cancel();
     unawaited(widget.saveDraft(draft.text));
     draft.dispose();
     address.dispose();
+    addressFocus.dispose();
     messagesScroll.dispose();
     selecting?.image.dispose();
     flight
@@ -406,38 +472,43 @@ class _RelayShellState extends State<RelayShell> {
       w.recorder.start();
       return;
     }
-    // Capture before the dialog so the picture shows what the user saw.
-    final page = w.active?.page;
-    Uint8List? screenshot;
-    if (page != null && page.canCapture) {
+    // Another click while a report is captured or asked about does nothing;
+    // a second capture would clear the first one's page pictures.
+    if (reportingBug) return;
+    reportingBug = true;
+    try {
+      // Capture before the dialog so the picture shows what the user saw.
+      Uint8List? screenshot;
       try {
-        screenshot = await page.snapshot();
+        screenshot = await captureWindow(context);
       } catch (_) {
         /* The report is still useful without a picture. */
       }
-    }
-    if (!mounted) return;
-    final window = '${MediaQuery.sizeOf(context)}';
-    final answer = await askBugReport(context, w.recorder.events.length);
-    if (answer == null) return;
-    if (!answer.save) {
-      w.recorder.stop();
-      return;
-    }
-    final file = await w.saveBugReport(
-      answer.description,
-      screenshot: screenshot,
-      client: {
-        'app': widget.updates?.installedLabel,
-        'window': window,
-        'chatOpen': chatOpen,
-        'chatOnly': chatOnly,
-        'chatWidth': chatWidth,
-      },
-    );
-    if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Bug report saved: $file')));
+      if (!mounted) return;
+      final window = '${MediaQuery.sizeOf(context)}';
+      final answer = await askBugReport(context, w.recorder.events.length);
+      if (answer == null) return;
+      if (!answer.save) {
+        w.recorder.stop();
+        return;
+      }
+      final file = await w.saveBugReport(
+        answer.description,
+        screenshot: screenshot,
+        client: {
+          'app': widget.updates?.installedLabel,
+          'window': window,
+          'chatOpen': chatOpen,
+          'chatOnly': chatOnly,
+          'chatWidth': chatWidth,
+        },
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Bug report saved: $file')));
+      }
+    } finally {
+      reportingBug = false;
     }
   }
 
@@ -451,6 +522,16 @@ class _RelayShellState extends State<RelayShell> {
           await showDialog<void>(
             context: context,
             builder: (_) => BugReportsDialog(api: w.api),
+          );
+        case 'servers':
+          await showDialog<void>(
+            context: context,
+            builder: (_) => AppServersDialog(api: w.api),
+          );
+        case 'stored':
+          await showDialog<void>(
+            context: context,
+            builder: (_) => StoredDataDialog(api: w.api),
           );
         case 'provider':
           await showDialog<void>(
@@ -525,6 +606,8 @@ class _RelayShellState extends State<RelayShell> {
     final url = w.active?.page?.url;
     if (url != lastPageUrl) {
       lastPageUrl = url;
+      fill = null;
+      asked = null;
       address.text = url == 'about:blank' ? '' : url ?? '';
     }
     // Several controls open or close chat; the panel reopens as it was left.
@@ -532,12 +615,25 @@ class _RelayShellState extends State<RelayShell> {
       savedChatOpen = chatOpen;
       widget.saveChatOpen?.call(chatOpen);
     }
+    // A fullscreen page takes the whole screen when its tab shows alone; in
+    // split view it fills only its own pane. Leaving the screen for any other
+    // reason, such as another tab opening, also ends the page's fullscreen.
+    final inSplit =
+        MediaQuery.sizeOf(context).width >= 900 && w.shownSplit != null;
+    final active = w.active?.page?.browser;
+    final full = active?.fullScreen == true && !inSplit ? active : null;
+    if (full != onScreen) {
+      unawaited(onScreen?.fillScreen(false));
+      unawaited(full?.fillScreen(true));
+      onScreen = full;
+    }
+    final screen = full != null;
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            _toolbar(),
-            if (w.error != null)
+            if (!screen) _toolbar(),
+            if (w.error != null && !screen)
               MaterialBanner(
                 content: Text(w.error!, maxLines: 3),
                 actions: [
@@ -555,7 +651,7 @@ class _RelayShellState extends State<RelayShell> {
                 builder: (context, size) {
                   final page = Column(
                     children: [
-                      if (w.active?.isBrowser == true)
+                      if (w.active?.isBrowser == true && !screen)
                         Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
@@ -585,37 +681,25 @@ class _RelayShellState extends State<RelayShell> {
                                 onPressed: () => w.browserAction('reload'),
                                 icon: const Icon(Icons.refresh),
                               ),
-                              Expanded(
-                                child: TextField(
-                                  controller: address,
-                                  decoration: const InputDecoration(
-                                    hintText: 'Search or enter a web address',
-                                    isDense: true,
-                                    contentPadding: EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 10,
-                                    ),
-                                  ),
-                                  onSubmitted: w.navigate,
-                                ),
-                              ),
+                              Expanded(child: _addressField()),
                               IconButton(
                                 tooltip: 'Go',
-                                onPressed: () => w.navigate(address.text),
+                                onPressed: () => _go(_addressTarget),
                                 icon: const Icon(Icons.arrow_forward),
                               ),
+                              ..._readingControls(),
                             ],
                           ),
                         ),
                       Expanded(
                         child: LayoutBuilder(
                           builder: (context, area) =>
-                              _pages(area.maxWidth, size.maxWidth >= 900),
+                              _pages(area.biggest, size.maxWidth >= 900),
                         ),
                       ),
                     ],
                   );
-                  return _panels(size, page);
+                  return _panels(size, page, screen);
                 },
               ),
             ),
@@ -625,47 +709,358 @@ class _RelayShellState extends State<RelayShell> {
     );
   }
 
+  // Desktop only: zoom for a PDF, which shows in the Mac's own PDF viewer,
+  // and Highlight for the text selected on any page of a Browser tab.
+  List<Widget> _readingControls() {
+    final browser = w.active?.page?.browser;
+    final selection = w.active?.page?.context?['selection'];
+    final selected = selection is String && selection.isNotEmpty;
+    return [
+      if (browser?.pdf == true) ...[
+        IconButton(
+          tooltip: 'Zoom out',
+          onPressed: () => w.browserAction('zoomOut'),
+          icon: const Icon(Icons.zoom_out),
+        ),
+        IconButton(
+          tooltip: 'Zoom in',
+          onPressed: () => w.browserAction('zoomIn'),
+          icon: const Icon(Icons.zoom_in),
+        ),
+        IconButton(
+          tooltip: 'Fit to width',
+          onPressed: () => w.browserAction('zoomFit'),
+          icon: const Icon(Icons.fit_screen),
+        ),
+      ],
+      if (browser?.canHighlight == true)
+        IconButton(
+          tooltip: selected
+              ? 'Highlight the selected text'
+              : 'Select text on the page to highlight it',
+          onPressed: selected ? () => w.browserAction('highlight') : null,
+          icon: const Icon(Icons.border_color),
+        ),
+    ];
+  }
+
+  /// What the address bar opens: the suggested page's own URL while its
+  /// filled-in text is shown, selected or accepted with the caret, since the
+  /// text drops its scheme, `www.` and final `/`; otherwise the text as typed.
+  String get _addressTarget =>
+      address.text == fill?.text ? fill!.url : address.text;
+
+  /// Opens [text] from the address bar; the page it lands on counts as typed.
+  Future<void> _go(String text) async {
+    final page = w.active?.page;
+    await w.navigate(text);
+    if (mounted && w.error == null && page != null && widget.browserHistory) {
+      w.api.browserTyped(page.url);
+    }
+  }
+
+  // Suggestions appear only once the user changes the address the app wrote.
+  // Their first option stands for the typed text and is not listed, so Enter
+  // opens what was typed, or the filled-in page, until the arrow keys move to
+  // a page. The server
+  // answers as the user types; RawAutocomplete drops an answer once the text
+  // has changed again, and until then the earlier list stays, so the typed
+  // text option always reads the field rather than the text it was made for.
+  // As in Chrome, the best page's address also fills in after the typed text;
+  // the query stays what the user typed, so the fill-in asks for nothing new.
+  Widget _addressField() => RawAutocomplete<_Suggestion>(
+    textEditingController: address,
+    focusNode: addressFocus,
+    optionsBuilder: (value) async {
+      final query = value.text == fill?.text ? fill!.typed : value.text;
+      if (!widget.browserHistory ||
+          escaped ||
+          query == lastPageUrl ||
+          query.trim().isEmpty) {
+        return const [];
+      }
+      if (asked?.query != query) {
+        asked = (query: query, pages: w.api.browserSuggestions(query));
+      }
+      final pages = await asked!.pages;
+      // A failed request also answers nothing; ask again next time.
+      if (pages.isEmpty) asked = null;
+      if (mounted) _fillIn(query, pages);
+      return [if (pages.isNotEmpty) _typedText, ...pages];
+    },
+    displayStringForOption: (option) =>
+        option == _typedText ? address.text : option.url,
+    // Enter on the typed text option is opened by onSubmitted.
+    onSelected: (option) {
+      addressFocus.unfocus();
+      if (option == _typedText) return;
+      pickedSuggestion = true;
+      _go(option.url);
+    },
+    fieldViewBuilder: (context, controller, focus, submit) => Builder(
+      builder: (context) => Actions(
+        actions: {
+          DismissIntent: CallbackAction<DismissIntent>(
+            onInvoke: (intent) {
+              if (_filled(address.value)) {
+                escaped = true;
+                address.value = TextEditingValue(
+                  text: fill!.typed,
+                  selection: TextSelection.collapsed(
+                    offset: fill!.typed.length,
+                  ),
+                );
+              }
+              return Actions.maybeInvoke(context, intent);
+            },
+          ),
+        },
+        // A tap focuses the field as the field's own request, which
+        // selectAllOnFocus skips, and the tap has placed the caret by the
+        // time onTap runs; so a click that focuses the field selects here.
+        child: Listener(
+          onPointerDown: (_) => addressWasFocused = addressFocus.hasFocus,
+          child: TextField(
+            controller: controller,
+            focusNode: focus,
+            decoration: const InputDecoration(
+              hintText: 'Search or enter a web address',
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
+            ),
+            inputFormatters: [
+              TextInputFormatter.withFunction(
+                (before, now) => _edited(context, before, now),
+              ),
+            ],
+            onTap: () {
+              if (!addressWasFocused) {
+                address.selection = TextSelection(
+                  baseOffset: 0,
+                  extentOffset: address.text.length,
+                );
+              }
+            },
+            // Each change of the text returns the highlight to the typed text.
+            onChanged: (_) => Actions.maybeInvoke(
+              context,
+              const AutocompleteFirstOptionIntent(),
+            ),
+            onSubmitted: (_) {
+              pickedSuggestion = false;
+              submit();
+              if (!pickedSuggestion) _go(_addressTarget);
+            },
+          ),
+        ),
+      ),
+    ),
+    optionsViewBuilder: (context, select, options) {
+      final highlighted = AutocompleteHighlightedOption.of(context) - 1;
+      return Align(
+        alignment: Alignment.topLeft,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Material(
+            color: colors.surface,
+            elevation: 8,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: colors.outline),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.all(6),
+              children: [
+                for (final (index, option) in options.skip(1).indexed)
+                  ListTile(
+                    dense: true,
+                    selected: index == highlighted,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    title: Text(
+                      option.title.isEmpty ? option.url : option.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: option.title.isEmpty
+                        ? null
+                        : Text(
+                            option.url,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                    onTap: () => select(option),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+
+  bool _filled(TextEditingValue value) =>
+      value.text == fill?.text &&
+      value.selection.start == fill!.typed.length &&
+      value.selection.end == value.text.length &&
+      value.composing.isCollapsed;
+
+  /// Fills in the best page after [query] once its answer arrives, if the
+  /// user is still editing [query], as typed or filled in, with the caret at
+  /// the end and no input method composing.
+  void _fillIn(String query, List<_Suggestion> pages) {
+    final value = address.value;
+    final atEnd =
+        value.selection.isCollapsed &&
+        value.selection.baseOffset == value.text.length &&
+        value.composing.isCollapsed;
+    final typed = _filled(value) ? fill!.typed : (atEnd ? value.text : null);
+    if (noFill || typed != query || !addressFocus.hasFocus) return;
+    final best = pages.firstOrNull;
+    final text = best == null ? null : inlineCompletion(query, best.url);
+    fill = text == null ? null : (typed: query, text: text, url: best!.url);
+    final shown = text ?? query;
+    if (shown != value.text) {
+      address.value = TextEditingValue(
+        text: shown,
+        selection: TextSelection(
+          baseOffset: query.length,
+          extentOffset: shown.length,
+        ),
+      );
+    }
+  }
+
+  /// Applies the user's own edits. Typing the next filled-in character keeps
+  /// the rest filled in without waiting for the server; any other edit drops
+  /// the fill-in, and a deletion or a paste fills nothing in until the next
+  /// edit, as in Chrome. Moving only the caret is not an edit.
+  TextEditingValue _edited(
+    BuildContext context,
+    TextEditingValue before,
+    TextEditingValue now,
+  ) {
+    final shown = fill, typed = now.text, cut = before.selection;
+    // The characters the edit put in place of the selection; several at once
+    // with no input method composing are a paste.
+    final added = typed.length - before.text.length + cut.end - cut.start;
+    escaped = false;
+    if (shown != null &&
+        _filled(before) &&
+        now.composing.isCollapsed &&
+        now.selection.isCollapsed &&
+        now.selection.baseOffset == typed.length &&
+        added == 1 &&
+        typed.length < shown.text.length &&
+        shown.text.toLowerCase().startsWith(typed.toLowerCase())) {
+      noFill = false;
+      fill = (
+        typed: typed,
+        text: typed + shown.text.substring(typed.length),
+        url: shown.url,
+      );
+      // The text stays the same, so onChanged does not run.
+      Actions.maybeInvoke(context, const AutocompleteFirstOptionIntent());
+      return TextEditingValue(
+        text: fill!.text,
+        selection: TextSelection(
+          baseOffset: typed.length,
+          extentOffset: fill!.text.length,
+        ),
+      );
+    }
+    fill = null;
+    noFill =
+        before.composing.isCollapsed &&
+        now.composing.isCollapsed &&
+        (added < 0 || added > 1 || added == 0 && !cut.isCollapsed);
+    return now;
+  }
+
   /// Every tab's page stays in one keyed slot of this stack, so showing it
   /// alone, in a split pane or hidden only changes its position and never
   /// recreates its native view.
-  Widget _pages(double width, bool desktop) {
-    final pair = desktop && w.splitShown ? w.split! : null;
-    final shown = pair ?? [?w.active];
-    // Each pane keeps at least 240 pixels or a fifth of the page, whichever
-    // is larger.
-    final minFraction = (240 / width).clamp(.2, .5);
-    final fraction = w.splitWidth.clamp(minFraction, 1 - minFraction);
-    final middle = width * fraction;
-    Widget pane(WorkspaceTab tab, Widget child, {Key? key}) {
-      final side = pair?.indexOf(tab) ?? -1;
-      return Positioned.fill(
-        key: key,
-        left: side == 1 ? middle + 3 : 0,
-        right: side == 0 ? width - middle + 3 : 0,
-        child: child,
+  Widget _pages(Size size, bool desktop) {
+    final split = desktop ? w.shownSplit?.layout : null;
+    final area = Offset.zero & size;
+    final rects = <WorkspaceTab, Rect>{};
+    final dividers = <(SplitBranch, Rect, Rect)>[];
+    if (split != null) {
+      split.layOut(
+        area,
+        pane: (tab, rect) => rects[tab] = rect,
+        divider: (branch, area, line) => dividers.add((branch, area, line)),
       );
+    } else if (w.active case final tab?) {
+      rects[tab] = area;
     }
+    final shown = rects.keys.toList();
+    Widget pane(WorkspaceTab tab, Widget child, {Key? key}) =>
+        Positioned.fromRect(key: key, rect: rects[tab] ?? area, child: child);
 
-    final frame = pair == null ? 0.0 : 2.0;
+    final frame = split == null ? 0.0 : 2.0;
 
-    Widget dropZone(bool left) => Positioned.fill(
-      left: left ? 0 : width / 2,
-      right: left ? width / 2 : 0,
-      child: DragTarget<WorkspaceTab>(
-        onWillAcceptWithDetails: (details) => w.canSplitWith(details.data),
-        onAcceptWithDetails: (details) {
-          setState(() => chatOnly = false);
-          w.dropInSplit(details.data, left: left);
-        },
-        builder: (context, candidates, _) => candidates.isEmpty
-            ? const SizedBox.expand()
-            : DecoratedBox(
-                key: ValueKey(left ? 'drop-left' : 'drop-right'),
-                decoration: BoxDecoration(
-                  color: colors.primary.withValues(alpha: .12),
-                  border: Border.all(color: colors.primary, width: 2),
+    // A tab dropped on a pane takes the side whose edge is nearest.
+    Widget dropZone(WorkspaceTab target) => pane(
+      target,
+      Builder(
+        builder: (zone) {
+          SplitSide side(Offset global) {
+            final box = zone.findRenderObject()! as RenderBox;
+            return SplitSide.nearest(box.globalToLocal(global), box.size);
+          }
+
+          return DragTarget<WorkspaceTab>(
+            onWillAcceptWithDetails: (details) =>
+                details.data != target && details.data is! SplitTab,
+            onMove: (details) {
+              final next = (target, side(details.offset));
+              if (dropping != next) setState(() => dropping = next);
+            },
+            onLeave: (_) {
+              if (dropping?.$1 == target) setState(() => dropping = null);
+            },
+            onAcceptWithDetails: (details) {
+              setState(() {
+                dropping = null;
+                chatOnly = false;
+              });
+              w.dropInSplit(details.data, target, side(details.offset));
+            },
+            builder: (context, candidates, _) {
+              final hover = dropping;
+              if (candidates.isEmpty || hover == null || hover.$1 != target) {
+                return const SizedBox.expand();
+              }
+              final at = hover.$2;
+              return Align(
+                alignment: switch (at) {
+                  SplitSide.left => Alignment.centerLeft,
+                  SplitSide.right => Alignment.centerRight,
+                  SplitSide.top => Alignment.topCenter,
+                  SplitSide.bottom => Alignment.bottomCenter,
+                },
+                child: FractionallySizedBox(
+                  widthFactor: at.axis == Axis.horizontal ? .5 : 1,
+                  heightFactor: at.axis == Axis.vertical ? .5 : 1,
+                  child: DecoratedBox(
+                    key: ValueKey('drop-${at.name}'),
+                    decoration: BoxDecoration(
+                      color: colors.primary.withValues(alpha: .12),
+                      border: Border.all(color: colors.primary, width: 2),
+                    ),
+                  ),
                 ),
-              ),
+              );
+            },
+          );
+        },
       ),
     );
 
@@ -683,7 +1078,7 @@ class _RelayShellState extends State<RelayShell> {
               Builder(
                 builder: (context) {
                   final bar = ColoredBox(
-                    color: pair != null && w.active == tab
+                    color: split != null && w.active == tab
                         ? colors.primary.withValues(alpha: .45)
                         : Colors.transparent,
                   );
@@ -723,8 +1118,8 @@ class _RelayShellState extends State<RelayShell> {
                         right: frame,
                         bottom: frame,
                         child: Offstage(
-                          offstage: !shown.contains(tab),
-                          child: tab.page!.widget,
+                          offstage: !rects.containsKey(tab),
+                          child: PageSlot(page: tab.page!),
                         ),
                       ),
                     ],
@@ -738,6 +1133,8 @@ class _RelayShellState extends State<RelayShell> {
               apps: w.allowedApps,
               onChoose: _choose,
               onShow: w.refreshApps,
+              devices: w.otherDevices,
+              onOpenDevice: w.openDeviceTabs,
             ),
           ),
         for (final tab in shown) ...[
@@ -758,21 +1155,45 @@ class _RelayShellState extends State<RelayShell> {
                 apps: w.allowedApps,
                 onChoose: _choose,
                 onShow: w.refreshApps,
+                devices: w.otherDevices,
+                onOpenDevice: w.openDeviceTabs,
               ),
             ),
           if (tab.report != null && (tab.page == null || tab.error != null))
             pane(
               tab,
               key: ValueKey('report-${tab.id}'),
-              SavedReport(report: tab.report!, error: tab.error),
+              SavedReport(
+                report: tab.report!,
+                error: tab.error,
+                onServers: tab.isBrowser ? null : () => _menu('servers'),
+              ),
             ),
           if (tab.error != null && tab.report == null)
             pane(
               tab,
               key: ValueKey('error-${tab.id}'),
-              Center(child: Text(tab.error!)),
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: 16,
+                  children: [
+                    Text(tab.error!),
+                    // The app's server may be stopped.
+                    if (!tab.isBrowser)
+                      OutlinedButton.icon(
+                        onPressed: () => _menu('servers'),
+                        icon: const Icon(Icons.dns_outlined),
+                        label: const Text('App servers'),
+                      ),
+                  ],
+                ),
+              ),
             ),
-          if (tab.appId != null && tab.page == null && tab.report == null)
+          if (tab.appId != null &&
+              tab.page == null &&
+              tab.report == null &&
+              tab.error == null)
             pane(
               tab,
               key: ValueKey('loading-${tab.id}'),
@@ -781,7 +1202,7 @@ class _RelayShellState extends State<RelayShell> {
           // The other pane's tint is painted over its page on purpose: on
           // macOS a native page loses the mouse wherever Flutter paints over
           // it, so one click there selects the pane.
-          if (pair != null && w.active != tab)
+          if (split != null && w.active != tab)
             pane(
               tab,
               key: ValueKey('pane-${tab.id}'),
@@ -797,64 +1218,45 @@ class _RelayShellState extends State<RelayShell> {
               ),
             ),
         ],
-        if (pair != null) ...[
-          Positioned(
-            key: const ValueKey('split-divider'),
-            left: middle - 3,
-            width: 6,
-            top: 0,
-            bottom: 0,
-            child: MouseRegion(
-              cursor: SystemMouseCursors.resizeColumn,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onHorizontalDragUpdate: (details) => setState(() {
-                  w.splitWidth = (fraction + details.delta.dx / width).clamp(
-                    minFraction,
-                    1 - minFraction,
-                  );
-                }),
-                onHorizontalDragEnd: (_) => w.changed(),
-                onDoubleTap: () {
-                  w.splitWidth = .5;
-                  w.changed();
-                },
-                child: ColoredBox(color: colors.outline),
-              ),
-            ),
+        for (final (index, (branch, area, line)) in dividers.indexed)
+          Positioned.fromRect(
+            key: ValueKey('split-divider-$index'),
+            rect: line,
+            child: _divider(branch, area),
           ),
-          Positioned(
-            left: middle - 14,
-            width: 28,
-            top: 0,
-            bottom: 0,
-            child: Center(
-              child: Material(
-                shape: CircleBorder(side: BorderSide(color: colors.outline)),
-                color: colors.surface,
-                child: IconButton(
-                  tooltip: 'Exit split view',
-                  iconSize: 16,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 28,
-                    height: 28,
-                  ),
-                  icon: const Icon(Icons.close),
-                  // Leaving with the other tab keeps the selected one shown.
-                  onPressed: () =>
-                      w.leaveSplit(pair.firstWhere((tab) => tab != w.active)),
-                ),
-              ),
-            ),
-          ),
-        ],
-        if (desktop) ...[dropZone(true), dropZone(false)],
+        if (desktop) ...[for (final tab in shown) dropZone(tab)],
       ],
     );
   }
 
-  Widget _panels(BoxConstraints size, Widget page) {
+  Widget _divider(SplitBranch branch, Rect area) {
+    final horizontal = branch.axis == Axis.horizontal;
+    void drag(DragUpdateDetails details) => setState(
+      () => horizontal
+          ? branch.resize(details.delta.dx, area.width)
+          : branch.resize(details.delta.dy, area.height),
+    );
+    return MouseRegion(
+      cursor: horizontal
+          ? SystemMouseCursors.resizeColumn
+          : SystemMouseCursors.resizeRow,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragUpdate: horizontal ? drag : null,
+        onHorizontalDragEnd: horizontal ? (_) => w.changed() : null,
+        onVerticalDragUpdate: horizontal ? null : drag,
+        onVerticalDragEnd: horizontal ? null : (_) => w.changed(),
+        onDoubleTap: () {
+          branch.fraction = .5;
+          w.changed();
+        },
+        child: ColoredBox(color: colors.outline),
+      ),
+    );
+  }
+
+  /// Chat stays built but hidden while a page fills the [screen].
+  Widget _panels(BoxConstraints size, Widget page, bool screen) {
     final desktop = size.maxWidth >= 900;
     final minFraction = (320 / size.maxWidth).clamp(.2, .5);
     final fraction = chatWidth.clamp(minFraction, .5);
@@ -893,13 +1295,13 @@ class _RelayShellState extends State<RelayShell> {
         return Stack(
           children: [
             Positioned.fill(
-              right: desktop ? (panelWidth + 6) * reveal : 0,
+              right: desktop && !screen ? (panelWidth + 6) * reveal : 0,
               child: Offstage(
-                offstage: expand == 1,
+                offstage: expand == 1 && !screen,
                 child: ExcludeFocus(excluding: chatOnly, child: page),
               ),
             ),
-            if (!desktop && reveal < 1)
+            if (!desktop && reveal < 1 && !screen)
               Positioned(
                 left: 12,
                 right: 12,
@@ -919,25 +1321,32 @@ class _RelayShellState extends State<RelayShell> {
                 bottom: desktop ? 0 : -height * (1 - reveal),
                 width: width + gutter,
                 height: height,
-                child: IgnorePointer(
-                  ignoring: !chatOpen,
-                  child: Row(
-                    children: [
-                      if (desktop)
-                        SizedBox(width: gutter, height: height, child: divider),
-                      Expanded(
-                        child: Material(
-                          elevation: desktop ? 0 : 12 * (1 - expand),
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(
-                              desktop ? 0 : 18 * (1 - expand),
-                            ),
+                child: Offstage(
+                  offstage: screen,
+                  child: IgnorePointer(
+                    ignoring: !chatOpen,
+                    child: Row(
+                      children: [
+                        if (desktop)
+                          SizedBox(
+                            width: gutter,
+                            height: height,
+                            child: divider,
                           ),
-                          clipBehavior: Clip.antiAlias,
-                          child: chat,
+                        Expanded(
+                          child: Material(
+                            elevation: desktop ? 0 : 12 * (1 - expand),
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(
+                                desktop ? 0 : 18 * (1 - expand),
+                              ),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: chat,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -985,20 +1394,26 @@ class _RelayShellState extends State<RelayShell> {
         Expanded(
           child: DragTarget<WorkspaceTab>(
             onWillAcceptWithDetails: (details) =>
-                w.split?.contains(details.data) ?? false,
+                w.shownSplit?.layout.contains(details.data) ?? false,
             onAcceptWithDetails: (details) => w.leaveSplit(details.data),
-            builder: (context, _, _) => WorkspaceTabs(
-              tabs: List.of(w.tabs),
-              selected: chatOnly ? null : w.active,
-              split: MediaQuery.sizeOf(context).width >= 900 ? w.split : null,
-              draggable: MediaQuery.sizeOf(context).width >= 900,
-              onSelect: (tab) {
-                w.recorder.action('select tab', {'tab': tab.title});
-                setState(() => chatOnly = false);
-                w.select(tab);
-              },
-              onClose: w.closeTab,
-            ),
+            builder: (context, _, _) {
+              // Narrow windows show only the selected tab, never the split.
+              final split = MediaQuery.sizeOf(context).width >= 900
+                  ? w.shownSplit
+                  : null;
+              return WorkspaceTabs(
+                tabs: List.of(w.tabs),
+                selected: chatOnly ? null : split ?? w.active,
+                split: split?.layout.tabs,
+                draggable: MediaQuery.sizeOf(context).width >= 900,
+                onSelect: (tab) {
+                  w.recorder.action('select tab', {'tab': tab.title});
+                  setState(() => chatOnly = false);
+                  w.select(tab, alone: true, opened: true);
+                },
+                onClose: w.closeTab,
+              );
+            },
           ),
         ),
         IconButton(
@@ -1050,6 +1465,7 @@ class _RelayShellState extends State<RelayShell> {
             _menuItem('library', 'App library', Icons.grid_view_rounded),
             _menuItem('bots', 'Bots', Icons.smart_toy_outlined),
             _menuItem('memory', 'Memory', Icons.bookmarks_outlined),
+            _menuItem('servers', 'App servers', Icons.dns_outlined),
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 5),
               child: Divider(),
@@ -1081,6 +1497,12 @@ class _RelayShellState extends State<RelayShell> {
               ],
               child: const Text('Appearance'),
             ),
+            CheckboxMenuButton(
+              value: w.newestTabFirst,
+              onChanged: (value) => w.setNewestTabFirst(value!),
+              child: const Text('Newest tab first'),
+            ),
+            _menuItem('stored', 'Stored data', Icons.storage_rounded),
             if (widget.updates != null)
               _menuItem(
                 'updates',
@@ -1566,10 +1988,16 @@ class NewTabPage extends StatefulWidget {
     required this.apps,
     required this.onChoose,
     required this.onShow,
+    required this.devices,
+    required this.onOpenDevice,
   });
   final List<WorkspaceApp> apps;
   final Future<void> Function(WorkspaceApp) onChoose;
   final Future<void> Function() onShow;
+
+  /// The user's other devices with the tabs each saved last.
+  final Future<List<Json>> Function() devices;
+  final Future<void> Function(Json tabs) onOpenDevice;
   @override
   State<NewTabPage> createState() => _NewTabPageState();
 }
@@ -1577,11 +2005,119 @@ class NewTabPage extends StatefulWidget {
 class _NewTabPageState extends State<NewTabPage> {
   ColorScheme get colors => Theme.of(context).colorScheme;
   String search = '';
+  late final Future<List<Json>> devices = widget.devices();
   @override
   void initState() {
     super.initState();
     unawaited(widget.onShow());
   }
+
+  String _ago(int at) {
+    final minutes = DateTime.now()
+        .difference(DateTime.fromMillisecondsSinceEpoch(at))
+        .inMinutes;
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return '$minutes min ago';
+    if (minutes < 24 * 60) return '${minutes ~/ 60} h ago';
+    return '${minutes ~/ (24 * 60)} days ago';
+  }
+
+  /// What a saved tab shows: a website's host, or its app or report name.
+  String? _tabName(Json tab) {
+    if (tab['split'] != null) return null;
+    final url = tab['url'] as String?;
+    final host = url == null ? null : Uri.tryParse(url)?.host;
+    if (host != null && host.isNotEmpty) return host;
+    final source = tab['source'] as Map?;
+    return source?['title'] as String? ??
+        widget.apps.where((app) => app.id == tab['appId']).firstOrNull?.name;
+  }
+
+  Widget _devices() => FutureBuilder(
+    future: devices,
+    builder: (context, snapshot) {
+      final found = snapshot.data ?? const [];
+      if (found.isEmpty) return const SizedBox.shrink();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 18),
+          Text(
+            'ON YOUR OTHER DEVICES',
+            style: TextStyle(
+              fontSize: 10,
+              letterSpacing: 1.2,
+              fontWeight: FontWeight.w600,
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (final device in found)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Material(
+                color: colors.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: colors.outline),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () => widget.onOpenDevice(device['tabs'] as Json),
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.devices_rounded,
+                          size: 20,
+                          color: colors.primary,
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Open ${device['name']}\'s tabs here',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                [
+                                  _ago(device['updatedAt'] as int),
+                                  ...{
+                                    for (final tab
+                                        in ((device['tabs'] as Json)['tabs']
+                                                as List)
+                                            .cast<Json>())
+                                      ?_tabName(tab),
+                                  },
+                                ].join(' · '),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: colors.onSurfaceVariant,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Icon(Icons.arrow_outward_rounded, size: 17),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    },
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -1720,6 +2256,7 @@ class _NewTabPageState extends State<NewTabPage> {
                     'No matching apps.',
                     style: TextStyle(color: colors.onSurfaceVariant),
                   ),
+                if (search.trim().isEmpty) _devices(),
               ],
             ),
           ),
@@ -1728,3 +2265,25 @@ class _NewTabPageState extends State<NewTabPage> {
     );
   }
 }
+
+/// The address-bar text that completes [typed] with [url] inline, or null
+/// when [url], without its scheme and `www.`, does not continue [typed]. The
+/// typed characters stay as typed, and a bare site has no trailing `/`.
+String? inlineCompletion(String typed, String url) {
+  final prefix = RegExp(r'^(https?://)?(www\.)?', caseSensitive: false);
+  final start = typed.replaceFirst(prefix, '');
+  var address = url.replaceFirst(prefix, '');
+  if (RegExp(r'^[^/]+/$').hasMatch(address)) {
+    address = address.substring(0, address.length - 1);
+  }
+  if (start.isEmpty ||
+      address.length <= start.length ||
+      !address.toLowerCase().startsWith(start.toLowerCase())) {
+    return null;
+  }
+  return typed + address.substring(start.length);
+}
+
+/// An address-bar suggestion: a visited page, or [_typedText].
+typedef _Suggestion = ({String url, String title});
+const _Suggestion _typedText = (url: '', title: '');

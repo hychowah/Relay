@@ -7,26 +7,33 @@ import 'package:material_ui/material_ui.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
 
 import 'browser_comment.dart';
 import 'browser_transcript.dart';
+import 'highlight_menu.dart';
 import 'page_surface.dart';
 import 'relay_api.dart';
 import 'workspace_style.dart';
 
-const _readPage = '''JSON.stringify({url:location.href,title:document.title,
+// WebView2 (Windows) shows Relay's own HTML at a data: address where other
+// web views use about:blank; websites cannot open data: in the main frame.
+const _readPage = '''JSON.stringify({url:location.protocol==='data:'?'about:blank':location.href,title:document.title,
  selection:window.__relaySelection||window.getSelection()?.toString().slice(0,4000)||'',
  text:document.body?.innerText.slice(0,24000)||'',
  links:[...document.querySelectorAll('a[href]')].filter(a=>a.getClientRects().length).slice(0,60).map(a=>({text:a.innerText.slice(0,500),url:a.href.slice(0,2000)})),
  capturedAt:new Date().toISOString()})''';
+// A drag changes the selection many times, and each report redraws the
+// whole workspace; Relay hears once it settles, as from the PDF viewer.
 const _observePage =
     '''(()=>{if(window.__relayObserved)return;window.__relayObserved=true;
- let timer;const notify=()=>{clearTimeout(timer);timer=setTimeout(()=>RelayBrowser.postMessage('interaction'),80)};
+ let timer,settle;const notify=()=>{clearTimeout(timer);timer=setTimeout(()=>RelayBrowser.postMessage('interaction'),80)};
  const selection=()=>window.getSelection()?.toString().slice(0,4000)||'';
  document.addEventListener('selectionchange',()=>{
    const text=selection();
    if(text || document.hasFocus()) window.__relaySelection=text;
-   RelayBrowser.postMessage('selection:'+(window.__relaySelection||''));
+   clearTimeout(settle);
+   settle=setTimeout(()=>RelayBrowser.postMessage('selection:'+(window.__relaySelection||'')),150);
  },true);
  for(const type of ['pointerdown','keydown'])document.addEventListener(type,()=>{
    window.__relaySelection='';notify();
@@ -92,17 +99,72 @@ Future<Uri> browserUrl(String text) async {
   return uri;
 }
 
-PageSurface createWebPage(PageSpec spec, void Function(bool) changed) {
+/// Whether a Browser tab or popup may load [url] in its main frame.
+Future<bool> publicPageAllowed(String url) async {
+  if (url == 'about:blank') return true;
+  if (!['https', 'http'].contains(Uri.tryParse(url)?.scheme)) return false;
+  try {
+    await browserUrl(url);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+const _browserChannel = MethodChannel('app.relay/browser');
+
+/// The Browser page filling the screen (desktop only).
+_BrowserPage? _onScreen;
+
+/// The Browser pages whose PDF shows in the Mac's PDF viewer, by web view
+/// (desktop only).
+final _pdfPages = <int, _BrowserPage>{};
+
+/// Answers the Mac runner's calls on the browser channel (desktop only):
+/// a Browser popup window asks before each main-frame load, the window says
+/// when the user left macOS fullscreen, and the PDF viewer reports the text
+/// selected in it and where to show the highlight menu.
+Future<Object?> browserChannelCall(MethodCall call) async {
+  if (call.method == 'pdfSelection') {
+    final event = call.arguments as Map;
+    _pdfPages[event['view']]?._message('selection:${event['text']}');
+    return null;
+  }
+  if (call.method == 'pdfMenu') {
+    final event = call.arguments as Map;
+    _pdfPages[event['view']]?._showMenu(event['menu']);
+    return null;
+  }
+  if (call.method == 'allowPopupPage') {
+    return publicPageAllowed(call.arguments as String);
+  }
+  if (call.method == 'leftScreen') {
+    final page = _onScreen;
+    await page?.fillScreen(false);
+    if (page != null && !page._disposed) page.changed(false);
+    return null;
+  }
+  throw MissingPluginException(call.method);
+}
+
+/// Browser tabs keep the pages they show in the server's browsing history,
+/// and the text highlighted on them, through [records] when it is given.
+PageSurface createWebPage(
+  PageSpec spec,
+  void Function(bool) changed, {
+  RelayApi? records,
+}) {
   if (spec.report != null) return _ReportPage(spec, changed);
-  if (spec.browser) return _BrowserPage(spec, changed);
+  if (spec.browser) return _BrowserPage(spec, changed, records);
   return _AppPage(spec, changed);
 }
 
 abstract class _WebPage extends PageSurface {
-  _WebPage(this.spec, this.changed);
+  _WebPage(this.spec, this.changed, [WebViewController? controller])
+    : controller = controller ?? WebViewController();
   final PageSpec spec;
   final void Function(bool) changed;
-  final controller = WebViewController();
+  final WebViewController controller;
   final _ready = Completer<void>();
   bool _disposed = false;
   Json? _context;
@@ -113,8 +175,10 @@ abstract class _WebPage extends PageSurface {
   Future<void> refreshSelection() async {
     if (!Platform.isMacOS || _disposed) return;
     final webKit = controller.platform as WebKitWebViewController;
-    _nativeSelection = await const MethodChannel('app.relay/browser')
-        .invokeMethod<String>('selection', webKit.webViewIdentifier);
+    _nativeSelection = await _browserChannel.invokeMethod<String>(
+      'selection',
+      webKit.webViewIdentifier,
+    );
   }
 
   // The Builder keeps a context for the page's JavaScript dialogs.
@@ -192,8 +256,10 @@ abstract class _WebPage extends PageSurface {
   @override
   Future<Uint8List> snapshot() async {
     final webKit = controller.platform as WebKitWebViewController;
-    final bytes = await const MethodChannel('app.relay/browser')
-        .invokeMethod<Uint8List>('snapshot', webKit.webViewIdentifier);
+    final bytes = await _browserChannel.invokeMethod<Uint8List>(
+      'snapshot',
+      webKit.webViewIdentifier,
+    );
     if (bytes == null) throw StateError('The page could not be captured.');
     return bytes;
   }
@@ -216,15 +282,67 @@ abstract class _WebPage extends PageSurface {
 }
 
 class _BrowserPage extends _WebPage with BrowserSurface {
-  _BrowserPage(super.spec, super.changed) {
+  // On macOS WebKit lets scripts open windows without a user action unless
+  // told otherwise; Relay keeps WebKit's popup blocker on.
+  _BrowserPage(PageSpec spec, void Function(bool) changed, this._records)
+    : super(
+        spec,
+        changed,
+        Platform.isMacOS
+            ? WebViewController.fromPlatformCreationParams(
+                WebKitWebViewControllerCreationParams(
+                  javaScriptCanOpenWindowsAutomatically: false,
+                ),
+              )
+            : null,
+      ) {
     _initialize();
   }
   Completer<void>? _navigation;
   String _title = '', _url = 'about:blank';
+  final RelayApi? _records;
+  // The address this tab last counted as a visit. While a load is under way
+  // its address may still pass through redirects; only the finished page counts.
+  String? _visited;
+  // The counted address still waiting for its one title; later title changes,
+  // such as unread counts, are not sent.
+  String? _untitled;
+  // A restored tab's first page is not a new visit; counting it on every
+  // launch would keep tabs left open at the top of the history.
+  bool _restoring = false;
+  bool _loading = false;
   int _generation = 0;
   String? _comment, _presentationId;
   int _transcriptRequests = 0;
   final _transcriptReplies = <String, Completer<Json>>{};
+  // Desktop only. The Mac runner lays its PDF viewer over a page that is a
+  // PDF. [_pdfOpening] ends once the viewer shows or the page keeps WebKit's
+  // own PDF view. [_documents] counts the documents the tab has shown, so a
+  // viewer or a highlights reply meant for an earlier one is dropped.
+  @override
+  bool pdf = false;
+  Future<void>? _pdfOpening;
+  int _documents = 0;
+  // Desktop only for now: highlights need the server's records.
+  @override
+  bool get canHighlight => _records != null;
+  // The address of the document whose highlights are loaded, as that
+  // document reported it (see [_documentAddress]), and its highlights by
+  // id: as the server keeps them, and as shown, with changes still on their
+  // way to the server.
+  String? _highlightsAddress;
+  String _highlightsSite = '';
+  final _kept = <String, Json>{}, _shown = <String, Json>{};
+  static String? _highlightScript;
+  // Changes reach the server one at a time, in the order they were made.
+  // The latest change of each highlight is numbered, so an earlier one that
+  // fails is not undone over it.
+  Future<void> _saving = Future.value();
+  final _latestChange = <String, int>{};
+  int _changes = 0;
+  // Where the highlight menu shows, and the highlight it is for; none for
+  // selected text.
+  ({Rect at, String? id})? _menu;
 
   @override
   Widget get widget => Stack(
@@ -233,6 +351,19 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       super.widget,
       if (_comment != null)
         BrowserComment(text: _comment!, onDismiss: _dismissComment),
+      if (_menu case final menu?)
+        HighlightMenu(
+          at: menu.at,
+          color: menu.id == null
+              ? null
+              : '${_shown[menu.id]?['color'] ?? 'yellow'}',
+          // A change the server does not take shows as the server keeps it
+          // (see [_keep]); the menu reports nothing to the user.
+          onColor: (color) =>
+              (menu.id == null ? _highlight(color) : _recolor(menu.id!, color))
+                  .ignore(),
+          onRemove: menu.id == null ? null : () => _remove(menu.id!).ignore(),
+        ),
     ],
   );
 
@@ -256,41 +387,59 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   @override
   Future<void> _load() async {
     if (Platform.isMacOS) {
-      final version = await const MethodChannel('app.relay/browser')
-          .invokeMethod<String>('safariVersion');
+      final version = await _browserChannel.invokeMethod<String>(
+        'safariVersion',
+      );
       final agent = safariUserAgent(await controller.getUserAgent(), version);
       if (agent != null) await controller.setUserAgent(agent);
+      // New windows open as popup windows, checked by the address rule.
+      _browserChannel.setMethodCallHandler(browserChannelCall);
+      await _browserChannel.invokeMethod<int>('popups', _webViewId);
+      final script = await rootBundle.loadString('assets/page_fullscreen.js');
+      await _browserChannel.invokeMethod<void>('documentStartScript', {
+        'view': _webViewId,
+        'source': script.replaceFirst('RELAY_KEY', jsonEncode(_fullScreenKey)),
+      });
+      // A new document in the tab says so: the page under the PDF viewer has
+      // been replaced. A load that only starts, then fails, says nothing.
+      await _browserChannel.invokeMethod<void>('documentStartScript', {
+        'view': _webViewId,
+        'source': "if (window === top && !window.opener) (window.webkit?.messageHandlers?.RelayBrowser ?? window.RelayBrowser)?.postMessage('document');",
+      });
     }
     await controller.setNavigationDelegate(
       NavigationDelegate(
-        onNavigationRequest: (request) async {
-          if (!request.isMainFrame || request.url == 'about:blank') {
-            return NavigationDecision.navigate;
-          }
-          try {
-            if (!['https', 'http'].contains(Uri.parse(request.url).scheme)) {
-              return NavigationDecision.prevent;
-            }
-            await browserUrl(request.url);
-            return NavigationDecision.navigate;
-          } catch (_) {
-            return NavigationDecision.prevent;
-          }
-        },
+        onNavigationRequest: (request) async =>
+            !request.isMainFrame || await publicPageAllowed(request.url)
+            ? NavigationDecision.navigate
+            : NavigationDecision.prevent,
         onPageStarted: (url) {
           _nativeSelection = null;
+          _menu = null;
           _url = url;
+          _loading = true;
+          final wasFullScreen = fullScreen;
+          fullScreen = false;
           if (_presentationId == null) {
             _comment = null;
             _generation++;
             changed(true);
+          } else if (wasFullScreen) {
+            changed(false);
           }
         },
         onPageFinished: (_) async {
           if (_disposed) return;
           try {
             await controller.runJavaScript(_observePage);
-            await read();
+            // The page is ready without waiting for the PDF viewer or the
+            // highlights. A viewer still open belonged to the page before.
+            _newDocument();
+            final opening = _pdfOpening = _openPdf();
+            await _readDocument();
+            unawaited(opening.then((_) => _showHighlights()));
+            _loading = false;
+            _visit(_title);
             canGoBack = await controller.canGoBack();
             canGoForward = await controller.canGoForward();
             if (!_ready.isCompleted) _ready.complete();
@@ -307,7 +456,19 @@ class _BrowserPage extends _WebPage with BrowserSurface {
         onUrlChange: (change) async {
           final url = change.url;
           if (_disposed || url == null || url.isEmpty) return;
+          // A page can only change its own address within its origin, so
+          // another origin here is a redirect of a load still under way.
+          final before = Uri.tryParse(_url), after = Uri.tryParse(url);
+          final inPage =
+              !_loading &&
+              before?.scheme == after?.scheme &&
+              before?.authority == after?.authority;
           _url = url;
+          if (inPage) _visit();
+          // A single-page app may have moved to another of its addresses.
+          // The document itself says whether it did: this address is also
+          // each redirect step of a load that has not replaced it yet.
+          unawaited(_showHighlights());
           (_context?['state'] as Map?)?['url'] = url;
           canGoBack = await controller.canGoBack();
           canGoForward = await controller.canGoForward();
@@ -319,46 +480,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     // Public pages can only invalidate context; they cannot issue app commands.
     await controller.addJavaScriptChannel(
       'RelayBrowser',
-      onMessageReceived: (message) {
-        if (_disposed) return;
-        if (message.message.startsWith('transcript:')) {
-          final reply = jsonDecode(message.message.substring(11)) as Map;
-          final pending = _transcriptReplies.remove(reply['id']);
-          if (reply['error'] != null) {
-            pending?.completeError(StateError('${reply['error']}'));
-          } else {
-            pending?.complete(Map<String, dynamic>.from(reply['data'] as Map));
-          }
-          return;
-        }
-        if (message.message.startsWith('title:')) {
-          _title = message.message.substring('title:'.length);
-          (_context?['state'] as Map?)?['title'] = _title;
-          changed(false);
-          return;
-        }
-        if (message.message != 'interaction') {
-          if (!message.message.startsWith('selection:')) return;
-          final selection = message.message.substring('selection:'.length);
-          if (selection.length > 4000 || _context?['selection'] == selection) {
-            return;
-          }
-          _context?['selection'] = selection;
-        }
-        _nativeSelection = null;
-        final presenting = _presentationId != null;
-        _comment = null;
-        _presentationId = null;
-        _generation++;
-        _context?['generation'] = _generation;
-        changed(true);
-        if (presenting && _navigation?.isCompleted == false) {
-          unawaited(controller.runJavaScript('window.stop()'));
-          _navigation!.completeError(
-            StateError('Presentation interrupted by manual input.'),
-          );
-        }
-      },
+      onMessageReceived: (message) => _message(message.message),
     );
     // WebKit only knows the system appearance, not Relay's own setting.
     await controller.loadHtmlString(
@@ -368,14 +490,442 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     );
   }
 
+  /// A message from the page's scripts, or from the Mac's PDF viewer about
+  /// the PDF it shows in the page's place.
+  void _message(String message) {
+    if (_disposed) return;
+    if (message.startsWith('transcript:')) {
+      final reply = jsonDecode(message.substring(11)) as Map;
+      final pending = _transcriptReplies.remove(reply['id']);
+      if (reply['error'] != null) {
+        pending?.completeError(StateError('${reply['error']}'));
+      } else {
+        pending?.complete(Map<String, dynamic>.from(reply['data'] as Map));
+      }
+      return;
+    }
+    if (message.startsWith('fullscreen:')) {
+      final on = message == 'fullscreen:enter:$_fullScreenKey';
+      if (!on && message != 'fullscreen:exit:$_fullScreenKey') return;
+      if (on != fullScreen) {
+        fullScreen = on;
+        changed(false);
+      }
+      return;
+    }
+    if (message == 'document') {
+      _newDocument();
+      return;
+    }
+    if (message.startsWith('menu:')) {
+      try {
+        final menu = message.substring('menu:'.length);
+        _showMenu(menu.isEmpty ? null : jsonDecode(menu));
+      } on FormatException {
+        // Not from the highlight script.
+      }
+      return;
+    }
+    if (message.startsWith('title:')) {
+      _title = message.substring('title:'.length);
+      (_context?['state'] as Map?)?['title'] = _title;
+      final untitled = _untitled;
+      if (untitled != null &&
+          _title.isNotEmpty &&
+          _historyAddress(_url) == untitled) {
+        _untitled = null;
+        _records?.browserTitle(untitled, _title);
+      }
+      changed(false);
+      return;
+    }
+    if (message != 'interaction') {
+      if (!message.startsWith('selection:')) return;
+      final selection = message.substring('selection:'.length);
+      if (selection.length > 4000 || _context?['selection'] == selection) {
+        return;
+      }
+      _context?['selection'] = selection;
+    }
+    _nativeSelection = null;
+    final presenting = _presentationId != null;
+    _comment = null;
+    _presentationId = null;
+    _generation++;
+    _context?['generation'] = _generation;
+    changed(true);
+    if (presenting && _navigation?.isCompleted == false) {
+      unawaited(controller.runJavaScript('window.stop()'));
+      _navigation!.completeError(
+        StateError('Presentation interrupted by manual input.'),
+      );
+    }
+  }
+
+  Future<T?> _pdf<T>(String action, [Json more = const {}]) => _browserChannel
+      .invokeMethod<T>('pdf', {'view': _webViewId, 'do': action, ...more});
+
+  // A new document shows in the tab: the viewer and the highlights belonged
+  // to the one before.
+  void _newDocument() {
+    _documents++;
+    _highlightsAddress = null;
+    _kept.clear();
+    _shown.clear();
+    _menu = null;
+    if (!Platform.isMacOS) return;
+    final closing = pdf;
+    pdf = false;
+    _pdfOpening = null;
+    _pdfPages.remove(_webViewId);
+    unawaited(_pdf<void>('close'));
+    // The PDF's buttons go with its viewer.
+    if (closing) changed(false);
+  }
+
+  // WebKit shows a PDF in a page with no text, title or selection events.
+  // The Mac runner fetches the PDF again and shows it in its own viewer.
+  Future<void> _openPdf() async {
+    if (!Platform.isMacOS) return;
+    final load = _documents;
+    try {
+      final type = await controller.runJavaScriptReturningResult(
+        'document.contentType',
+      );
+      if (!'$type'.contains('application/pdf')) return;
+      final opened = await _pdf<Map>('open');
+      if (opened == null || _disposed || load != _documents) return;
+      pdf = true;
+      _pdfPages[_webViewId] = this;
+      _message('title:${opened['title']}');
+    } catch (_) {
+      // WebKit's own PDF view stays.
+    }
+  }
+
+  // The document's address without its #fragment, as the document reports
+  // it. Location's own properties and plain operators cannot be replaced by
+  // a page's scripts.
+  static const _documentSite =
+      'location.origin + location.pathname + location.search';
+
+  /// Where the document on screen is, asked of the document itself. The
+  /// tab's address cannot say: while a load is under way it is already the
+  /// next page's, through every redirect step, and a page can stop that load
+  /// and stay. Highlights for an address go only to a document that is there.
+  Future<({String? address, String site})> _documentAddress() async {
+    final raw = await controller.runJavaScriptReturningResult(
+      "location.href + '\\n' + $_documentSite",
+    );
+    final parts = '$raw'.split('\n');
+    if (parts.length != 2) return (address: null, site: '');
+    return (address: _historyAddress(parts[0]), site: parts[1]);
+  }
+
+  /// Shows the highlights kept for the page's address: in the Mac's viewer
+  /// for a PDF, and through the page's highlight script for a web page.
+  Future<void> _showHighlights() async {
+    final records = _records;
+    if (records == null) return;
+    final document = _documents;
+    try {
+      final here = await _documentAddress();
+      // Nothing to do while the document and its address are the same.
+      if (_disposed ||
+          document != _documents ||
+          here.address == _highlightsAddress) {
+        return;
+      }
+      final address = _highlightsAddress = here.address;
+      _highlightsSite = here.site;
+      _kept.clear();
+      _shown.clear();
+      _showMenu(null);
+      if (address == null) return;
+      final kept = await records.highlights(address);
+      // The tab may show another document, or address, by now.
+      if (_disposed ||
+          document != _documents ||
+          address != _highlightsAddress) {
+        return;
+      }
+      for (final highlight in kept) {
+        final id = highlight['id'] as String;
+        _kept[id] = highlight;
+        // A highlight made while the list was on its way stays as made.
+        _shown.putIfAbsent(id, () => highlight);
+      }
+      await _draw();
+    } catch (_) {
+      // The page shows without its highlights.
+    }
+  }
+
+  /// Draws the shown highlights in place of those drawn before: in the Mac's
+  /// viewer for a PDF, and through the page's highlight script for a web page.
+  Future<void> _draw() async {
+    final shown = _shown.values;
+    if (pdf) {
+      await _pdf<void>('marks', {
+        'highlights': [
+          for (final highlight in shown)
+            if (highlight['marks'] != null) highlight,
+        ],
+      });
+      return;
+    }
+    _highlightScript ??= await rootBundle.loadString(
+      'assets/page_highlights.js',
+    );
+    await controller.runJavaScript(_highlightScript!);
+    await controller.runJavaScript(
+      'if ($_documentSite === ${jsonEncode(_highlightsSite)}) '
+      'window.__relayHighlights?.set(${jsonEncode([for (final highlight in shown)
+        if (highlight['marks'] == null) highlight])})',
+    );
+  }
+
+  /// Shows the highlight menu where the page's highlight script or the PDF
+  /// viewer says: {rect: {left, top, right, bottom}, id?}. Anything else
+  /// hides it. A page's own scripts can send this too, so the menu opens
+  /// only for a highlight this page was given.
+  void _showMenu(Object? data) {
+    ({Rect at, String? id})? menu;
+    final rect = data is Map ? data['rect'] : null,
+        id = data is Map ? data['id'] : null;
+    if (_records != null &&
+        rect is Map &&
+        (id == null || _shown.containsKey(id))) {
+      final sides = [
+        for (final side in ['left', 'top', 'right', 'bottom']) rect[side],
+      ];
+      if (sides.every((side) => side is num && side.isFinite)) {
+        final [left, top, right, bottom] = [
+          for (final side in sides) (side as num).toDouble(),
+        ];
+        menu = (at: Rect.fromLTRB(left, top, right, bottom), id: id as String?);
+      }
+    }
+    if (menu == _menu) return;
+    _menu = menu;
+    changed(false);
+  }
+
+  /// Highlights the selected text in [color] and keeps it on the server.
+  Future<void> _highlight(String color) async {
+    _showMenu(null);
+    // The document on screen must be the one whose highlights are loaded.
+    await _showHighlights();
+    final here = await _documentAddress();
+    if (here.address == null || here.address != _highlightsAddress) return;
+    final place = _place;
+    final id = const Uuid().v4();
+    final viewer = pdf;
+    Object? added;
+    if (viewer) {
+      added = (await _pdf<Map>('highlight', {
+        'id': id,
+        'color': color,
+      }))?['added'];
+    } else {
+      // The page's selection is gone with the highlight; the page observer
+      // keeps the last one while the page is out of focus.
+      final raw = await controller.runJavaScriptReturningResult(
+        '(() => { const change = $_documentSite === ${jsonEncode(_highlightsSite)}'
+        ' ? window.__relayHighlights?.add(${jsonEncode(id)}, ${jsonEncode(color)}) ?? null : null;'
+        " if (change) window.__relaySelection = ''; return JSON.stringify(change); })()",
+      );
+      dynamic data = raw is String ? jsonDecode(raw) : raw;
+      if (data is String) data = jsonDecode(data);
+      added = data is Map ? data['added'] : null;
+      if (added != null) _message('selection:');
+    }
+    final records = _records;
+    if (!_still(place) || records == null) return;
+    if (added is! Map || added['text'] is! String) return;
+    // A web page's own scripts can answer in the highlight script's place, so
+    // only its quoted text is taken from the answer: the address, id and
+    // colour are Relay's.
+    final Json highlight = {
+      'id': id,
+      'text': added['text'],
+      'color': color,
+      if (viewer)
+        'marks': added['marks']
+      else ...{
+        'prefix': '${added['prefix'] ?? ''}',
+        'suffix': '${added['suffix'] ?? ''}',
+      },
+    };
+    _shown[id] = highlight;
+    await _keep(
+      place,
+      id,
+      _number(id),
+      highlight,
+      () => records.saveHighlight(place.address!, highlight),
+    );
+  }
+
+  Future<void> _recolor(String id, String color) async {
+    _showMenu(null);
+    final shown = _shown[id], place = _place;
+    if (shown == null) return;
+    final recolored = _shown[id] = {...shown, 'color': color};
+    final change = _number(id);
+    await _changeShown('recolor', {'id': id, 'color': color});
+    await _keep(
+      place,
+      id,
+      change,
+      recolored,
+      () => _records!.recolorHighlight(id, color),
+    );
+  }
+
+  Future<void> _remove(String id) async {
+    _showMenu(null);
+    final place = _place;
+    if (_shown.remove(id) == null) return;
+    final change = _number(id);
+    await _changeShown('remove', {'id': id});
+    await _keep(place, id, change, null, () => _records!.forgetHighlight(id));
+  }
+
+  // Changes a highlight in the PDF viewer or on the page.
+  Future<void> _changeShown(String action, Json change) async {
+    if (pdf) return _pdf<void>(action, change);
+    await controller.runJavaScript(
+      'if ($_documentSite === ${jsonEncode(_highlightsSite)}) '
+      'window.__relayHighlights?.$action(${jsonEncode(change['id'])}, ${jsonEncode(change['color'])})',
+    );
+  }
+
+  // The document and address whose highlights are loaded.
+  ({int document, String? address}) get _place =>
+      (document: _documents, address: _highlightsAddress);
+
+  bool _still(({int document, String? address}) place) =>
+      !_disposed && place == _place;
+
+  // Numbers a change of the highlight [id] when it is made, before the
+  // screen shows it, so a quicker failure of an earlier one sees it.
+  int _number(String id) => _latestChange[id] = ++_changes;
+
+  /// Sends the [change] of the highlight [id] to the server after those
+  /// before it; [now] is the highlight as the change leaves it, none once
+  /// removed.
+  /// What the server takes is kept. When it takes nothing and no later
+  /// change of the highlight waits, the highlight shows again as the server
+  /// keeps it. Neither touches a document or address the tab has left.
+  Future<void> _keep(
+    ({int document, String? address}) place,
+    String id,
+    int change,
+    Json? now,
+    Future<void> Function() send,
+  ) {
+    return _saving = _saving.then((_) async {
+      try {
+        await send();
+        if (!_still(place)) return;
+        if (now == null) {
+          _kept.remove(id);
+        } else {
+          _kept[id] = now;
+        }
+      } catch (_) {
+        if (!_still(place) || _latestChange[id] != change) return;
+        final kept = _kept[id];
+        if (kept == null) {
+          _shown.remove(id);
+        } else {
+          _shown[id] = kept;
+        }
+        try {
+          await _draw();
+        } catch (_) {
+          // The tab is closing or has moved on.
+        }
+      }
+    });
+  }
+
   @override
   void _fail(Object error) {
     super._fail(error);
     if (_navigation?.isCompleted == false) _navigation!.completeError(error);
   }
 
+  // A reload or #fragment change of the page shown is not another visit.
+  void _visit([String? title]) {
+    final address = _historyAddress(_url);
+    if (_records == null || address == null || address == _visited) return;
+    final restored = _restoring;
+    _visited = address;
+    _restoring = false;
+    _untitled = (restored || (title?.isNotEmpty ?? false)) ? null : address;
+    if (!restored) _records.browserVisit(address, title);
+  }
+
+  int get _webViewId =>
+      (controller.platform as WebKitWebViewController).webViewIdentifier;
+
+  @override
+  bool fullScreen = false;
+  final _fullScreenKey = const Uuid().v4();
+
+  @override
+  Future<void> fillScreen(bool on) async {
+    if (!Platform.isMacOS) return;
+    if (on) {
+      _onScreen = this;
+    } else if (_onScreen == this) {
+      _onScreen = null;
+    }
+    try {
+      if (!on && fullScreen && !_disposed) {
+        fullScreen = false;
+        await controller.runJavaScript('window.__relayExitFullscreen?.()');
+      }
+      await _browserChannel.invokeMethod<void>('fillScreen', {
+        'view': _webViewId,
+        'on': on,
+      });
+    } catch (_) {
+      // A closed tab has nothing left to show or end.
+    }
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    _pdfPages.removeWhere((_, page) => page == this);
+    // Closing the tab closes its popup windows and ends its PDF's fetch.
+    if (Platform.isMacOS) {
+      _pdf<void>('close').catchError((_) {});
+      _browserChannel
+          .invokeMethod<int>('closePopups', _webViewId)
+          .catchError((_) => 0);
+    }
+  }
+
   @override
   Future<Json> read() async {
+    // A PDF still being fetched is worth a short wait for its text: the
+    // server allows a read 8 seconds.
+    await _pdfOpening?.timeout(const Duration(seconds: 5), onTimeout: () {});
+    final result = await _readDocument();
+    final shown = pdf ? await _pdf<Map>('text') : null;
+    if (shown != null) {
+      // From the page in view onward, so `pdf` says where the text starts.
+      result['text'] = shown['text'];
+      result['pdf'] = {'page': shown['page'], 'pages': shown['pages']};
+    }
+    return result;
+  }
+
+  Future<Json> _readDocument() async {
     final raw = await controller
         .runJavaScriptReturningResult(_readPage)
         .timeout(const Duration(seconds: 20));
@@ -384,6 +934,8 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     final result = Map<String, dynamic>.from(data as Map);
     await refreshSelection();
     if (_nativeSelection != null) result['selection'] = _nativeSelection;
+    // WebKit's page for a PDF has no title; the viewer gave the PDF's own.
+    if (pdf) result['title'] = _title;
     _url = result['url'] as String;
     _title = result['title'] as String;
     _context = {
@@ -431,8 +983,9 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   }
 
   @override
-  Future<void> navigate(String text) async {
+  Future<void> navigate(String text, {bool restoring = false}) async {
     final target = await browserUrl(text);
+    _restoring = restoring;
     _navigation = Completer<void>();
     await controller.loadRequest(target);
     await _navigation!.future.timeout(const Duration(seconds: 30));
@@ -447,6 +1000,8 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       await controller.goForward();
     }
     if (action == 'reload') await controller.reload();
+    if (action == 'highlight') await _highlight('yellow');
+    if (pdf && pdfZoomActions.contains(action)) await _pdf<void>(action);
   }
 
   @override
@@ -706,4 +1261,13 @@ class _ReportPage extends _HostedPage {
     'highlightIds': command['highlightIds'] ?? [],
     'viewState': command['viewState'],
   };
+}
+
+/// The address history keeps for [url], without its #fragment, or null for
+/// pages it skips: anything but an HTTP or HTTPS website.
+String? _historyAddress(String url) {
+  final uri = Uri.tryParse(url);
+  if (uri == null || !['http', 'https'].contains(uri.scheme)) return null;
+  if (uri.host.isEmpty) return null;
+  return uri.removeFragment().toString();
 }

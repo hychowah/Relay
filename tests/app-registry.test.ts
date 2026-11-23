@@ -6,11 +6,12 @@ import { join } from "node:path";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { appRegistry } from "../server/app-registry.ts";
+import type { RegisteredApp } from "../server/app.ts";
 
 // Closed loopback ports: manifest probes fail at once and only warn.
 const notes = { id: "notes", name: "Notes", serverUrl: "http://127.0.0.1:9" };
 const rooms = { id: "rooms", name: "Rooms", serverUrl: "http://127.0.0.1:7" };
-const browser = { id: "browser", name: "Browser", serverUrl: "http://127.0.0.1:13" };
+const browser: RegisteredApp = { id: "browser", name: "Browser", description: "Built in", integration: {} };
 
 function appsFile(t: TestContext) {
   const dir = mkdtempSync(join(tmpdir(), "relay-apps-"));

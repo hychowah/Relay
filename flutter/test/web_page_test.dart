@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:relay_flutter/browser_transcript.dart';
+import 'package:relay_flutter/highlight_menu.dart';
 import 'package:relay_flutter/page_surface.dart';
 import 'package:relay_flutter/relay_api.dart';
 import 'package:relay_flutter/web_page.dart';
@@ -61,7 +65,7 @@ class TestController extends PlatformWebViewController {
 
   @override
   Future<void> loadRequest(LoadRequestParams params) async {
-    loaded.complete();
+    if (!loaded.isCompleted) loaded.complete();
   }
 
   @override
@@ -70,10 +74,19 @@ class TestController extends PlatformWebViewController {
   Future<void> runJavaScript(String javaScript) async =>
       scripts.add(javaScript);
   Object playTime = -1;
+  // What the page's highlight script answers to Highlight.
+  String highlighted = 'null';
+  // The document on screen, when it is not the tab's address: a load that is
+  // under way has moved the address on but not replaced the document.
+  String? document;
   @override
   Future<Object> runJavaScriptReturningResult(String javaScript) async =>
       javaScript == youtubePlaybackTimeScript
       ? playTime
+      : javaScript.startsWith('location.href')
+      ? '${document ?? location}\n${(document ?? location).split('#').first}'
+      : javaScript.contains('__relayHighlights?.add(')
+      ? highlighted
       : jsonEncode({'url': location, 'title': 'YouTube', 'selection': ''});
   @override
   Future<bool> canGoBack() async => history;
@@ -112,6 +125,32 @@ void main() {
     expect(safariUserAgent(base, '26.6.2'), expected);
     expect(safariUserAgent(base, null), isNull);
     expect(safariUserAgent(expected, '26.6.2'), isNull);
+  });
+
+  test('popup pages follow the Browser address rule', () async {
+    Future<Object?> ask(String url) =>
+        browserChannelCall(MethodCall('allowPopupPage', url));
+    for (final url in [
+      'http://127.0.0.1:8080/',
+      'http://localhost/',
+      'http://10.1.2.3/',
+      'http://192.168.0.2/',
+      'http://169.254.169.254/latest',
+      'http://100.100.1.1/',
+      'http://[::1]/',
+      'https://user@8.8.8.8/',
+      'file:///etc/hosts',
+      'javascript:alert(1)',
+      'data:text/html,hi',
+    ]) {
+      expect(await ask(url), isFalse, reason: url);
+    }
+    expect(await ask('about:blank'), isTrue);
+    expect(await ask('https://8.8.8.8/sign-in'), isTrue);
+    expect(
+      () => browserChannelCall(const MethodCall('other')),
+      throwsA(isA<MissingPluginException>()),
+    );
   });
 
   test(
@@ -210,6 +249,332 @@ void main() {
       });
       expect(changes, [false, false]);
       expect(page.context!['generation'], generation);
+    },
+  );
+
+  test(
+    'a restored Browser page is not a visit, and each visit sends one title',
+    () async {
+      final platform = TestWebPlatform();
+      WebViewPlatform.instance = platform;
+      final sent = <String>[];
+      final api = RelayApi(
+        Uri.parse('http://relay.test'),
+        client: MockClient((request) async {
+          if (request.url.path.startsWith('/api/highlights')) {
+            return http.Response('[]', 200);
+          }
+          sent.add('${request.url.pathSegments.last} ${request.body}');
+          return http.Response('{}', 200);
+        }),
+      );
+      final page = createWebPage(
+        PageSpec(
+          id: 'tab',
+          appId: 'browser',
+          name: 'Browser',
+          sessionId: 'session',
+          relayOrigin: api.origin,
+        ),
+        (_) {},
+        records: api,
+      );
+      addTearDown(page.dispose);
+      final controller = platform.controller;
+      await pumpEventQueue();
+      controller
+        ..location = 'about:blank'
+        ..delegate.finished('about:blank');
+      await page.ready;
+
+      Future<void> open(String url, {bool restoring = false}) async {
+        final done = page.browser!.navigate(url, restoring: restoring);
+        await pumpEventQueue();
+        controller
+          ..location = url
+          ..delegate.finished(url);
+        await done;
+        await pumpEventQueue();
+      }
+
+      void title(String text) => controller.channel.onMessageReceived(
+        JavaScriptMessage(message: 'title:$text'),
+      );
+
+      await open('https://8.8.8.8/saved', restoring: true);
+      title('Saved');
+      await pumpEventQueue();
+      expect(sent, isEmpty);
+
+      await open('https://8.8.8.8/next');
+      title('(1) Next');
+      await pumpEventQueue();
+      expect(sent, ['visit {"url":"https://8.8.8.8/next","title":"YouTube"}']);
+
+      // A page changing its own address is a visit whose title comes next.
+      controller.location = 'https://8.8.8.8/next?v=2';
+      controller.delegate.urlChange(UrlChange(url: controller.location));
+      title('');
+      title('Video');
+      title('(1) Video');
+      await pumpEventQueue();
+      expect(sent.skip(1), [
+        'visit {"url":"https://8.8.8.8/next?v=2"}',
+        'title {"url":"https://8.8.8.8/next?v=2","title":"Video"}',
+      ]);
+    },
+  );
+
+  test(
+    'a web page highlight is kept under the page address and shown again',
+    () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      final platform = TestWebPlatform();
+      WebViewPlatform.instance = platform;
+      const kept = {
+        'id': 'old',
+        'text': 'an earlier passage',
+        'prefix': 'before ',
+        'suffix': ' after',
+        'color': 'green',
+      };
+      final sent = <String>[];
+      // How the server answers a change, or a list, for now; by default it
+      // takes the change and lists what it keeps.
+      Future<http.Response> Function()? answer, listing;
+      final api = RelayApi(
+        Uri.parse('http://relay.test'),
+        client: MockClient((request) async {
+          if (!request.url.path.startsWith('/api/highlights')) {
+            return http.Response('{}', 200);
+          }
+          sent.add(
+            '${request.method} ${request.url.path} '
+                    '${request.url.queryParameters['url'] ?? request.body}'
+                .trim(),
+          );
+          if (request.method == 'GET') {
+            if (listing != null) return listing();
+            final url = request.url.queryParameters['url'];
+            final list = url == 'https://8.8.8.8/article' ? [kept] : [];
+            return http.Response(jsonEncode(list), 200);
+          }
+          return answer?.call() ?? http.Response('', 204);
+        }),
+      );
+      final page = createWebPage(
+        PageSpec(
+          id: 'tab',
+          appId: 'browser',
+          name: 'Browser',
+          sessionId: 'session',
+          relayOrigin: api.origin,
+        ),
+        (_) {},
+        records: api,
+      );
+      addTearDown(page.dispose);
+      final controller = platform.controller;
+      await pumpEventQueue();
+      controller
+        ..location = 'about:blank'
+        ..delegate.finished('about:blank');
+      await page.ready;
+      sent.clear();
+      final done = page.browser!.navigate('https://8.8.8.8/article#part');
+      await pumpEventQueue();
+      controller
+        ..location = 'https://8.8.8.8/article#part'
+        ..delegate.finished(controller.location);
+      await done;
+      await pumpEventQueue();
+
+      // The page gets its script, then the highlights kept for its address.
+      expect(sent, ['GET /api/highlights https://8.8.8.8/article']);
+      expect(controller.scripts.last, contains('.set([${jsonEncode(kept)}])'));
+      expect(
+        controller.scripts[controller.scripts.length - 2],
+        contains('window.__relayHighlights ='),
+      );
+
+      // The page's script says where its menu goes: by selected text, or
+      // by a highlight this page was given.
+      HighlightMenu? menu() => (page.widget as Stack).children
+          .whereType<HighlightMenu>()
+          .firstOrNull;
+      void say(String message) => controller.channel.onMessageReceived(
+        JavaScriptMessage(message: message),
+      );
+      const rect = {'left': 10, 'top': 40, 'right': 90, 'bottom': 56};
+      say('menu:${jsonEncode({'rect': rect})}');
+      expect(menu()!.at, const Rect.fromLTRB(10, 40, 90, 56));
+      expect(menu()!.color, isNull);
+      expect(menu()!.onRemove, isNull);
+
+      // A colour saves what the page's script quoted, in that colour.
+      controller.highlighted = jsonEncode({
+        'added': {'text': 'a passage', 'prefix': 'the ', 'suffix': ' ends'},
+      });
+      menu()!.onColor('blue');
+      await pumpEventQueue();
+      expect(menu(), isNull);
+      final saved = jsonDecode(sent.last.split(' ').skip(2).join(' ')) as Map;
+      expect(sent.last, startsWith('POST /api/highlights '));
+      expect(saved['id'], hasLength(36));
+      expect(saved..remove('id'), {
+        'url': 'https://8.8.8.8/article',
+        'text': 'a passage',
+        'color': 'blue',
+        'prefix': 'the ',
+        'suffix': ' ends',
+      });
+
+      // A clicked highlight's menu changes its colour or removes it, on the
+      // page and on the server. An id the page was not given opens nothing.
+      say('menu:${jsonEncode({'rect': rect, 'id': 'elsewhere'})}');
+      expect(menu(), isNull);
+      say('menu:${jsonEncode({'rect': rect, 'id': 'old'})}');
+      expect(menu()!.color, 'green');
+
+      // A change the server refuses, or cannot be reached for, shows the
+      // highlight as the server keeps it again, and its menu still opens.
+      String drawn() => controller.scripts.last;
+      answer = () async => http.Response('{"error":"Down."}', 500);
+      menu()!.onColor('purple');
+      await pumpEventQueue();
+      expect(sent.last, 'PATCH /api/highlights/old {"color":"purple"}');
+      expect(drawn(), contains('.set([${jsonEncode(kept)},'));
+      answer = null;
+      say('menu:${jsonEncode({'rect': rect, 'id': 'old'})}');
+      expect(menu()!.color, 'green');
+
+      menu()!.onColor('pink');
+      await pumpEventQueue();
+      expect(drawn(), endsWith('.recolor("old", "pink")'));
+      expect(sent.last, 'PATCH /api/highlights/old {"color":"pink"}');
+      say('menu:${jsonEncode({'rect': rect, 'id': 'old'})}');
+      expect(menu()!.color, 'pink');
+      answer = () => throw http.ClientException('Unreachable.');
+      menu()!.onRemove!();
+      await pumpEventQueue();
+      expect(sent.last, 'DELETE /api/highlights/old');
+      expect(drawn(), contains('{"id":"old","text":"an earlier passage"'));
+      answer = null;
+      say('menu:${jsonEncode({'rect': rect, 'id': 'old'})}');
+      expect(menu()!.color, 'pink');
+      menu()!.onRemove!();
+      await pumpEventQueue();
+      expect(drawn(), endsWith('.remove("old", null)'));
+      expect(sent.last, 'DELETE /api/highlights/old');
+      say('menu:${jsonEncode({'rect': rect, 'id': 'old'})}');
+      expect(menu(), isNull, reason: 'the highlight is gone');
+
+      // The toolbar's Highlight with nothing selected saves nothing.
+      controller.highlighted = 'null';
+      await page.browser!.browserAction('highlight');
+      expect(sent, hasLength(6), reason: 'nothing was selected');
+
+      // A page that moves to another of its addresses shows that one's. A
+      // change still on its way fails there: it touches neither that
+      // address's highlights nor its page.
+      final added = jsonDecode(sent[1].split(' ').skip(2).join(' '))['id'];
+      final hold = Completer<http.Response>();
+      answer = () => hold.future;
+      say('menu:${jsonEncode({'rect': rect, 'id': added})}');
+      menu()!.onColor('yellow');
+      await pumpEventQueue();
+      expect(sent.last, 'PATCH /api/highlights/$added {"color":"yellow"}');
+      controller.location = 'https://8.8.8.8/other';
+      controller.delegate.urlChange(UrlChange(url: controller.location));
+      await pumpEventQueue();
+      expect(sent.last, 'GET /api/highlights https://8.8.8.8/other');
+      final given = controller.scripts.length;
+      hold.complete(http.Response('{"error":"Down."}', 500));
+      await pumpEventQueue();
+      answer = null;
+      expect(controller.scripts, hasLength(given));
+      say('menu:${jsonEncode({'rect': rect, 'id': added})}');
+      expect(menu(), isNull);
+
+      // A new #fragment is the same address.
+      controller.location = 'https://8.8.8.8/other#part';
+      controller.delegate.urlChange(UrlChange(url: controller.location));
+      await pumpEventQueue();
+      expect(sent, hasLength(8));
+
+      // A highlight made while the address's list is on its way stays when
+      // the list arrives.
+      final list = Completer<http.Response>();
+      listing = () => list.future;
+      controller.location = 'https://8.8.8.8/third';
+      controller.delegate.urlChange(UrlChange(url: controller.location));
+      await pumpEventQueue();
+      expect(sent.last, 'GET /api/highlights https://8.8.8.8/third');
+      controller.highlighted = jsonEncode({
+        'added': {'text': 'made early', 'prefix': '', 'suffix': ''},
+      });
+      say('menu:${jsonEncode({'rect': rect})}');
+      menu()!.onColor('green');
+      await pumpEventQueue();
+      final early = jsonDecode(sent.last.split(' ').skip(2).join(' '))['id'];
+      list.complete(http.Response(jsonEncode([kept]), 200));
+      listing = null;
+      await pumpEventQueue();
+      expect(drawn(), allOf(contains('"id":"old"'), contains('"id":"$early"')));
+
+      // Two quick colour changes the server refuses go out in the order
+      // made, and end with one redraw in the colour the server keeps.
+      answer = () async => http.Response('{"error":"Down."}', 500);
+      final before = controller.scripts.length;
+      for (final color in ['purple', 'pink']) {
+        say('menu:${jsonEncode({'rect': rect, 'id': early})}');
+        menu()!.onColor(color);
+      }
+      await pumpEventQueue();
+      answer = null;
+      expect(sent.sublist(sent.length - 2), [
+        'PATCH /api/highlights/$early {"color":"purple"}',
+        'PATCH /api/highlights/$early {"color":"pink"}',
+      ]);
+      final redrawn = controller.scripts.sublist(before);
+      expect(
+        redrawn.where((script) => script.contains('__relayHighlights?.set(')),
+        hasLength(1),
+      );
+      expect(
+        redrawn.last,
+        contains('{"id":"$early","text":"made early","color":"green"'),
+      );
+
+      // A load under way moves the tab's address through each redirect
+      // step, here back through the page's own address and on to another
+      // site, while the page stays on screen. That site's highlights are not
+      // asked for or given to this page, and Highlight still saves here.
+      controller.document = 'https://8.8.8.8/third';
+      final asked = sent.length, shown = controller.scripts.length;
+      for (final step in [
+        'https://8.8.8.8/redirect',
+        'https://8.8.8.8/third',
+        'https://8.8.4.4/victim',
+        'https://8.8.4.4/victim/',
+      ]) {
+        controller.location = step;
+        controller.delegate.urlChange(UrlChange(url: step));
+        await pumpEventQueue();
+      }
+      expect(sent, hasLength(asked));
+      expect(controller.scripts, hasLength(shown));
+      controller.highlighted = jsonEncode({
+        'added': {'text': 'kept here', 'prefix': '', 'suffix': ''},
+      });
+      await page.browser!.browserAction('highlight');
+      expect(
+        sent.last,
+        allOf(
+          startsWith('POST /api/highlights '),
+          contains('"url":"https://8.8.8.8/third"'),
+        ),
+      );
     },
   );
 

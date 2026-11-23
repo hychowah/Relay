@@ -277,10 +277,10 @@ test("provider HTTP settings redact keys and enforce origin, active-work and app
 });
 
 
-test("Claude and DeepSeek preserve separate keys/models across switching and legacy migration", async () => {
+test("Claude and DeepSeek preserve separate keys/models across switching", async () => {
   const dir = await mkdtemp(join(tmpdir(), "relay-provider-switch-"));
   try {
-    await writeFile(join(dir, "provider.json"), JSON.stringify({mode:"deepseek", model:"deepseek-flash", apiKey:"synthetic-deepseek", reasoningEffort:"high"}));
+    await writeFile(join(dir, "provider.json"), JSON.stringify({mode:"deepseek", connections:{deepseek:{model:"deepseek-flash", apiKey:"synthetic-deepseek", reasoningEffort:"high"}}}));
     let settings = new ProviderSettingsStore(dir, {});
     assert.equal(settings.status("anthropic").hasKey, false);
     assert.throws(() => settings.prepare({mode:"anthropic", model:"claude-sonnet-5-5"}), /Claude API key/);

@@ -16,6 +16,8 @@ import 'package:relay_flutter/transcript_pane.dart';
 import 'package:relay_flutter/workspace.dart';
 import 'package:relay_flutter/capture_flight.dart';
 import 'package:relay_flutter/region_capture.dart';
+import 'package:relay_flutter/split_layout.dart';
+import 'package:relay_flutter/window_capture.dart';
 import 'package:relay_flutter/workspace_tabs.dart';
 
 const apps = [
@@ -46,6 +48,7 @@ class FakePage extends PageSurface with BrowserSurface {
   Completer<Json>? pending;
   Completer<void>? loading;
   Uint8List? frame;
+  final navigated = <String>[];
   @override
   Widget get widget => SizedBox.expand(
     key: ValueKey('page-${spec.id}'),
@@ -60,10 +63,11 @@ class FakePage extends PageSurface with BrowserSurface {
   int transcriptLoads = 0, timeReads = 0;
   double? time;
   String selection = 'selected passage';
+  int generation = 5;
   @override
   Json get context => {
     'viewId': spec.browser ? 'browser' : 'room',
-    'generation': 5,
+    'generation': generation,
     'selection': selection,
     'state': spec.browser
         ? {'sessionId': spec.sessionId, 'tabId': spec.id}
@@ -91,8 +95,26 @@ class FakePage extends PageSurface with BrowserSurface {
   }
 
   @override
-  Future<void> navigate(String text) async {
+  Future<void> navigate(String text, {bool restoring = false}) async {
+    navigated.add(restoring ? 'restore $text' : text);
     changed(true);
+  }
+
+  @override
+  bool pdf = false;
+  @override
+  bool get canHighlight => spec.browser;
+  final actions = <String>[];
+  @override
+  Future<void> browserAction(String action) async => actions.add(action);
+
+  @override
+  bool fullScreen = false;
+  final screenFills = <bool>[];
+  @override
+  Future<void> fillScreen(bool on) async {
+    screenFills.add(on);
+    if (!on) fullScreen = false;
   }
 
   @override
@@ -112,7 +134,7 @@ class FakePage extends PageSurface with BrowserSurface {
 }
 
 class Fixture {
-  Fixture({Json? session}) {
+  Fixture({Json? session, bool newestTabFirst = false}) {
     w = Workspace(
       api: RelayApi(
         Uri.parse('http://localhost:3250'),
@@ -123,7 +145,13 @@ class Fixture {
             return reply({'apps': configApps});
           }
           if (path == '/api/bots') return reply([]);
-          if (path.endsWith('/report')) return reply({'source': deskReport});
+          if (path.endsWith('/report')) {
+            return reply({'source': deskReport, 'sections': []});
+          }
+          if (path == '/api/app-servers') return reply([]);
+          if (path.contains('/view') && appDown) {
+            return http.Response(jsonEncode({'error': 'App is down.'}), 502);
+          }
           if (path.contains('/view')) {
             return reply({
               'url': 'http://localhost:3252/_relay/view?token=x',
@@ -136,12 +164,42 @@ class Fixture {
             return reply({});
           }
           if (path.endsWith('/messages')) {
+            sentTo = path;
             sent = jsonDecode(request.body) as Json;
             return reply({'id': 'run'});
           }
           if (path == '/api/conversations') {
             return reply({'id': 'conversation'});
           }
+          if (path.startsWith('/api/browser-history')) {
+            if (request.method != 'GET') {
+              history.add('${request.method} $path ${request.body}'.trim());
+              return http.Response('', 204);
+            }
+            final q = request.url.queryParameters['q']!;
+            history.add('suggest $q');
+            await holdHistory[q]?.future;
+            final pages = historyPages;
+            if (pages == null) return http.Response('Not found', 404);
+            return reply([
+              for (final page in pages)
+                if ('${page['url']} ${page['title']}'.toLowerCase().contains(
+                  q.toLowerCase(),
+                ))
+                  page,
+            ]);
+          }
+          if (path == '/api/current-conversation') {
+            if (request.method == 'GET') {
+              // The answer is the value when asked, however late it comes.
+              final value = current;
+              await holdCurrent?.future;
+              return reply({'id': value});
+            }
+            current = (jsonDecode(request.body) as Json)['id'] as String;
+            return http.Response('', 204);
+          }
+          if (path == '/api/devices') return reply(devices);
           if (path == '/api/bug-reports') {
             if (offline) return http.Response('Offline', 503);
             bugReport = jsonDecode(request.body) as Json;
@@ -170,9 +228,17 @@ class Fixture {
         return page;
       },
       saveConversation: (_) async {},
+      newestTabFirst: newestTabFirst,
+      saveNewestTabFirst: (value) async => savedNewestFirst.add(value),
     );
   }
-  bool offline = false, failRoomRestore = false;
+  final savedNewestFirst = <bool>[];
+  // The server's conversation last opened on any device, and each device's
+  // saved tabs as the server lists them.
+  String? current, sentTo;
+  Completer<void>? holdCurrent;
+  List<Json> devices = [];
+  bool offline = false, failRoomRestore = false, appDown = false;
   List<Json> configApps = [...apps];
   late Workspace w;
   final pages = <FakePage>[];
@@ -181,6 +247,11 @@ class Fixture {
   List<Json> commands = [], messages = [], runs = [];
   Completer<void>? holdSnapshot, holdPages;
   Json? sent, bugReport;
+  // The server's browsing history: its calls, and pages already ranked;
+  // null pages stand for an older backend without history.
+  final history = <String>[];
+  final holdHistory = <String, Completer<void>>{};
+  List<Json>? historyPages;
   http.Response reply(Object data) => http.Response(jsonEncode(data), 200);
   Json command(String id, String target, {String? token}) => {
     'id': id,
@@ -200,6 +271,127 @@ class Fixture {
 }
 
 void main() {
+  test('the conversation last opened on any device opens here', () async {
+    final f = Fixture()..current = 'elsewhere';
+    await f.w.start();
+    expect(f.w.conversationId, 'elsewhere');
+
+    // Another device opened a newer one while this one stayed in front.
+    f.current = 'later';
+    expect(f.w.conversationId, 'elsewhere');
+    await f.w.openCurrentConversation();
+    expect(f.w.conversationId, 'later');
+
+    await f.w.selectConversation('mine');
+    expect(f.current, 'mine');
+    // A new chat is not current anywhere until its first message saves it,
+    // and returning to the front keeps it.
+    await f.w.newConversation();
+    expect(f.current, 'mine');
+    await f.w.openCurrentConversation();
+    expect(f.w.conversationId, isNull);
+    f.w.dispose();
+  });
+
+  test(
+    'following another device never moves a send or undoes a click',
+    () async {
+      final f = Fixture()..current = 'mine';
+      await f.w.start();
+
+      // The app returns to the front as the user sends in the chat shown.
+      f.current = 'other';
+      f.holdCurrent = Completer();
+      final following = f.w.openCurrentConversation();
+      await f.w.send('hello');
+      f.holdCurrent!.complete();
+      await following;
+      expect(f.sentTo, '/api/conversations/mine/messages');
+      expect(f.w.conversationId, 'mine');
+
+      // Or as the user picks a chat.
+      f.holdCurrent = Completer();
+      final again = f.w.openCurrentConversation();
+      await f.w.selectConversation('picked');
+      f.holdCurrent!.complete();
+      await again;
+      expect(f.w.conversationId, 'picked');
+      expect(f.current, 'picked');
+      f.w.dispose();
+    },
+  );
+
+  test('copying tabs from a split\'s empty pane keeps the split', () async {
+    final f = Fixture();
+    addTearDown(f.w.dispose);
+    await f.w.start();
+    final room = await f.w.openApp(f.w.apps[1]);
+    f.w.newTab();
+    final blank = f.w.active!;
+    f.w.dropInSplit(room, blank, SplitSide.right);
+    final split = f.w.shownSplit!;
+    f.w.select(blank);
+    await f.w.openDeviceTabs({
+      'active': 0,
+      'tabs': [
+        {'appId': 'browser', 'url': 'https://news.example/'},
+      ],
+    });
+    expect(f.w.tabs, contains(blank));
+    expect(split.layout.tabs, [blank, room]);
+  });
+
+  testWidgets('another device\'s tabs open here once, from the new tab page', (
+    tester,
+  ) async {
+    final f = Fixture()
+      ..devices = [
+        {
+          'id': 'device',
+          'name': 'This device',
+          'updatedAt': DateTime.now().millisecondsSinceEpoch,
+          'tabs': {
+            'active': 0,
+            'tabs': [
+              {'appId': 'browser', 'url': 'https://here.example/'},
+            ],
+          },
+        },
+        {
+          'id': 'mac',
+          'name': 'Mac',
+          'updatedAt': DateTime.now()
+              .subtract(const Duration(minutes: 5))
+              .millisecondsSinceEpoch,
+          'tabs': {
+            'active': 1,
+            'tabs': [
+              {'appId': 'browser', 'url': 'https://news.example/today'},
+              {'appId': 'room-layout'},
+            ],
+          },
+        },
+      ];
+    await f.w.start();
+    f.w.newTab();
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    expect(find.text("Open This device's tabs here"), findsNothing);
+    expect(find.text('5 min ago · news.example · Room layout'), findsOneWidget);
+
+    await tester.tap(find.text("Open Mac's tabs here"));
+    await tester.pumpAndSettle();
+    // The empty tab it was opened from goes; the Mac's shown tab shows.
+    expect([for (final tab in f.w.tabs) tab.appId], ['browser', 'room-layout']);
+    expect(f.w.active?.appId, 'room-layout');
+    expect(f.pages.first.navigated, ['restore https://news.example/today']);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   test(
     'saved tabs survive an offline start and reconnect retries a failed tab',
     () async {
@@ -329,6 +521,63 @@ void main() {
     expect(next.w.active!.appId, 'room-layout');
     expect(next.w.pendingSession, isNull);
   });
+  test(
+    'newest tab first moves opened tabs left and restores saved order',
+    () async {
+      final off = Fixture();
+      addTearDown(off.w.dispose);
+      await off.w.start();
+      final offRoom = await off.w.openApp(off.w.apps[1]);
+      await off.w.openApp(off.w.apps[0]);
+      off.w.select(offRoom, opened: true);
+      expect(off.w.tabs.map((tab) => tab.appId), ['room-layout', 'browser']);
+
+      final f = Fixture(newestTabFirst: true);
+      addTearDown(f.w.dispose);
+      await f.w.start();
+      final room = await f.w.openApp(f.w.apps[1]);
+      final browser = await f.w.openApp(f.w.apps[0]);
+      f.w.newTab();
+      final blank = f.w.active!;
+      expect(f.w.tabs, [blank, browser, room]);
+      f.w.dropInSplit(browser, blank, SplitSide.right);
+      final split = f.w.shownSplit!;
+      expect(f.w.tabs, [
+        split,
+        blank,
+        browser,
+        room,
+      ], reason: 'a new split tab opens on the left; the others keep order');
+      f.w.select(room, opened: true);
+      expect(f.w.tabs, [room, split, blank, browser]);
+      // An app the agent opens, here into the blank pane, also moves left.
+      f.w.select(split);
+      f.w.select(blank);
+      final opened = await f.w.openApp(f.w.apps[0], manual: false);
+      expect(f.w.tabs, [opened, room, split, browser]);
+      expect(f.w.shownSplit, split);
+      expect(split.layout.tabs, [opened, browser]);
+      expect(f.w.session(), containsPair('active', 2));
+      expect(f.w.session()['tabs'][2]['split']['panes'], [0, 3]);
+
+      f.w.select(room);
+      final next = Fixture(
+        session: jsonDecode(jsonEncode(f.stored.last)) as Json,
+        newestTabFirst: true,
+      );
+      addTearDown(next.w.dispose);
+      await next.w.start();
+      final tabs = next.w.tabs;
+      expect(tabs.map((tab) => tab.appId), [
+        'browser',
+        'room-layout',
+        null,
+        'browser',
+      ]);
+      expect(next.w.active, tabs[1]);
+      expect((tabs[2] as SplitTab).layout.tabs, [tabs[0], tabs[3]]);
+    },
+  );
   test(
     'saved tabs open at once on the saved active tab and load together',
     () async {
@@ -508,6 +757,8 @@ void main() {
       expect(f.acks.last['status'], 'failed');
       expect(f.acks.last['viewToken'], f.w.active!.token);
       expect(f.acks.last['context']['generation'], 6);
+      // The page reported the view it was left at with the failure.
+      page.generation = 6;
       page.result = null;
       f.commands = [
         {
@@ -546,6 +797,23 @@ void main() {
     expect(f.acks.last['status'], 'stale');
     expect(f.w.active!.appId, isNull);
   });
+  test('a request without context presents in the app already open', () async {
+    final f = Fixture();
+    addTearDown(f.w.dispose);
+    await f.w.start();
+    final browser = await f.w.openApp(f.w.apps[0]);
+    f.w.includeContext = false;
+    await f.w.send('Open example.com');
+    expect(f.sent!['appContext'], isNull);
+    // The server expects generation 0 when no context was sent.
+    f.commands = [
+      {...f.command('open-site', 'browser'), 'expectedViewToken': null},
+    ];
+    await f.w.refresh();
+    expect(f.acks.last['status'], 'applied');
+    expect(f.w.active, same(browser));
+    expect((browser.page as FakePage).lastCommand!['expectedGeneration'], 5);
+  });
   test('bot scope excludes disallowed page context and saved sessions restore tabs', () async {
     final f = Fixture();
     addTearDown(f.w.dispose);
@@ -574,97 +842,183 @@ void main() {
     expect((f.w.tabs.first.page as FakePage).lastCommand!['intent']['state'], {
       'zone': 'work',
     });
+    expect((f.w.active!.page as FakePage).navigated, [
+      'restore https://example.com/desk',
+    ]);
+  });
+  test('a split is its own tab whose panes nest, move and leave', () async {
+    final f = Fixture();
+    addTearDown(f.w.dispose);
+    await f.w.start();
+    f.w.recorder.start();
+    final room = await f.w.openApp(f.w.apps[1]);
+    final browser = await f.w.openApp(f.w.apps[0]);
+    f.w.newTab();
+    final blank = f.w.active!;
+    f.w.select(browser);
+    f.w.dropInSplit(browser, browser, SplitSide.left);
+    expect(f.w.shownSplit, isNull, reason: 'a tab cannot split its own pane');
+    f.w.dropInSplit(room, browser, SplitSide.left);
+    final split = f.w.shownSplit!;
+    expect(f.w.tabs, [room, browser, blank, split]);
+    expect(split.title, 'Room layout + Browser');
+    expect(split.layout.tabs, [room, browser]);
+    expect(split.layout.axis, Axis.horizontal);
+    expect(f.w.active, room);
+
+    f.w.dropInSplit(blank, browser, SplitSide.bottom);
+    expect(split.layout.tabs, [room, browser, blank]);
+    final column = split.layout.second as SplitBranch;
+    expect(column.axis, Axis.vertical, reason: 'only the dropped-on pane');
+    expect(column.fraction, .5, reason: 'each new split starts at half');
+
+    split.layout.fraction = .3;
+    f.w.dropInSplit(blank, room, SplitSide.top);
+    expect(split.layout.tabs, [blank, room, browser], reason: 'a pane moves');
+    expect(split.layout.second, isA<SplitPane>());
+    expect(split.layout.fraction, .3, reason: 'moving keeps other dividers');
+
+    // A tab's own tab shows it alone; the split tab brings the split back
+    // with the pane selected last.
+    f.w.select(room, alone: true);
+    expect(f.w.shownSplit, isNull);
+    expect(f.w.active, room);
+    f.w.select(split);
+    expect(f.w.shownSplit, split);
+    expect(f.w.active, blank);
+    f.w.select(browser);
+    expect(f.w.shownSplit, split, reason: 'selecting a pane keeps the split');
+
+    f.w.leaveSplit(browser);
+    expect(split.layout.tabs, [blank, room], reason: 'its neighbour grows');
+    expect(f.w.active, blank);
+    f.w.closeTab(split);
+    expect(f.w.tabs, [room, browser, blank], reason: 'its tabs stay open');
+    expect(f.w.shownSplit, isNull);
+    expect(f.w.active, blank, reason: 'the selected tab shows alone');
+    expect(
+      f.w.recorder.events
+          .where((event) => event['type'] == 'action')
+          .map((event) => event['name'])
+          .where((name) => name.toString().contains('split')),
+      ['split tabs', 'split tabs', 'split tabs', 'leave split'],
+    );
+
+    // A tab can be in several splits; closing it leaves every one, and a
+    // split left with one pane closes.
+    f.w.dropInSplit(room, blank, SplitSide.right);
+    final first = f.w.shownSplit!;
+    f.w.select(browser, alone: true);
+    f.w.dropInSplit(blank, browser, SplitSide.left);
+    final second = f.w.shownSplit!;
+    f.w.select(blank);
+    final opened = await f.w.openApp(f.w.apps[0]);
+    expect(opened.id, blank.id);
+    expect(f.w.shownSplit, second, reason: 'the pane keeps its new app');
+    expect(first.layout.tabs, [opened, room]);
+    expect(second.layout.tabs, [opened, browser]);
+    f.w.closeTab(room);
+    expect(f.w.tabs, [browser, opened, second]);
+    f.w.closeTab(opened);
+    expect(f.w.tabs, [browser]);
+    expect(f.w.shownSplit, isNull);
+    expect(f.w.active, browser, reason: 'the remaining pane stays shown');
   });
   test(
-    'a split pair replaces, swaps, hides behind other tabs and ends',
-    () async {
-      final f = Fixture();
-      addTearDown(f.w.dispose);
-      await f.w.start();
-      f.w.recorder.start();
-      final room = await f.w.openApp(f.w.apps[1]);
-      final browser = await f.w.openApp(f.w.apps[0]);
-      f.w.newTab();
-      final blank = f.w.active!;
-      f.w.select(browser);
-      expect(f.w.canSplitWith(browser), isFalse);
-      f.w.dropInSplit(room, left: true);
-      expect(f.w.split, [room, browser]);
-      expect(f.w.active, room);
-      f.w.splitWidth = .3;
-      f.w.dropInSplit(room, left: false);
-      expect(f.w.split, [browser, room]);
-      f.w.dropInSplit(blank, left: false);
-      expect(f.w.split, [browser, blank], reason: 'at most two panes');
-      expect(f.w.splitWidth, .3, reason: 'swaps keep the divider');
-      f.w.select(room);
-      expect(f.w.splitShown, isFalse);
-      f.w.select(browser);
-      expect(f.w.splitShown, isTrue);
-      f.w.leaveSplit(browser);
-      expect(f.w.split, isNull);
-      expect(f.w.active, blank);
-      expect(
-        f.w.recorder.events
-            .where((event) => event['type'] == 'action')
-            .map((event) => event['name'])
-            .where((name) => name.toString().contains('split')),
-        ['split tabs', 'split tabs', 'split tabs', 'end split'],
-      );
-
-      f.w.dropInSplit(room, left: true);
-      expect(f.w.splitWidth, .5, reason: 'a new split starts at half');
-      f.w.select(blank);
-      final opened = await f.w.openApp(f.w.apps[0]);
-      expect(opened.id, blank.id);
-      expect(f.w.split, [room, opened], reason: 'the pane keeps its new app');
-      f.w.closeTab(opened);
-      expect(f.w.split, isNull);
-      expect(f.w.active, room, reason: 'the partner stays shown');
-    },
-  );
-  test(
-    'the split pair is saved with the tabs and reopens on the next start',
+    'split tabs are saved with the tabs and reopen on the next start',
     () async {
       final first = Fixture();
       addTearDown(first.w.dispose);
       await first.w.start();
       final room = await first.w.openApp(first.w.apps[1]);
-      await first.w.openApp(first.w.apps[0]);
-      first.w.dropInSplit(room, left: false);
-      first.w
-        ..splitWidth = .3
-        ..changed();
+      final browser = await first.w.openApp(first.w.apps[0]);
+      final second = await first.w.openApp(first.w.apps[0]);
+      first.w.dropInSplit(room, second, SplitSide.right);
+      first.w.dropInSplit(browser, room, SplitSide.bottom);
+      first.w.shownSplit!.layout.fraction = .3;
+      first.w.changed();
       final saved = jsonDecode(jsonEncode(first.stored.last)) as Json;
-      expect(saved['split'], [1, 0]);
-      expect(saved['splitWidth'], .3);
+      expect(saved['active'], 3);
+      expect(saved['tabs'][3], {
+        'split': {
+          'axis': 'horizontal',
+          'fraction': .3,
+          'panes': [
+            2,
+            {
+              'axis': 'vertical',
+              'fraction': .5,
+              'panes': [0, 1],
+            },
+          ],
+        },
+        'focus': 1,
+      });
 
       final next = Fixture(session: saved);
       addTearDown(next.w.dispose);
       await next.w.start();
       final tabs = next.w.tabs;
-      expect(next.w.split, [tabs[1], tabs[0]]);
-      expect(next.w.splitWidth, .3);
-      expect(next.w.active, tabs[0]);
-      expect(next.w.splitShown, isTrue);
+      final split = tabs[3] as SplitTab;
+      expect(next.w.shownSplit, split);
+      expect(split.layout.tabs, [tabs[2], tabs[0], tabs[1]]);
+      expect(split.layout.fraction, .3);
+      expect(next.w.active, tabs[1]);
 
       final failed = Fixture(session: saved)..failRoomRestore = true;
       addTearDown(failed.w.dispose);
       await failed.w.start();
-      expect(failed.w.tabs.map((tab) => tab.appId), ['browser']);
-      expect(
-        failed.w.split,
-        isNull,
-        reason: 'a tab that failed ends the split',
-      );
-      expect(failed.stored.last.containsKey('split'), isFalse);
+      final kept = failed.w.tabs;
+      expect(kept.map((tab) => tab.appId), ['browser', 'browser', null]);
+      expect((kept[2] as SplitTab).layout.tabs, [
+        kept[1],
+        kept[0],
+      ], reason: 'a tab that failed leaves the split');
     },
   );
-  test('reconnect does not bring back a split the user ended', () async {
+  test('reconnect fills a split saved before a pane it retries', () async {
+    // Newest tab first saves a new split tab ahead of its panes.
     final f = Fixture(
       session: {
         'active': 0,
-        'split': [0, 1],
+        'tabs': [
+          {
+            'split': {
+              'axis': 'horizontal',
+              'fraction': .5,
+              'panes': [1, 2],
+            },
+            'focus': 2,
+          },
+          {
+            'appId': 'room-layout',
+            'context': {
+              'viewId': 'room',
+              'state': {'zone': 'work'},
+            },
+          },
+          {'appId': 'browser', 'url': 'https://example.com/desk'},
+        ],
+      },
+    )..configApps = [apps[1]];
+    addTearDown(f.w.dispose);
+    await f.w.start();
+    expect(f.w.tabs.map((tab) => tab.appId), ['room-layout']);
+    expect(f.w.pendingSession, isNotNull, reason: 'the Browser is retried');
+
+    f.configApps = [...apps];
+    await f.w.start();
+    expect(f.w.error, isNull);
+    expect(f.w.pendingSession, isNull);
+    final tabs = f.w.tabs;
+    expect(tabs.map((tab) => tab.appId), ['room-layout', null, 'browser']);
+    expect((tabs[1] as SplitTab).layout.tabs, [tabs[0], tabs[2]]);
+    expect(f.stored.last['tabs'][1]['split']['panes'], [0, 2]);
+  });
+  test('reconnect does not bring back a split tab the user closed', () async {
+    final f = Fixture(
+      session: {
+        'active': 3,
         'tabs': [
           {'appId': 'browser', 'url': 'about:blank'},
           {'appId': 'research', 'source': deskReport},
@@ -675,20 +1029,30 @@ void main() {
               'state': {'zone': 'work'},
             },
           },
+          {
+            'split': {
+              'axis': 'horizontal',
+              'fraction': .5,
+              'panes': [0, 1],
+            },
+            'focus': 1,
+          },
         ],
       },
     )..failRoomRestore = true;
     addTearDown(f.w.dispose);
     await f.w.start();
-    expect(f.w.tabs.map((tab) => tab.appId), ['browser', 'research']);
-    expect(f.w.split, f.w.tabs);
-    // Sessions saved before the divider existed have no width: start at half.
-    expect(f.w.splitWidth, .5);
-    f.w.leaveSplit(f.w.active!);
+    expect(f.w.tabs.map((tab) => tab.appId), ['browser', 'research', null]);
+    expect(f.w.shownSplit!.layout.tabs, f.w.tabs.take(2));
+    expect(f.w.active, f.w.tabs[1]);
+    f.w.closeTab(f.w.shownSplit!);
     f.failRoomRestore = false;
     await f.w.start();
-    expect(f.w.tabs.length, 3);
-    expect(f.w.split, isNull);
+    expect(f.w.tabs.map((tab) => tab.appId), [
+      'browser',
+      'research',
+      'room-layout',
+    ]);
   });
   testWidgets('dragging tabs splits the page without recreating either view', (
     tester,
@@ -707,28 +1071,46 @@ void main() {
     final browserView = find.text('View Browser', skipOffstage: false);
     final roomElement = tester.element(roomView);
     final browserElement = tester.element(browserView);
-    final page = tester.getRect(find.byKey(ValueKey('page-${browser.id}')));
-    Finder chip(String title) => find.descendant(
-      of: find.byType(WorkspaceTabs),
-      matching: find.text(title),
-    );
+    Rect page(WorkspaceTab tab) =>
+        tester.getRect(find.byKey(ValueKey('page-${tab.id}')));
+    final whole = page(browser);
+    // Both Browser tabs have the same title.
+    Finder chip(String title, [int index = 0]) => find
+        .descendant(of: find.byType(WorkspaceTabs), matching: find.text(title))
+        .at(index);
 
-    final drag = await tester.startGesture(
-      tester.getCenter(chip('Room layout')),
-      kind: PointerDeviceKind.mouse,
+    Future<void> dragTab(Finder tab, Offset to, String highlight) async {
+      final drag = await tester.startGesture(
+        tester.getCenter(tab),
+        kind: PointerDeviceKind.mouse,
+      );
+      await drag.moveBy(const Offset(0, 40));
+      await drag.moveTo(to);
+      await tester.pump();
+      expect(find.byKey(ValueKey(highlight)), findsOneWidget);
+      await drag.up();
+      await tester.pumpAndSettle();
+    }
+
+    await dragTab(
+      chip('Room layout'),
+      Offset(whole.left + 40, whole.center.dy),
+      'drop-left',
     );
-    await drag.moveBy(const Offset(0, 40));
-    await drag.moveTo(Offset(page.left + 40, page.center.dy));
-    await tester.pump();
-    expect(find.byKey(const ValueKey('drop-left')), findsOneWidget);
-    await drag.up();
-    await tester.pumpAndSettle();
-    expect(f.w.split, [room, browser]);
+    final split = f.w.shownSplit!;
+    expect(split.layout.tabs, [room, browser]);
     expect(f.w.active, room);
+    expect(chip('Room layout + Browser'), findsOneWidget);
+    // The split tab draws its panes as they are arranged.
+    Rect mapPane(WorkspaceTab tab) =>
+        tester.getRect(find.byKey(ValueKey('split-map-${tab.id}')));
+    expect(mapPane(room).right, lessThan(mapPane(browser).left));
+    expect(mapPane(room).height, mapPane(browser).height);
+    expect(mapPane(room).height, greaterThan(10));
     expect(tester.element(roomView), same(roomElement));
     expect(tester.element(browserView), same(browserElement));
-    final left = tester.getRect(find.byKey(ValueKey('page-${room.id}')));
-    final right = tester.getRect(find.byKey(ValueKey('page-${browser.id}')));
+    final left = page(room);
+    final right = page(browser);
     expect(left.right, lessThan(right.left));
     expect(left.width, closeTo(right.width, 1));
     expect(find.byIcon(Icons.vertical_split), findsNWidgets(2));
@@ -736,65 +1118,111 @@ void main() {
     await tester.tapAt(right.center);
     await tester.pump();
     expect(f.w.active, browser);
+    // Browser shows its address bar once selected, which moves the pages.
+    final selected = page(browser), beside = page(room);
     // On macOS a native page gets no input wherever Flutter paints over it, so
     // nothing may overlap the selected page, edges included. Its outline is a
-    // frame around the page, in the other pane a colour that does not show.
-    final pages = find
-        .ancestor(
-          of: find.byKey(ValueKey(browser.id)),
-          matching: find.byType(Stack),
-        )
-        .first;
-    final inPage = find.descendant(
-      of: find.byKey(ValueKey('page-${browser.id}')),
-      matching: find.byWidgetPredicate((_) => true),
-    );
-    final selected = tester.getRect(find.byKey(ValueKey('page-${browser.id}')));
-    final painted = find.descendant(
-      of: pages,
-      matching: find.byWidgetPredicate(
-        (w) => w is ColoredBox || w is DecoratedBox || w is CustomPaint,
-      ),
-    );
-    // The exit button sits on the divider and reaches 11 pixels into the page
-    // on purpose, so it is the one drawing left out.
-    final inside = {
-      ...inPage.evaluate(),
-      ...find
+    // frame around the page; each other pane has a tint that one click selects.
+    void expectNothingOver(WorkspaceTab tab, List<WorkspaceTab> others) {
+      final selected = page(tab);
+      final pages = find
+          .ancestor(
+            of: find.byKey(ValueKey(tab.id)),
+            matching: find.byType(Stack),
+          )
+          .first;
+      // The slot's capture picture is painted under the page, not over it.
+      final inPage = find
           .descendant(
-            of: find.byWidgetPredicate(
-              (w) => w is Material && w.shape is CircleBorder,
+            of: find.ancestor(
+              of: find.byKey(ValueKey('page-${tab.id}')),
+              matching: find.byType(PageSlot),
             ),
             matching: find.byWidgetPredicate((_) => true),
           )
-          .evaluate(),
-    };
-    final outline = Theme.of(tester.element(pages)).colorScheme.primary
-        .withValues(alpha: .45);
-    var outlines = 0;
-    for (final element in painted.evaluate()) {
-      if (inside.contains(element)) continue;
-      final box = element.renderObject! as RenderBox;
-      final rect = box.localToGlobal(Offset.zero) & box.size;
-      expect(
-        rect.overlaps(selected),
-        isFalse,
-        reason: '$rect ${element.widget} ${element.widget.key}',
+          .evaluate()
+          .toSet();
+      final painted = find.descendant(
+        of: pages,
+        matching: find.byWidgetPredicate(
+          (w) => w is ColoredBox || w is DecoratedBox || w is CustomPaint,
+        ),
       );
-      final widget = element.widget;
-      if (widget is ColoredBox && widget.color == outline) outlines++;
+      final outline = Theme.of(tester.element(pages)).colorScheme.primary
+          .withValues(alpha: .45);
+      var outlines = 0;
+      for (final element in painted.evaluate()) {
+        if (inPage.contains(element)) continue;
+        final box = element.renderObject! as RenderBox;
+        final rect = box.localToGlobal(Offset.zero) & box.size;
+        expect(
+          rect.overlaps(selected),
+          isFalse,
+          reason: '$rect ${element.widget} ${element.widget.key}',
+        );
+        final widget = element.widget;
+        if (widget is ColoredBox && widget.color == outline) outlines++;
+      }
+      expect(outlines, 4);
+      expect(find.byKey(ValueKey('pane-${tab.id}')), findsNothing);
+      for (final other in others) {
+        expect(find.byKey(ValueKey('pane-${other.id}')), findsOneWidget);
+      }
     }
-    expect(outlines, 4);
+
+    expectNothingOver(browser, [room]);
+
+    // A second Browser tab dropped near the bottom edge stacks under it.
+    final second = await f.w.openApp(f.w.apps[0]);
+    f.w.select(split);
+    await tester.pumpAndSettle();
+    await dragTab(
+      chip('Browser', 1),
+      Offset(selected.center.dx, selected.bottom - 30),
+      'drop-bottom',
+    );
+    expect(split.layout.tabs, [room, browser, second]);
+    expect(page(browser).bottom, lessThan(page(second).top));
+    expect(page(browser).left, selected.left);
+    expect(page(second).width, page(browser).width);
+    expect(mapPane(browser).bottom, lessThan(mapPane(second).top));
+    expect(mapPane(room).right, lessThan(mapPane(second).left));
+    expect(page(room), beside, reason: 'other panes keep their place');
+    expect(tester.element(browserView.first), same(browserElement));
+    expect(f.w.active, second);
+    expectNothingOver(second, [room, browser]);
+    // One click on the dimmed top pane selects it.
+    await tester.tapAt(page(browser).center);
+    await tester.pump();
+    expect(f.w.active, browser);
+    expectNothingOver(browser, [room, second]);
+    // The split tab's map fills the pane selected last.
+    Color? fill(WorkspaceTab tab) =>
+        (tester
+                    .widget<DecoratedBox>(
+                      find.byKey(ValueKey('split-map-${tab.id}')),
+                    )
+                    .decoration
+                as BoxDecoration)
+            .color;
+    expect(fill(browser), isNotNull);
+    expect([fill(room), fill(second)], [null, null]);
+
     tester.view.physicalSize = const Size(700, 800);
     await tester.pumpAndSettle();
     expect(find.text('View Room layout'), findsNothing);
-    expect(find.text('View Browser'), findsOneWidget);
     expect(find.byIcon(Icons.vertical_split), findsNothing);
+    expect(
+      tester.widget<WorkspaceTabs>(find.byType(WorkspaceTabs)).selected,
+      browser,
+      reason: 'the strip marks the tab on screen, not the hidden split',
+    );
     tester.view.physicalSize = const Size(1400, 800);
     await tester.pumpAndSettle();
 
+    // Dragging a tab back to the tab strip takes it out of the split.
     final back = await tester.startGesture(
-      tester.getCenter(chip('Browser')),
+      tester.getCenter(chip('Browser', 1)),
       kind: PointerDeviceKind.mouse,
     );
     await back.moveBy(const Offset(0, 120));
@@ -802,21 +1230,46 @@ void main() {
     await tester.pump();
     await back.up();
     await tester.pumpAndSettle();
-    expect(f.w.split, isNull);
-    expect(f.w.active, room);
+    expect(split.layout.tabs, [room, browser]);
+    expect(
+      page(browser).height,
+      page(room).height,
+      reason: 'its neighbour grows',
+    );
+
+    // Clicking an app's own tab shows it full screen; the split tab stays.
+    await tester.tap(chip('Room layout'));
+    await tester.pumpAndSettle();
+    expect(f.w.shownSplit, isNull);
+    expect(page(room).width, closeTo(whole.width, 1));
     expect(find.text('View Browser'), findsNothing);
+    await tester.tap(chip('Room layout + Browser'));
+    await tester.pumpAndSettle();
+    expect(f.w.shownSplit, split);
+    expect(f.w.active, browser, reason: 'the pane selected last');
+    expect(page(room).width, beside.width);
+    expect(page(room).left, beside.left);
+
+    // Closing the split tab keeps every app open.
+    await tester.tap(find.byTooltip('Close Room layout + Browser'));
+    await tester.pumpAndSettle();
+    expect(f.w.tabs, [room, browser, second]);
+    expect(f.w.active, browser, reason: 'the selected pane shows alone');
+    expect(page(browser).width, closeTo(whole.width, 1));
     expect(tester.element(roomView), same(roomElement));
-    expect(tester.element(browserView), same(browserElement));
+    expect(tester.element(browserView.first), same(browserElement));
     await tester.pumpWidget(const SizedBox());
   });
-  testWidgets('the split divider resizes, resets and ends the split', (
+  testWidgets('split dividers resize side by side and stacked, and reset', (
     tester,
   ) async {
     final f = Fixture();
     await f.w.start();
     final room = await f.w.openApp(f.w.apps[1]);
     final browser = await f.w.openApp(f.w.apps[0]);
-    f.w.dropInSplit(room, left: true);
+    final second = await f.w.openApp(f.w.apps[0]);
+    f.w.dropInSplit(room, second, SplitSide.left);
+    f.w.dropInSplit(browser, second, SplitSide.top);
     tester.view.physicalSize = const Size(1400, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -824,55 +1277,155 @@ void main() {
     await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
     await tester.pumpAndSettle();
     final roomView = find.text('View Room layout', skipOffstage: false);
-    final browserView = find.text('View Browser', skipOffstage: false);
     final roomElement = tester.element(roomView);
-    final browserElement = tester.element(browserView);
     Rect page(WorkspaceTab tab) =>
         tester.getRect(find.byKey(ValueKey('page-${tab.id}')));
     final width = page(browser).right - page(room).left;
-    // Above the exit button in the middle of the divider.
-    Offset grip() => tester
-        .getRect(find.byKey(const ValueKey('split-divider')))
-        .center
-        .translate(0, -150);
-    Future<void> dragDivider(double dx) async {
+    final height = page(second).bottom - page(browser).top;
+    Offset grip(int index) =>
+        tester.getRect(find.byKey(ValueKey('split-divider-$index'))).center;
+    double saved() => f.stored.last['tabs'][3]['split']['fraction'] as double;
+    Future<void> dragDivider(int index, Offset by) async {
       final drag = await tester.startGesture(
-        grip(),
+        grip(index),
         kind: PointerDeviceKind.mouse,
       );
       // The first pixels of a move only start the drag, as a mouse does.
-      await drag.moveBy(Offset(dx.sign * 2, 0));
-      await drag.moveBy(Offset(dx, 0));
+      await drag.moveBy(Offset(by.dx.sign * 2, by.dy.sign * 2));
+      await drag.moveBy(by);
       await tester.pump();
       await drag.up();
       await tester.pumpAndSettle();
     }
 
-    await dragDivider(150);
+    await dragDivider(0, const Offset(150, 0));
     expect(page(room).width, closeTo(width / 2 + 147, 2));
     expect(page(browser).width, closeTo(width / 2 - 153, 2));
-    expect(f.stored.last['splitWidth'], closeTo(.5 + 150 / width, .01));
+    expect(saved(), closeTo(.5 + 150 / width, .01));
     expect(tester.element(roomView), same(roomElement));
-    expect(tester.element(browserView), same(browserElement));
 
-    await dragDivider(-2000);
+    await dragDivider(0, const Offset(-2000, 0));
     expect(page(room).width, closeTo(max(240, width * .2) - 7, 1));
 
-    final reset = grip();
+    // The divider between the stacked panes moves up and down.
+    await dragDivider(1, const Offset(0, 100));
+    expect(page(browser).height, closeTo(height / 2 + 97, 2));
+    expect(page(second).height, closeTo(height / 2 - 103, 2));
+
+    final reset = grip(0);
     await tester.tapAt(reset, kind: PointerDeviceKind.mouse);
     await tester.pump(const Duration(milliseconds: 50));
     await tester.tapAt(reset, kind: PointerDeviceKind.mouse);
     await tester.pumpAndSettle();
     expect(page(room).width, closeTo(page(browser).width, 1));
-    expect(f.stored.last['splitWidth'], .5);
+    expect(saved(), .5);
+    await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets(
+    'a fullscreen video takes the whole screen alone and its pane in split',
+    (tester) async {
+      final f = Fixture();
+      await f.w.start();
+      final room = await f.w.openApp(f.w.apps[1]);
+      final browser = await f.w.openApp(f.w.apps[0]);
+      final video = browser.page! as FakePage;
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        RelayApp(
+          workspace: f.w,
+          initialDraft: 'Keep this draft',
+          saveDraft: (_) async {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      final view = find.byKey(ValueKey('page-${browser.id}'));
+      final element = tester.element(view);
+      final alone = tester.getRect(view);
+      final menu = find.byTooltip('Workspace menu');
+      final address = find.text('Search or enter a web address');
+      final chat = find.text('Keep this draft');
+      Future<void> pageFullScreen(bool on) async {
+        video.fullScreen = on;
+        video.changed(false);
+        await tester.pumpAndSettle();
+      }
 
-    await tester.tap(find.byTooltip('Exit split view'));
+      await pageFullScreen(true);
+      expect(tester.getRect(view), const Rect.fromLTWH(0, 0, 1400, 800));
+      expect(video.screenFills, [true]);
+      expect(menu, findsNothing);
+      expect(address, findsNothing);
+      // Chat stays built, with its draft, but hidden.
+      expect(chat, findsNothing);
+      expect(find.text('Keep this draft', skipOffstage: false), findsOneWidget);
+      expect(tester.element(view), same(element));
+
+      // Escape in the page ends its fullscreen.
+      await pageFullScreen(false);
+      expect(tester.getRect(view), alone);
+      expect(video.screenFills, [true, false]);
+      expect(menu, findsOneWidget);
+      expect(chat, findsOneWidget);
+
+      // Another tab taking the screen ends the page's fullscreen.
+      await pageFullScreen(true);
+      f.w.select(room);
+      await tester.pumpAndSettle();
+      expect(video.screenFills, [true, false, true, false]);
+      expect(video.fullScreen, isFalse);
+      expect(menu, findsOneWidget);
+
+      // In split view the video fills only its own pane.
+      f.w.dropInSplit(browser, room, SplitSide.right);
+      await tester.pumpAndSettle();
+      final pane = tester.getRect(view);
+      await pageFullScreen(true);
+      expect(tester.getRect(view), pane);
+      expect(video.screenFills, [true, false, true, false]);
+      expect(menu, findsOneWidget);
+      expect(chat, findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+  testWidgets('a Browser tab highlights selected text, and zooms a PDF', (
+    tester,
+  ) async {
+    final f = Fixture();
+    await f.w.start();
+    final pdf = (await f.w.openApp(f.w.apps[0])).page! as FakePage;
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
     await tester.pumpAndSettle();
-    expect(f.w.split, isNull);
-    expect(f.w.active, room, reason: 'the selected tab stays shown');
-    expect(f.w.tabs, [room, browser]);
-    expect(find.byKey(const ValueKey('split-divider')), findsNothing);
-    expect(tester.element(roomView), same(roomElement));
+    expect(find.byTooltip('Zoom in'), findsNothing);
+    // With nothing selected there is nothing to highlight.
+    IconButton highlight() => tester.widget(
+      find.widgetWithIcon(IconButton, Icons.border_color),
+    );
+    pdf.selection = '';
+    pdf.changed(false);
+    await tester.pumpAndSettle();
+    expect(highlight().onPressed, isNull);
+
+    pdf.pdf = true;
+    pdf.changed(false);
+    await tester.pumpAndSettle();
+    for (final button in ['Zoom out', 'Zoom in', 'Fit to width']) {
+      await tester.tap(find.byTooltip(button));
+    }
+    expect(pdf.actions, ['zoomOut', 'zoomIn', 'zoomFit']);
+    expect(highlight().onPressed, isNull);
+
+    pdf.selection = 'selected passage';
+    pdf.changed(true);
+    await tester.pumpAndSettle();
+    highlight().onPressed!();
+    expect(pdf.actions.last, 'highlight');
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets('a click that moves a few pixels still selects the tab', (
@@ -901,7 +1454,7 @@ void main() {
     await click.up();
     await tester.pumpAndSettle();
     expect(f.w.active, room);
-    expect(f.w.split, isNull);
+    expect(f.w.shownSplit, isNull);
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets(
@@ -996,17 +1549,95 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
-  testWidgets('the toolbar record button starts and finishes a bug recording', (
+  testWidgets('a bug report pictures the whole window with its page in place', (
     tester,
   ) async {
     final f = Fixture();
-    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await f.w.start();
+    tester.view.physicalSize = const Size(3000, 1600);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await f.w.openApp(f.w.apps[1]);
+    final page = f.pages.last;
+    page.frame = await tester.runAsync(() async {
+      final recorder = ui.PictureRecorder();
+      Canvas(recorder).drawColor(Colors.blue, BlendMode.src);
+      final image = await recorder.endRecording().toImage(80, 60);
+      final png = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      return png!.buffer.asUint8List();
+    });
+    await tester.pumpWidget(
+      RelayApp(workspace: f.w, initialDraft: '', saveDraft: (_) async {}),
+    );
+    await tester.pumpAndSettle();
+    final shown = tester.getRect(find.byKey(ValueKey('page-${page.spec.id}')));
+    final panel = tester.getRect(
+      find.byKey(const ValueKey('conversation-panel')),
+    );
+
+    // The window picture is made by the engine, outside the test's clock.
+    Future<void> settle(Finder until) async {
+      for (var i = 0; i < 100 && until.evaluate().isEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+    }
+
+    // The saved picture's width and its colours in the page and the chat.
+    Future<(int, List<int>, List<int>)> record() async {
+      await tester.tap(find.byTooltip('Record a bug'));
+      await tester.pump();
+      expect(f.w.recorder.recording, isTrue);
+      // A second click during the capture must not start another one.
+      await tester.tap(find.byTooltip('Recording a bug. Stop and save'));
+      await tester.tap(find.byTooltip('Recording a bug. Stop and save'));
+      await settle(find.text('Save bug report'));
+      await tester.pumpAndSettle();
+      expect(find.text('Save bug report'), findsOneWidget);
+      await tester.tap(find.text('Save on server'));
+      await tester.pumpAndSettle();
+      expect(f.w.recorder.recording, isFalse);
+      final png = base64Decode(f.bugReport!['screenshot'] as String);
+      return (await tester.runAsync(() async {
+        final image = await decodeFrame(png);
+        final pixels = (await image.toByteData())!.buffer.asUint8List();
+        final scale = image.width / 1500;
+        List<int> at(Offset point) {
+          final i =
+              ((point.dy * scale).round() * image.width +
+                  (point.dx * scale).round()) *
+              4;
+          return pixels.sublist(i, i + 3);
+        }
+
+        final result = (
+          image.width,
+          at(shown.topLeft + shown.size.bottomRight(Offset.zero) * .75),
+          at(panel.center),
+        );
+        image.dispose();
+        return result;
+      }))!;
+    }
+
+    final (width, inPage, inChat) = await record();
+    expect(width, 2000, reason: 'the longest side is capped');
+    expect(inPage, [0x21, 0x96, 0xf3], reason: 'the page snapshot in place');
+    expect(inChat, isNot(inPage), reason: 'the chat panel is in the picture');
+
+    page.frame = null;
+    final (_, notCaptured, _) = await record();
+    expect(notCaptured, [0xd4, 0xd4, 0xd4]);
+    expect(find.text('Page not captured'), findsNothing, reason: 'cleared');
+
     await tester.tap(find.byTooltip('Record a bug'));
     await tester.pump();
-    expect(f.w.recorder.recording, isTrue);
     await tester.tap(find.byTooltip('Recording a bug. Stop and save'));
-    await tester.pumpAndSettle();
-    expect(find.text('Save bug report'), findsOneWidget);
+    await settle(find.text('Save bug report'));
     await tester.tap(find.text('Discard'));
     await tester.pumpAndSettle();
     expect(f.w.recorder.recording, isFalse);
@@ -1176,6 +1807,413 @@ void main() {
   });
 
   testWidgets(
+    'address bar asks the server for visited pages as the user types',
+    (tester) async {
+      final f = Fixture()
+        ..historyPages = [
+          {'url': 'https://example.com/', 'title': ''},
+          {'url': 'https://example.com/desk', 'title': 'Desk'},
+          {'url': 'https://news.example/', 'title': 'News'},
+        ];
+      await f.w.start();
+      await f.w.openApp(f.w.apps[0]);
+      final page = f.pages.single;
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, saveDraft: (_) async {}, browserHistory: true),
+      );
+      await tester.pumpAndSettle();
+      final address = find.byWidgetPredicate(
+        (w) =>
+            w is TextField &&
+            w.decoration?.hintText == 'Search or enter a web address',
+      );
+      // Entered at once over the whole address, as a paste after a focusing
+      // click, so nothing fills in.
+      Future<void> type(String text) async {
+        final controller = tester.widget<TextField>(address).controller!;
+        controller.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: controller.text.length,
+        );
+        await tester.enterText(address, text);
+        await tester.pumpAndSettle();
+      }
+
+      Future<void> submit() async {
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+      }
+
+      // The address the app wrote asks for nothing, even with the field focused.
+      await tester.tap(address);
+      await tester.pumpAndSettle();
+      expect(f.history, isEmpty);
+      expect(find.text('Desk'), findsNothing);
+
+      // Browsing history stays out of bug recordings.
+      f.w.recorder.start();
+      await type('exa');
+      expect(f.history, ['suggest exa']);
+      expect(find.text('Desk'), findsOneWidget);
+      expect(find.text('News'), findsOneWidget);
+      await submit();
+      expect(page.navigated, ['exa'], reason: 'nothing was highlighted');
+      expect(find.text('Desk'), findsNothing);
+      expect(
+        f.history.last,
+        'POST /api/browser-history/typed {"url":"https://example.com/desk"}',
+      );
+
+      await type('exa');
+      // Below the example.com site row and its desk page.
+      for (var i = 0; i < 3; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      }
+      await submit();
+      expect(page.navigated.last, 'https://news.example/');
+
+      // Typing again returns the highlight to the typed text.
+      await type('exa');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await type('exam');
+      await submit();
+      expect(page.navigated.last, 'exam');
+
+      // A slow answer for older text never replaces the newer one, and Enter
+      // opens the text in the field while the earlier list is still shown.
+      f.holdHistory['e'] = Completer();
+      await type('e');
+      await type('ne');
+      expect(find.text('News'), findsOneWidget);
+      f.holdHistory['e']!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Desk'), findsNothing);
+      f.holdHistory['new'] = Completer();
+      await type('new');
+      await submit();
+      expect(page.navigated.last, 'new');
+      f.holdHistory['new']!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('News'), findsNothing);
+      expect(tester.widget<TextField>(address).controller!.text, 'new');
+
+      await type('news');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(find.text('News'), findsNothing);
+      await submit();
+      expect(page.navigated.last, 'news');
+
+      await type('ne');
+      await tester.tap(find.text('News'));
+      await tester.pumpAndSettle();
+      expect(page.navigated.last, 'https://news.example/');
+
+      // A new page address replaces typed text without opening suggestions.
+      await type('ne');
+      expect(find.text('News'), findsOneWidget);
+      final asked = f.history.length;
+      page.url = 'https://example.com/';
+      f.w.changed();
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(address).controller!.text, page.url);
+      expect(find.text('Desk'), findsNothing);
+      expect(find.text('News'), findsNothing);
+      expect(f.history, hasLength(asked));
+
+      // An older backend without history shows no suggestions.
+      f.historyPages = null;
+      await type('desk');
+      expect(find.text('Desk'), findsNothing);
+
+      expect(
+        f.w.recorder.events.where((e) => '${e['path']}'.contains('history')),
+        isEmpty,
+      );
+      f.w.recorder.stop();
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  test('inline completion continues the typed text with the best address', () {
+    expect(inlineCompletion('you', 'https://www.youtube.com/'), 'youtube.com');
+    expect(inlineCompletion('YOU', 'https://www.youtube.com/'), 'YOUtube.com');
+    expect(
+      inlineCompletion('www.you', 'https://youtube.com/'),
+      'www.youtube.com',
+    );
+    expect(
+      inlineCompletion('HTTPS://you', 'http://www.YouTube.com/watch?v=1'),
+      'HTTPS://youTube.com/watch?v=1',
+    );
+    expect(inlineCompletion('ex', 'https://example.com/a/'), 'example.com/a/');
+    expect(inlineCompletion('tube', 'https://youtube.com/'), isNull);
+    expect(inlineCompletion('youtube.com', 'https://youtube.com/'), isNull);
+    expect(inlineCompletion('www.', 'https://www.youtube.com/'), isNull);
+  });
+
+  testWidgets(
+    'address bar selects all on a focusing click and fills in the best page',
+    (tester) async {
+      final f = Fixture()
+        ..historyPages = [
+          {'url': 'http://www.example.com/', 'title': ''},
+          {'url': 'https://example.com/desk', 'title': 'Desk'},
+        ];
+      await f.w.start();
+      await f.w.openApp(f.w.apps[0]);
+      final page = f.pages.single;
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, saveDraft: (_) async {}, browserHistory: true),
+      );
+      await tester.pumpAndSettle();
+      final address = find.byWidgetPredicate(
+        (w) =>
+            w is TextField &&
+            w.decoration?.hintText == 'Search or enter a web address',
+      );
+      final field = tester.widget<TextField>(address).controller!;
+      TextEditingValue shown(String text, [int? typed]) => TextEditingValue(
+        text: text,
+        selection: TextSelection(
+          baseOffset: typed ?? text.length,
+          extentOffset: text.length,
+        ),
+      );
+      Future<void> edit(TextEditingValue value) async {
+        tester.testTextInput.updateEditingValue(value);
+        await tester.pumpAndSettle();
+      }
+
+      Future<void> key(LogicalKeyboardKey key) async {
+        await tester.sendKeyEvent(key);
+        await tester.pumpAndSettle();
+      }
+
+      // The click that focuses the bar selects the address; the next one
+      // places the caret.
+      await tester.tap(address, kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      expect(field.selection, TextSelection(baseOffset: 0, extentOffset: 24));
+      await tester.pump(kDoubleTapTimeout);
+      await tester.tap(address, kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      expect(field.selection.isCollapsed, isTrue);
+
+      // A paste fills nothing in; the next typed character fills in the best
+      // page after the typed text, asking for nothing more.
+      await edit(shown(''));
+      await edit(shown('exa'));
+      expect(field.value, shown('exa'));
+      expect(find.text('Desk'), findsOneWidget);
+      await edit(shown('exam'));
+      expect(field.value, shown('example.com', 4));
+      expect(f.history, ['suggest exa', 'suggest exam']);
+      // Typing what is filled in next keeps the fill-in at once.
+      await edit(shown('examp'));
+      expect(field.value, shown('example.com', 5));
+      expect(f.history, ['suggest exa', 'suggest exam', 'suggest examp']);
+      // Deleting removes the fill-in and fills nothing in again.
+      await key(LogicalKeyboardKey.backspace);
+      expect(field.value, shown('examp'));
+      await key(LogicalKeyboardKey.backspace);
+      expect(field.value, shown('exam'));
+      await edit(shown('examp'));
+      expect(field.value, shown('example.com', 5));
+      // Esc removes the fill-in and closes the list.
+      await key(LogicalKeyboardKey.escape);
+      expect(field.value, shown('examp'));
+      expect(find.text('Desk'), findsNothing);
+
+      // Enter and Go open the filled-in page's own URL, not the shown text,
+      // also once the caret has accepted the fill-in.
+      field.selection = const TextSelection(baseOffset: 0, extentOffset: 5);
+      await edit(shown('e'));
+      expect(field.value, shown('example.com', 1));
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(page.navigated, ['http://www.example.com/']);
+      expect(
+        f.history.last,
+        'POST /api/browser-history/typed {"url":"https://example.com/desk"}',
+      );
+      await tester.tap(address, kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      await edit(shown('e'));
+      expect(field.value, shown('example.com', 1));
+      await key(LogicalKeyboardKey.arrowRight);
+      expect(field.value, shown('example.com'));
+      await tester.tap(find.byTooltip('Go'));
+      await tester.pumpAndSettle();
+      expect(page.navigated, List.filled(2, 'http://www.example.com/'));
+      await tester.tap(address, kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      await edit(shown('e'));
+      await key(LogicalKeyboardKey.arrowRight);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(page.navigated, List.filled(3, 'http://www.example.com/'));
+      // With nothing filled in, as after a paste, Enter opens the text as is.
+      await tester.tap(address, kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      await edit(shown('exa'));
+      expect(field.value, shown('exa'));
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(page.navigated.last, 'exa');
+      await tester.tap(address, kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      await edit(shown('desk'));
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(page.navigated.last, 'desk');
+
+      // An answer fills nothing in once the text or caret has moved on.
+      await tester.tap(address, kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      f.holdHistory['e'] = Completer();
+      f.holdHistory['ex'] = Completer();
+      await edit(shown('e'));
+      await edit(shown('ex'));
+      await edit(shown('ex?'));
+      f.holdHistory['e']!.complete();
+      f.holdHistory['ex']!.complete();
+      await tester.pumpAndSettle();
+      expect(field.value, shown('ex?'));
+      f.holdHistory['exa'] = Completer();
+      await edit(shown('exa'));
+      await key(LogicalKeyboardKey.arrowLeft);
+      f.holdHistory['exa']!.complete();
+      await tester.pumpAndSettle();
+      expect(field.text, 'exa');
+      expect(field.selection, const TextSelection.collapsed(offset: 2));
+
+      // Nothing fills in while an input method is composing.
+      await edit(shown(''));
+      const composing = TextEditingValue(
+        text: 'exa',
+        selection: TextSelection.collapsed(offset: 3),
+        composing: TextRange(start: 0, end: 3),
+      );
+      await edit(composing);
+      expect(field.value, composing);
+      await edit(shown('exa'));
+      expect(field.value, shown('example.com', 3));
+      await tester.pumpWidget(const SizedBox());
+    },
+    // A click on macOS places the caret as the mouse goes down.
+    variant: TargetPlatformVariant.only(TargetPlatform.macOS),
+  );
+
+  testWidgets('newest tab first is a saved setting and slides the tab left', (
+    tester,
+  ) async {
+    final f = Fixture();
+    await f.w.start();
+    final room = await f.w.openApp(f.w.apps[1]);
+    await f.w.openApp(f.w.apps[2]);
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Workspace menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Newest tab first'));
+    await tester.pumpAndSettle();
+    expect(f.w.newestTabFirst, isTrue);
+    expect(f.savedNewestFirst, [true]);
+
+    Finder chip(String title) => find.descendant(
+      of: find.byType(WorkspaceTabs),
+      matching: find.text(title),
+    );
+    double left(String title) => tester.getTopLeft(chip(title)).dx;
+    // The moving chip is drawn larger while it travels, then lands at rest.
+    double width(String title) => tester
+        .getRect(
+          find.ancestor(of: chip(title), matching: find.byType(Material)).first,
+        )
+        .width;
+    final start = left('Research'), end = left('Room layout');
+    final rest = width('Research');
+    await tester.tap(chip('Research'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(f.w.tabs.last, room);
+    expect(left('Research'), allOf(lessThan(start), greaterThan(end)));
+    expect(width('Research'), greaterThan(rest));
+    expect(width('Room layout'), moreOrLessEquals(rest));
+    await tester.pumpAndSettle();
+    expect(left('Research'), end);
+    expect(left('Room layout'), start);
+    expect(width('Research'), rest);
+
+    // A tab moved from the far end of a scrolled strip is scrolled into view.
+    for (var i = 0; i < 6; i++) {
+      f.w.newTab();
+    }
+    await tester.pumpAndSettle();
+    final strip = tester.state<ScrollableState>(
+      find.descendant(
+        of: find.byType(WorkspaceTabs),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    strip.position.jumpTo(strip.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(strip.position.pixels, greaterThan(0));
+    await tester.tap(chip('Room layout'));
+    await tester.pumpAndSettle();
+    expect(f.w.tabs.first, room);
+    expect(strip.position.pixels, 0);
+    expect(left('Room layout'), end);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'with newest tab first, clicking tab D of A B C D gives D A B C',
+    (tester) async {
+      final f = Fixture()
+        ..configApps = [
+          ...apps,
+          {'id': 'notes', 'name': 'Notes', 'description': 'Notes'},
+        ];
+      await f.w.start();
+      final [a, b, c, d] = [for (final app in f.w.apps) await f.w.openApp(app)];
+      f.w.select(a);
+      f.w.setNewestTabFirst(true);
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, saveDraft: (_) async {}),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(WorkspaceTabs),
+          matching: find.text('Notes'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(f.w.tabs, [d, a, b, c]);
+      expect(f.w.active, d);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
     'deleting a tab during insertion keeps the next tab interactive',
     (tester) async {
       final f = Fixture();
@@ -1200,6 +2238,46 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('an app tab that cannot load opens the App servers screen', (
+    tester,
+  ) async {
+    final f = Fixture()..appDown = true;
+    await f.w.start();
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    // The pane for a tab without a page keeps its progress spinner turning,
+    // so these steps pump a fixed time instead of settling.
+    Future<void> settle() async {
+      for (var frame = 0; frame < 5; frame++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+    }
+
+    Future<void> opensServers() async {
+      await tester.tap(find.widgetWithText(OutlinedButton, 'App servers'));
+      await settle();
+      expect(find.textContaining('No app servers are set up'), findsOneWidget);
+      await tester.tap(find.byTooltip('Close app servers'));
+      await settle();
+    }
+
+    await expectLater(f.w.openApp(f.w.apps[1]), throwsA(anything));
+    await settle();
+    expect(find.text('App is down.'), findsOneWidget);
+    await opensServers();
+
+    // A tab opened from a cited source shows the saved evidence instead.
+    await f.w.openSource(deskReport);
+    await settle();
+    expect(find.textContaining('Its app view could not open'), findsOneWidget);
+    await opensServers();
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('desktop and phone picker, retained tabs and chat draft', (
     tester,
@@ -1430,8 +2508,14 @@ void main() {
       expect(shade(7), tint);
       expect(shown(7), isTrue);
       expect(follow, findsNothing);
-      // A seek back moves it; an unknown time, as during an ad, keeps it.
+      // A seek back moves it, rebuilding only the two paragraphs that change;
+      // an unknown time, as during an ad, keeps it.
+      final rebuilt = <Widget>[];
+      debugOnRebuildDirtyWidget = (element, _) => rebuilt.add(element.widget);
       await play(5);
+      debugOnRebuildDirtyWidget = null;
+      expect(rebuilt.whereType<TranscriptPane>(), isEmpty);
+      expect(rebuilt.whereType<ValueListenableBuilder<bool>>(), hasLength(2));
       expect([shade(0), shade(7)], [tint, null]);
       expect(shown(0), isTrue);
       await play(null);

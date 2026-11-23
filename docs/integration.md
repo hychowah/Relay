@@ -4,8 +4,10 @@ Relay connects independently hosted apps through a configured HTTP origin.
 Flutter displays the app in an iframe inside a system WebView. The React
 browser fallback displays the app in an iframe. Apps own data, routes, semantic
 targets and animation. Relay owns chat, execution records, device-scoped
-presentation and cancellation. It does not manage app processes or install
-executable app code into the agent harness.
+presentation and cancellation. It does not install executable app code into the
+agent harness. App processes are not part of the protocol; the host's service
+manager can run them, controlled from the optional
+[servers file](../README.md#manage-app-servers).
 
 ## Registration
 
@@ -33,7 +35,10 @@ browser features such as embedded PDF viewing. This gives the app ordinary
 cross-origin iframe privileges, including forms, downloads and user-initiated
 top-level navigation; use it only for trusted registrations. The separate-origin
 requirement still applies. App manifests and agent calls cannot enable this flag.
-Generated content does not inherit this trust.
+Generated content does not inherit this trust. The default sandbox also ignores
+page dialogs (`confirm()` answers false at once) and blocks form submission, so
+an app that needs either must be registered as trusted
+(`tests/app-frame-dialogs.test.ts`).
 
 The [room-layout example](../examples/room-layout/README.md) is a complete v2 app
 without document APIs. Research Web implements v2 plus its existing v1 evidence
@@ -180,7 +185,9 @@ Relay also checks originating device/tab and its own view token. An applied
 acknowledgement advances the next command's token and app generation, preserving
 original question context in history. A failed presentation may also return its
 actual context and token so a corrected retry uses the current view; the action
-stays failed. Stale/manual changes never advance that chain.
+stays failed. Stale/manual changes never advance that chain. Once its token
+check passes, the Flutter client presents with the open page's own generation,
+so a request sent without context can still present in the app already open.
 Commands remain pending until acknowledged; a server result is not proof of a
 visible change. A disconnected browser does not block the agent indefinitely.
 
@@ -206,6 +213,9 @@ home. Existing `app_search`, `app_read` and `app_navigate` tools remain availabl
 - Native views accept resource ID, revision, token and parent origin. For a v2
   app retaining this interface, saved-source opening adds `protocol=1`.
 
+A v2 app that keeps this interface declares `capabilities.search` and/or
+`capabilities.read`; Relay refuses the matching tool otherwise.
+
 `Source` is `{appId,resourceId,revision,title,sourceUrl}`. URLs resolve against the
 browser origin. Saved Reports retain exact evidence independently of whether
 the live app still serves its revision. Old commands without a kind are read as
@@ -215,8 +225,8 @@ The v1 bridge uses `relay.ready`, `relay.context`, `relay.navigate` and
 `relay.navigation`. Navigation supplies source, command ID, section ID, optional
 `highlightIds` and `viewState:{query?,filters?,language?}`. IDs come from the
 published Report. Applied means those targets rendered. A null source clears
-previous document context while preserving app context. V2 apps can advertise
-`capabilities.search` to retain Relay's Library control.
+previous document context while preserving app context. `capabilities.search`
+also keeps Relay's Library control for a v2 app.
 
 An app that cannot serve the protocol itself can sit behind an external adapter
 registered by address. See [Setup](../README.md#setup) for registration.

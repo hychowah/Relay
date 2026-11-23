@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:material_ui/material_ui.dart';
 
 import 'relay_api.dart';
+import 'workspace_style.dart';
 
 /// Lists the bug reports saved on the service and shows one report's
 /// description, screenshot and recorded events. Each report can be marked
@@ -74,26 +75,6 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
   });
 
   Future<void> delete(Json item) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete bug report?'),
-        content: const Text(
-          'This removes the recording and its screenshot from the service.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
     await _run(() async {
       final id = item['id'];
       await widget.api.deleteBugReport(id as String);
@@ -113,10 +94,10 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
         : Icon(Icons.radio_button_unchecked, color: colors.onSurfaceVariant),
   );
 
-  Widget _deleteButton(Json item) => IconButton(
+  Widget _deleteButton(Json item) => ConfirmDeleteButton(
     tooltip: 'Delete bug report',
-    onPressed: loading ? null : () => delete(item),
-    icon: const Icon(Icons.delete_outline),
+    label: 'Delete',
+    onConfirmed: loading ? null : () => delete(item),
   );
 
   static String _time(Object? iso) {
@@ -150,6 +131,32 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
 
   static String _pretty(Object? value) =>
       const JsonEncoder.withIndent('  ').convert(value);
+
+  // The window picture is too small to read inside the report.
+  void _showScreenshot(Uint8List picture) => showDialog<void>(
+    context: context,
+    builder: (context) => Dialog.fullscreen(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: InteractiveViewer(
+              maxScale: 4,
+              child: Center(child: Image.memory(picture)),
+            ),
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: IconButton.filledTonal(
+              tooltip: 'Close',
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _details(String title, Object? value) => ExpansionTile(
     title: Text(title),
@@ -217,9 +224,18 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
       if (screenshot != null)
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 12),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 360),
-            child: Image.memory(screenshot!, alignment: Alignment.centerLeft),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Tooltip(
+              message: 'Open the screenshot full size',
+              child: InkWell(
+                onTap: () => _showScreenshot(screenshot!),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 360),
+                  child: Image.memory(screenshot!),
+                ),
+              ),
+            ),
           ),
         ),
       _details('Workspace when saved', report['workspace']),

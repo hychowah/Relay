@@ -40,6 +40,52 @@ export interface SavedRun extends Run {
   navigationSurface?: { appId: string; context?: SurfaceContext };
 }
 
+/** A Browser page address with its counts; lastVisit is in epoch milliseconds. */
+export interface BrowserPage {
+  url: string;
+  title: string;
+  visits: number;
+  typed: number;
+  lastVisit: number;
+}
+
+/**
+ * Text the user highlighted on a page. A web page finds it again by the text
+ * and the text around it, so it shows wherever that text is on the page; a
+ * PDF also keeps where its lines are drawn.
+ */
+export interface Highlight {
+  id: string;
+  text: string;
+  prefix: string;
+  suffix: string;
+  /** PDF only: one [page, x, y, width, height] for each highlighted line. */
+  marks?: number[][];
+  /** One of [highlightColors]; yellow when absent. */
+  color?: string;
+}
+
+/**
+ * The colours a highlight can have. The Flutter app draws each in its own
+ * shade, kept in step in page_highlights.js, BrowserPDF.swift and
+ * highlight_menu.dart.
+ */
+export const highlightColors = ["yellow", "green", "blue", "pink", "purple"];
+
+/** How much one stored-data category holds. */
+export interface StoredUsage {
+  items: number;
+  bytes: number;
+}
+
+export interface Device {
+  id: string;
+  name: string;
+  /** The device's tab session as JSON, as its client saved it. */
+  tabs: string;
+  updatedAt: number;
+}
+
 export class Store {
   private db: DatabaseSync;
 
@@ -85,6 +131,21 @@ export class Store {
       );
       CREATE TABLE IF NOT EXISTS checkpoints (
         conversation_id TEXT PRIMARY KEY REFERENCES conversations(id), data TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS browser_pages (
+        url TEXT PRIMARY KEY, title TEXT NOT NULL, visits INTEGER NOT NULL, typed INTEGER NOT NULL,
+        last_visit INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS highlights (
+        id TEXT PRIMARY KEY, url TEXT NOT NULL, data TEXT NOT NULL, created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS highlights_url ON highlights(url);
+      CREATE TABLE IF NOT EXISTS stored_data_cleanup (category TEXT PRIMARY KEY, days INTEGER);
+      CREATE TABLE IF NOT EXISTS devices (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, tabs TEXT NOT NULL, updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS current_conversation (
+        only INTEGER PRIMARY KEY CHECK (only = 1), id TEXT NOT NULL
       );
     `);
     const columns = this.db.prepare("PRAGMA table_info(conversations)").all();
@@ -300,6 +361,119 @@ export class Store {
       this.db.exec("ROLLBACK");
       throw error;
     }
+  }
+
+  /** Adds one visit, or one address-bar open, to the page's row. Either may arrive first. */
+  countBrowserPage(url: string, at: number, kind: "visit" | "typed", title = "") {
+    const visit = kind === "visit" ? 1 : 0;
+    this.db.prepare(`INSERT INTO browser_pages VALUES (?, ?, ?, ?, ?) ON CONFLICT(url) DO UPDATE SET
+      visits = visits + excluded.visits, typed = typed + excluded.typed,
+      title = CASE excluded.title WHEN '' THEN title ELSE excluded.title END,
+      last_visit = CASE excluded.visits WHEN 0 THEN last_visit ELSE excluded.last_visit END`)
+      .run(url, title, visit, 1 - visit, at);
+  }
+
+  retitleBrowserPage(url: string, title: string) {
+    this.db.prepare("UPDATE browser_pages SET title = ? WHERE url = ?").run(title, url);
+  }
+
+  browserPages(): BrowserPage[] {
+    return this.db.prepare("SELECT url, title, visits, typed, last_visit AS lastVisit FROM browser_pages ORDER BY rowid")
+      .all() as unknown as BrowserPage[];
+  }
+
+  /** Forgets the given pages, or every page. */
+  forgetBrowserPages(urls?: string[]) {
+    if (!urls) {
+      this.db.exec("DELETE FROM browser_pages");
+      return;
+    }
+    const forget = this.db.prepare("DELETE FROM browser_pages WHERE url = ?");
+    this.db.exec("BEGIN");
+    try {
+      for (const url of urls) forget.run(url);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  forgetBrowserPagesBefore(at: number) {
+    this.db.prepare("DELETE FROM browser_pages WHERE last_visit < ?").run(at);
+  }
+
+  /** What the history holds, or only the pages last visited before [before]. */
+  browserPagesUsage(before = Infinity) {
+    return this.db.prepare(`SELECT COUNT(*) AS items,
+      COALESCE(SUM(LENGTH(CAST(url AS BLOB)) + LENGTH(CAST(title AS BLOB))), 0) AS bytes
+      FROM browser_pages WHERE last_visit < ?`).get(before) as unknown as StoredUsage;
+  }
+
+  /** The highlights made at a page address, oldest first. */
+  highlights(url: string): Highlight[] {
+    return this.db.prepare("SELECT id, data FROM highlights WHERE url = ? ORDER BY created_at, rowid").all(url)
+      .map((row) => ({ ...JSON.parse(row.data as string), id: row.id as string }));
+  }
+
+  addHighlight(url: string, { id, ...data }: Highlight, at: number) {
+    this.db.prepare("INSERT OR REPLACE INTO highlights VALUES (?, ?, ?, ?)").run(id, url, JSON.stringify(data), at);
+  }
+
+  /** Whether the highlight [id] was there to change. */
+  recolorHighlight(id: string, color: string) {
+    return this.db.prepare("UPDATE highlights SET data = json_set(data, '$.color', ?) WHERE id = ?")
+      .run(color, id).changes > 0;
+  }
+
+  forgetHighlight(id: string) {
+    this.db.prepare("DELETE FROM highlights WHERE id = ?").run(id);
+  }
+
+  /** Forgets every highlight, or those made before [before]. */
+  forgetHighlights(before?: number) {
+    if (before === undefined) this.db.exec("DELETE FROM highlights");
+    else this.db.prepare("DELETE FROM highlights WHERE created_at < ?").run(before);
+  }
+
+  /** What the highlights hold, or only those made before [before]. */
+  highlightsUsage(before = Infinity) {
+    return this.db.prepare(`SELECT COUNT(*) AS items,
+      COALESCE(SUM(LENGTH(CAST(url AS BLOB)) + LENGTH(CAST(data AS BLOB))), 0) AS bytes
+      FROM highlights WHERE created_at < ?`).get(before) as unknown as StoredUsage;
+  }
+
+  saveDevice(id: string, name: string, tabs: string, at: number) {
+    this.db.prepare(`INSERT INTO devices VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name, tabs = excluded.tabs, updated_at = excluded.updated_at`).run(id, name, tabs, at);
+  }
+
+  /** Every device's last saved tabs, most recently updated first. */
+  devices(): Device[] {
+    return this.db.prepare("SELECT id, name, tabs, updated_at AS updatedAt FROM devices ORDER BY updated_at DESC")
+      .all() as unknown as Device[];
+  }
+
+  setCurrentConversation(id: string) {
+    this.db.prepare(`INSERT INTO current_conversation VALUES (1, ?)
+      ON CONFLICT(only) DO UPDATE SET id = excluded.id`).run(id);
+  }
+
+  /** The conversation last opened on any device, unless it has since gone to Trash. */
+  currentConversation(): string | undefined {
+    const row = this.db.prepare("SELECT id FROM current_conversation").get();
+    return row && this.conversation(row.id as string) ? row.id as string : undefined;
+  }
+
+  /** The days a stored-data category is kept: null for ever, undefined when never chosen. */
+  cleanupDays(category: string): number | null | undefined {
+    const row = this.db.prepare("SELECT days FROM stored_data_cleanup WHERE category = ?").get(category);
+    return row ? row.days as number | null : undefined;
+  }
+
+  setCleanupDays(category: string, days: number | null) {
+    this.db.prepare(`INSERT INTO stored_data_cleanup VALUES (?, ?)
+      ON CONFLICT(category) DO UPDATE SET days = excluded.days`).run(category, days);
   }
 
   forgottenKeys(conversationId: string): string[] {

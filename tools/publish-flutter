@@ -4,6 +4,7 @@
 The Mac build runs in a temporary folder that is removed afterwards, so
 publishing leaves nothing on the Mac."""
 import fcntl
+import gzip
 import hashlib
 import io
 import json
@@ -12,6 +13,7 @@ from pathlib import Path
 import plistlib
 import re
 import shlex
+import stat
 import subprocess
 import sys
 import tarfile
@@ -88,7 +90,7 @@ def main():
                 snapshot.seek(0)
                 subprocess.run([ssh, f"tar -xzf - -C {remote}"], stdin=snapshot, check=True)
             # The app has no built-in server address: the environment or local git config supplies it.
-            addresses = {"RELAY_URL": "relay.appUrl", "BROWSER_URL": "relay.browserUrl", "RELAY_UPDATE_URL": None}
+            addresses = {"RELAY_URL": "relay.appUrl", "RELAY_UPDATE_URL": None}
             for key, setting in addresses.items():
                 value = os.environ.get(key)
                 if not value and setting:
@@ -121,6 +123,25 @@ ditto -c -k --sequesterRsrc --keepParent "$bundle" {remote}/release.zip"""
             if mac_digest != digest:
                 sys.exit("The transferred archive differs from the signed Mac build.")
             size = archive.stat().st_size
+            # Compress each file outside the lock; the lock only covers moving them in.
+            packed = stage / preview_feed.STORE
+            packed.mkdir()
+            entries = []
+            with zipfile.ZipFile(archive) as package:
+                for item in package.infolist():
+                    path = item.filename.removeprefix("Relay Flutter.app/")
+                    mode = item.external_attr >> 16
+                    if item.filename == path:
+                        sys.exit(f"Unexpected archive entry: {item.filename}")
+                    if item.is_dir():
+                        continue
+                    data = package.read(item)
+                    if stat.S_ISLNK(mode):
+                        entries.append(dict(path=path, link=data.decode()))
+                        continue
+                    content = hashlib.sha256(data).hexdigest()
+                    (packed / f"{content}.gz").write_bytes(gzip.compress(data, mtime=0))
+                    entries.append(dict(path=path, sha256=content, size=len(data), exec=bool(mode & 0o111)))
             if stable:
                 manifest = dict(version=version, file=filename, size=size, sha256=digest, commit=commit)
             else:
@@ -129,15 +150,28 @@ ditto -c -k --sequesterRsrc --keepParent "$bundle" {remote}/release.zip"""
                                 version=info["CFBundleShortVersionString"], build=build,
                                 file=filename, sha256=digest, size=size)
             metadata = stage / "manifest.json"
-            metadata.write_text(json.dumps(manifest) + "\n")
             with (releases / preview_feed.LOCK).open("a") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
                 # The worktree may have been retired during the Mac build.
                 if not Path(".git").exists():
                     sys.exit("The source worktree was removed during the build.")
+                if stable and (releases / filename).exists():
+                    sys.exit(published)
+                store = releases / preview_feed.STORE
+                store.mkdir(exist_ok=True)
+                for blob in packed.iterdir():
+                    if not (store / blob.name).exists():
+                        blob.replace(store / blob.name)
+                for entry in entries:
+                    if "sha256" in entry:
+                        entry["packed"] = (store / f"{entry['sha256']}.gz").stat().st_size
+                listing = json.dumps(entries).encode()
+                listed = gzip.compress(listing, mtime=0)
+                manifest["fileList"] = dict(sha256=hashlib.sha256(listing).hexdigest(), size=len(listing), packed=len(listed))
+                (packed / "list.gz").write_bytes(listed)
+                (packed / "list.gz").replace(store / f"{manifest['fileList']['sha256']}.gz")
+                metadata.write_text(json.dumps(manifest) + "\n")
                 if stable:
-                    if (releases / filename).exists():
-                        sys.exit(published)
                     archive.replace(releases / filename)
                     metadata.replace(releases / "latest.json")
                     # A test build whose commit Stable contains has nothing left to offer.
@@ -148,6 +182,7 @@ ditto -c -k --sequesterRsrc --keepParent "$bundle" {remote}/release.zip"""
                 else:
                     archive.replace(releases / filename)
                     metadata.replace(releases / f"preview-{name}.json")
+                    preview_feed.prune(releases)
                     print(f"Published {name} ({branch} {commit[:8]}, {digest[:8]})")
     finally:
         subprocess.run([ssh, f"rm -rf {remote}"], check=False)

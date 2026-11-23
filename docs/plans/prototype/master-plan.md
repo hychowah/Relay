@@ -27,7 +27,7 @@ storage and export.
 
 | ID | Required behavior |
 | --- | --- |
-| R01 | Flutter on the MacBook is the main client. Maintain chat and app opening in the React browser fallback on Windows. Desktop chat is adjustable on the right, initially 30% wide. Native Android is the long-term goal, with chat overlaid on the app. Phone work and a Flutter Windows build are deferred. |
+| R01 | Flutter on the MacBook is the main client. Maintain chat and app opening in the React browser fallback on Windows. Desktop chat is adjustable on the right, initially 30% wide. Native Android is the long-term goal, with chat overlaid on the app. Phone work is deferred; see the [Flutter Windows test build](../flutter/windows.md). |
 | R02 | Connect apps the user develops. Each owns its screens, can use its own framework, and remains independently usable. |
 | R03 | Register an app by configured address and integration information. Apps can run on the same machine or reachable remote hosts. |
 | R04 | A conversation can span apps and remain open when the user switches apps. |
@@ -43,7 +43,7 @@ storage and export.
 | R14 | Show existing app views and generate new tables, charts, documents, or interactive views. Save generated outputs for reopening. |
 | R15 | Run the workspace/harness in Docker on WSL. Use the user's existing Tailscale connection for other devices. |
 | R16 | Separate agent command execution from service credentials and persistent records. Limit shared files, network access, and resources. |
-| R17 | Treat local app start/stop controls as optional. Existing app addresses and independent launchers suffice initially. |
+| R17 | Start, stop and watch local app servers from Relay, with the host's service manager keeping them running. See the [app servers plan](../app-servers/master-plan.md). |
 | R18 | Preserve an extension path for running backtests and other app actions later. Initial integration emphasizes reading, navigation, and visualization. |
 | R19 | Provide normal chat and reusable bots with individual objectives, scope, allowed apps and memory. Share personal preferences; keep bot knowledge separate. Forward a chosen conversation with a handoff and recoverable source messages. |
 | R20 | Show meaningful app actions while the agent works: search/results, selected evidence and the final focused view with field highlights. Progress reflects actual operations. Keep chat expandable and Stop available; preserve direct manual app use. |
@@ -51,7 +51,9 @@ storage and export.
 A project is proposed to group conversations, memory, outputs, and links to
 relevant app resources. One project may use several apps; one app may serve
 several projects. Project data and conversations are shared across devices;
-open tabs and layouts remain device-specific.
+open tabs and layouts remain device-specific. The conversation last opened
+on any device opens on each device when it starts or returns to the front, and
+a device can open a copy of another device's last saved tabs.
 
 ## App integration expectations
 
@@ -262,7 +264,7 @@ the interface during execution, then reconnect to the real result/status.
 
 Covers R13–R14, completes R12 and R16.
 
-R17 remains optional and R18 remains a later extension. Android and Windows packages, helper
+R18 remains a later extension. Android and Windows packages, helper
 agents, new backtest execution, live app-data editing, scheduling, public sharing,
 and a third-party marketplace are outside the first prototype commitment.
 
@@ -324,9 +326,11 @@ Tailscale checks for Relay and Research Web remain open prototype exits.
 
 Defer read/write effects to the first write, access scopes and versioned migrations to projects, and network policy injection to the Docker executor. Revisit server acknowledgement checks if bridge ownership changes, and new tool statuses or a run-oriented harness when existing lifecycles fall short.
 
-The [Flutter handoff](../flutter/master-plan.md#next) covers installing and reviewing Stable 0.0.13 on the Mac, with its checks for tab restore, the transcript pane and the app list refresh, and the split view. It also lists the Mac check for the capture animation, which is not in Stable yet. On the next preview teardown, use the [worktree removal command](../../../flutter/README.md#publish-a-worktree-test-build).
+The [Flutter handoff](../flutter/master-plan.md#next) covers installing and reviewing Stable 0.0.17 on the Mac, with its checks for tab restore, the transcript pane and the app list refresh, and the split view. It also lists the Mac checks for the capture animation, the Browser's PDF viewer, highlights and Stored data, which are in Stable since 0.0.17, published on 2026-11-23. The backend, last deployed at `f8299ce` the same day, connects the Browser on the Relay port, not 3251: builds older than 0.0.17, and a Windows app built before `acad2d8`, cannot read pages or transcripts. The Windows checks wait until the user returns to Windows. On the next preview teardown, use the [worktree removal command](../../../flutter/README.md#publish-a-worktree-test-build).
 
 The [coding sessions plan](../coding-sessions/master-plan.md) covers handing requests to Claude Code or Codex sessions through a coding app in its own project. Its Next section holds the current step.
+
+The [app servers plan](../app-servers/master-plan.md) covers starting, stopping and watching local app servers from Relay. Phase 1 is deployed and in Mac test build `app-servers`; its Mac check is next.
 
 1. Verify a sourced two-app question on the user's saved records from the Mac.
    Both stock adapters have run as local services, registered with the live
@@ -336,5 +340,5 @@ The [coding sessions plan](../coding-sessions/master-plan.md) covers handing req
 2. Evaluate sourced Research Web answers, memory correction and forgetting, and retrieval of old details after compaction with the configured real provider.
 3. Establish the Compose executor boundary before enabling any file or terminal tool.
 4. Serve the web page from the app backend so both clients share one set of records.
-5. Defer the Android device trial, Flutter Windows build and phone work until separately requested.
+5. Defer the Android device trial and phone work until separately requested.
 6. Have Analysis Web and Backtest Web serve the Relay protocol from their own projects, then retire the adapter project.

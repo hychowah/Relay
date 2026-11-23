@@ -25,7 +25,13 @@ class RelayApi {
   final Uri origin;
   final http.Client _client;
   BugRecorder? recorder;
-  Future<T> _request<T>(String path, [Json? body, String? method]) async {
+  Future<T> _request<T>(
+    String path, [
+    Json? body,
+    String? method,
+    bool private = false,
+  ]) async {
+    final recorder = private ? null : this.recorder;
     final url = origin.resolve(path);
     final request = http.Request(
       method ?? (body == null ? 'GET' : 'POST'),
@@ -212,6 +218,143 @@ class RelayApi {
     }
     return response.bodyBytes;
   }
+
+  /// The servers named in the host's servers file, each with its state.
+  Future<List<Json>> appServers() async =>
+      (await _request<List>('/api/app-servers')).cast<Json>();
+
+  /// Starts, stops or restarts a server and returns its state afterwards. A
+  /// server that fails, or does not stay running, throws with the reason.
+  Future<Json> controlAppServer(String id, String action) async =>
+      (await _request<Json>(
+            '/api/app-servers/${Uri.encodeComponent(id)}/$action',
+            {},
+          ))['server']
+          as Json;
+  Future<Json> setAppServerAutoStart(String id, bool on) => _request(
+    '/api/app-servers/${Uri.encodeComponent(id)}/auto-start',
+    {'on': on},
+    'PUT',
+  );
+
+  /// A server's recent log lines. They are the app's own, so they stay out
+  /// of bug recordings.
+  Future<String> appServerLogs(String id) async =>
+      (await _request<Json>(
+            '/api/app-servers/${Uri.encodeComponent(id)}/logs',
+            null,
+            null,
+            true,
+          ))['text']
+          as String;
+
+  // Per-keystroke history calls would flood bug recordings; recordings leave
+  // them out. Recording never holds up or breaks browsing, so failures are
+  // ignored.
+  void browserVisit(String url, String? title) =>
+      _quietly('visit', {'url': url, 'title': ?title});
+  void browserTyped(String url) => _quietly('typed', {'url': url});
+  void browserTitle(String url, String title) =>
+      _quietly('title', {'url': url, 'title': title});
+  void _quietly(String kind, Json body) =>
+      _request<void>('/api/browser-history/$kind', body, 'POST', true).ignore();
+
+  /// Saves this device's open tabs, so another device can open them. Like
+  /// the browsing history it is left out of recordings.
+  Future<void> saveDeviceTabs(String deviceId, String name, Json tabs) =>
+      _request<void>(
+        '/api/devices/${Uri.encodeComponent(deviceId)}',
+        {'name': name, 'tabs': tabs},
+        'PUT',
+        true,
+      );
+
+  /// Every device's last saved tabs, most recently updated first.
+  Future<List<Json>> devices() async =>
+      (await _request<List>('/api/devices', null, null, true)).cast<Json>();
+
+  /// The conversation last opened on any device, if it is not in Trash.
+  Future<String?> currentConversation() async =>
+      (await _request<Json>('/api/current-conversation'))['id'] as String?;
+
+  Future<void> setCurrentConversation(String id) =>
+      _request<void>('/api/current-conversation', {'id': id}, 'PUT');
+
+  /// The visited pages that best match [text]; none when the request fails.
+  Future<List<({String url, String title})>> browserSuggestions(
+    String text,
+  ) async {
+    final params = Uri(queryParameters: {'q': text});
+    try {
+      final pages = await _request<List>(
+        '/api/browser-history?${params.query}',
+        null,
+        null,
+        true,
+      );
+      return [
+        for (final page in pages.cast<Json>())
+          (url: page['url'] as String, title: page['title'] as String),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// The highlights kept for a page address; none when the request fails.
+  /// Like the history calls, these stay out of bug recordings.
+  Future<List<Json>> highlights(String url) async {
+    final params = Uri(queryParameters: {'url': url});
+    try {
+      final kept = await _request<List>(
+        '/api/highlights?${params.query}',
+        null,
+        null,
+        true,
+      );
+      return kept.cast<Json>();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> saveHighlight(String url, Json highlight) =>
+      _request('/api/highlights', {...highlight, 'url': url}, 'POST', true);
+  Future<void> recolorHighlight(String id, String color) => _request(
+    '/api/highlights/${Uri.encodeComponent(id)}',
+    {'color': color},
+    'PATCH',
+    true,
+  );
+  Future<void> forgetHighlight(String id) => _request(
+    '/api/highlights/${Uri.encodeComponent(id)}',
+    null,
+    'DELETE',
+    true,
+  );
+
+  /// Each kind of data the server keeps, with its size and how long it is
+  /// kept (`autoCleanDays`, null for ever).
+  Future<List<Json>> storedData() async =>
+      (await _request<List>('/api/stored-data')).cast<Json>();
+
+  /// Sets how long a kind is kept. A period that would delete items now is
+  /// not saved without [deleteOlder]: the answer is then how many items, and
+  /// otherwise 0.
+  Future<int> setAutoClean(
+    String id,
+    int? days, {
+    bool deleteOlder = false,
+  }) async {
+    final reply = await _request<Json>('/api/stored-data/$id', {
+      'autoCleanDays': days,
+      if (deleteOlder) 'deleteOlder': true,
+    }, 'PUT');
+    return reply['saved'] == true ? 0 : reply['older'] as int;
+  }
+
+  Future<void> clearStoredData(String id) =>
+      _request('/api/stored-data/$id', null, 'DELETE');
 
   Future<void> checkIdleBeforeRestart(
     String deviceId,
