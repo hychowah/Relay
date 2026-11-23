@@ -110,6 +110,35 @@ void main() {
     expect(find.textContaining(' MB'), findsNothing);
   });
 
+  testWidgets('a VPN tab shows a lock for the globe only where VPN is real', (
+    tester,
+  ) async {
+    final plain = WorkspaceTab(isBrowser: true, name: 'Plain');
+    final vpn = WorkspaceTab(isBrowser: true, name: 'Private', vpn: true);
+    Future<void> show(bool showVpn) => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 48,
+            child: WorkspaceTabs(
+              tabs: [plain, vpn],
+              selected: plain,
+              showVpn: showVpn,
+              onSelect: (_) {},
+              onClose: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await show(true);
+    expect(find.byIcon(Icons.vpn_lock), findsOneWidget);
+    expect(find.byIcon(Icons.language), findsOneWidget);
+    await show(false);
+    expect(find.byIcon(Icons.vpn_lock), findsNothing);
+    expect(find.byIcon(Icons.language), findsNWidgets(2));
+  });
+
   testWidgets('a hover card pictures a hidden tab and gives its memory', (
     tester,
   ) async {

@@ -222,11 +222,17 @@ Test build `browser-vpn` was republished from `9227f06`, with the fixes.
 
 ## Next
 
-Both phases are in `main` (`80cdd68`); the proxy is live.
+Both phases are in `main` (`80cdd68`); the proxy is live. On 2026-11-23 the
+user tried test build `pre-0-0-19` and reported that VPN works but that the
+mode was hard to tell; which hand checks they made is not recorded. The
+switch now becomes a filled "VPN" button while on, and a VPN tab's chip shows
+a lock in place of the globe, on the Mac only.
 
-1. The user tries test build `browser-vpn` for the hand checks in Phase 2
-   (switching both ways, a popup, a PDF, sign-in kept after a restart), and
-   the VPN-down message while NordVPN in WSL is off.
+1. The user judges the new marks in a test build, and makes the remaining
+   hand checks in Phase 2 (switching both ways, a popup, a PDF, sign-in kept
+   after a restart), and the VPN-down message while NordVPN in WSL is off.
+   Test build `pre-0-0-19` carries everything in `main`; `browser-vpn` is
+   older.
 2. The switch reaches Stable with the next release the user asks for. Then
    close out this plan and retire the Phase 2 worktree, which retires the
    test build.

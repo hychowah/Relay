@@ -20,6 +20,7 @@ class WorkspaceTabs extends StatefulWidget {
     this.split,
     this.draggable = false,
     this.memory,
+    this.showVpn = false,
     this.hoverCard,
   });
   final List<WorkspaceTab> tabs;
@@ -34,6 +35,10 @@ class WorkspaceTabs extends StatefulWidget {
 
   /// Desktop only: while tab memory is shown, each page's figure.
   final MemoryReading? memory;
+
+  /// Desktop (macOS) only: a VPN tab's chip shows a lock in place of the
+  /// globe. Other platforms ignore the flag, so they never show one.
+  final bool showVpn;
 
   /// Desktop only: the card shown while the pointer rests on an app's or a
   /// website's tab; [shown] says whether its page is on screen.
@@ -398,12 +403,20 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
                               else
                                 Icon(
                                   tab.isBrowser
-                                      ? Icons.language
+                                      ? widget.showVpn && tab.vpn
+                                            ? Icons.vpn_lock
+                                            : Icons.language
                                       : tab.appId == null
                                       ? Icons.add
                                       : Icons.grid_view_rounded,
                                   size: 15,
-                                  color: selected
+                                  // The lock keeps its colour on a tab that
+                                  // is not selected, so the mode stands out.
+                                  color:
+                                      selected ||
+                                          (widget.showVpn &&
+                                              tab.isBrowser &&
+                                              tab.vpn)
                                       ? colors.primary
                                       : colors.onSurfaceVariant,
                                 ),

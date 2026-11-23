@@ -694,16 +694,7 @@ class _RelayShellState extends State<RelayShell> {
                                 onPressed: () => w.browserAction('reload'),
                                 icon: const Icon(Icons.refresh),
                               ),
-                              if (Platform.isMacOS)
-                                IconButton(
-                                  tooltip: w.active!.vpn
-                                      ? 'VPN on: through NordVPN in WSL'
-                                      : "VPN off: the Mac's own network",
-                                  isSelected: w.active!.vpn,
-                                  onPressed: w.toggleVpn,
-                                  icon: const Icon(Icons.vpn_lock_outlined),
-                                  selectedIcon: const Icon(Icons.vpn_lock),
-                                ),
+                              if (Platform.isMacOS) _vpnSwitch(),
                               Expanded(child: _addressField()),
                               IconButton(
                                 tooltip: 'Go',
@@ -727,6 +718,34 @@ class _RelayShellState extends State<RelayShell> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // Desktop (macOS) only: a quiet icon while the active tab uses the Mac's own
+  // network, a filled "VPN" button while it goes through NordVPN in WSL.
+  Widget _vpnSwitch() {
+    final on = w.active!.vpn;
+    final tooltip = on
+        ? 'VPN on: through NordVPN in WSL'
+        : "VPN off: the Mac's own network";
+    if (!on) {
+      return IconButton(
+        tooltip: tooltip,
+        onPressed: w.toggleVpn,
+        icon: const Icon(Icons.vpn_lock_outlined),
+      );
+    }
+    return Tooltip(
+      message: tooltip,
+      child: FilledButton.icon(
+        onPressed: w.toggleVpn,
+        icon: const Icon(Icons.vpn_lock, size: 18),
+        label: const Text('VPN'),
+        style: FilledButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
         ),
       ),
     );
@@ -1432,6 +1451,7 @@ class _RelayShellState extends State<RelayShell> {
                   split: split?.layout.tabs,
                   draggable: MediaQuery.sizeOf(context).width >= 900,
                   memory: memory,
+                  showVpn: Platform.isMacOS,
                   hoverCard: Platform.isMacOS
                       ? (tab, shown) => TabPreview(
                           tab: tab,

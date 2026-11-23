@@ -151,14 +151,15 @@ dialog raised inside a popup window is not shown.
 On macOS only, **VPN** beside Reload sends a Browser tab's pages, its popups
 and the PDFs it shows through the Relay backend, which tunnels them (HTTP
 CONNECT on the backend's existing port) out of WSL through NordVPN. New tabs
-start with it off; the setting is saved with the tab. Switching reopens the
-tab's address in a new web view, without its back history. Nothing falls back
-to the Mac's network: if the route fails, for example while NordVPN in WSL is
-off, the page does not load and says so, and a VPN tab that could not be set
-up loads nothing. VPN tabs share one WebKit profile of their own, so their
-sign-ins persist and stay apart from normal tabs. The backend applies the
-Browser's address rule to them, looking names up through NordVPN. WebRTC is
-off in VPN tabs, through a private WebKit setting that also covers frames
+start with it off; the setting is saved with the tab. While on, the switch is
+a filled "VPN" button and the tab's chip shows a lock in place of the globe.
+Switching reopens the tab's address in a new web view, without its back
+history. Nothing falls back to the Mac's network: if the route fails, for
+example while NordVPN in WSL is off, the page does not load and says so, and a
+VPN tab that could not be set up loads nothing. VPN tabs share one WebKit
+profile of their own, so their sign-ins persist and stay apart from normal
+tabs. The backend applies the Browser's address rule to them, looking names up
+through NordVPN. WebRTC is off in VPN tabs, through a private WebKit setting that also covers frames
 (popups take the opener's settings), so video calls do not work there: the
 tunnel carries only TCP, and WebRTC's UDP would show the Mac's own address. A
 macOS without that setting does not load VPN tabs. The Windows client ignores
