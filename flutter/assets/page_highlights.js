@@ -1,6 +1,8 @@
 // Highlights on web pages in a Browser tab. Relay runs this in the page once
 // it has loaded, then calls `__relayHighlights.set` with the highlights kept
-// for the page's address and `toggle` when the user presses Highlight.
+// for the page's address, and `add`, `recolor` or `remove` from its
+// highlight menu. This script tells Relay where to show that menu: next to
+// selected text once the mouse is released, or next to a clicked highlight.
 //
 // A highlight is the quoted text and a little of the text around it, not a
 // place in the page. It shows wherever that text is, and only while it is
@@ -12,6 +14,10 @@
   if (window.__relayHighlights) return;
   const name = "relay-highlight", around = 40, longest = 4000;
   const paints = !!(window.CSS && CSS.highlights && window.Highlight);
+  // Kept in step with highlight_menu.dart, BrowserPDF.swift and the server's
+  // highlightColors, which refuses any other.
+  const colors = { yellow: "255,214,10", green: "52,199,89", blue: "10,132,255", pink: "255,55,95", purple: "175,82,222" };
+  const colorOf = (highlight) => colors[highlight.color] ? highlight.color : "yellow";
   let kept = [];
   // Where each highlight is painted, and the text that was there.
   const ranges = new Map(), painted = new Map();
@@ -21,7 +27,8 @@
   if (paints) {
     try {
       sheet = new CSSStyleSheet();
-      sheet.replaceSync(`::highlight(${name}){background-color:rgba(255,214,10,.5);color:inherit}`);
+      sheet.replaceSync(Object.entries(colors).map(([color, rgb]) =>
+        `::highlight(${name}-${color}){background-color:rgba(${rgb},.45);color:inherit}`).join(""));
     } catch (_) { /* The highlight keeps the browser's default look. */ }
   }
 
@@ -75,11 +82,16 @@
 
   function paint() {
     if (!paints) return;
-    if (!ranges.size) {
-      CSS.highlights.delete(name);
-      return;
+    const shades = new Map();
+    for (const highlight of kept) {
+      const range = ranges.get(highlight.id), color = colorOf(highlight);
+      if (range) shades.get(color)?.push(range) ?? shades.set(color, [range]);
     }
-    CSS.highlights.set(name, new Highlight(...ranges.values()));
+    for (const color in colors) {
+      if (shades.has(color)) CSS.highlights.set(`${name}-${color}`, new Highlight(...shades.get(color)));
+      else CSS.highlights.delete(`${name}-${color}`);
+    }
+    if (!ranges.size) return;
     // A page that replaces its style sheets takes the colour away with them.
     try {
       if (sheet && !document.adoptedStyleSheets.includes(sheet))
@@ -153,36 +165,105 @@
     return low;
   }
 
+  // Where Relay shows its menu: a box in the viewport's CSS pixels, with
+  // the id of the highlight clicked, or nothing to hide it.
+  let pressed = false, shown = null, settle;
+  const post = (menu) => {
+    try { RelayBrowser.postMessage("menu:" + (menu ? JSON.stringify(menu) : "")); } catch (_) { /* No Relay. */ }
+  };
+  function hide() {
+    if (shown === null) return;
+    shown = null;
+    post(null);
+  }
+  // The part of [rects] in view, or null.
+  function box(rects) {
+    let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+    for (const rect of rects) {
+      if (rect.bottom < 0 || rect.top > innerHeight || rect.right < 0 || rect.left > innerWidth) continue;
+      left = Math.min(left, rect.left);
+      top = Math.min(top, rect.top);
+      right = Math.max(right, rect.right);
+      bottom = Math.max(bottom, rect.bottom);
+    }
+    return left > right ? null : { left, top, right, bottom };
+  }
+  // The selected text that can be highlighted: not in a text field.
+  function selected() {
+    const selection = getSelection();
+    if (!selection || selection.isCollapsed || !selection.rangeCount || !selection.toString().trim()) return null;
+    const at = selection.anchorNode, element = at?.nodeType === 1 ? at : at?.parentElement;
+    if (element?.isContentEditable || element?.closest("input, textarea")
+      || document.activeElement?.matches?.("input, textarea")) return null;
+    return selection.getRangeAt(0);
+  }
+  function showSelection() {
+    const range = selected(), rect = range && box(range.getClientRects());
+    if (!rect) return hide();
+    shown = "selection";
+    post({ rect });
+  }
+  // The highlight under a point; of several, the one made last.
+  function showHighlightAt(x, y) {
+    for (let i = kept.length - 1; i >= 0; i--) {
+      const range = ranges.get(kept[i].id);
+      if (!range) continue;
+      const rects = range.getClientRects();
+      if (![...rects].some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)) continue;
+      shown = kept[i].id;
+      post({ id: shown, rect: box(rects) });
+      return;
+    }
+  }
+  if (paints) {
+    addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      pressed = true;
+      hide();
+    }, true);
+    addEventListener("pointerup", (event) => {
+      if (!pressed) return;
+      pressed = false;
+      // After the page has finished with the click's own selection change.
+      setTimeout(() => (selected() ? showSelection() : showHighlightAt(event.clientX, event.clientY)), 0);
+    }, true);
+    // Text selected with the keyboard, or selected text that went away.
+    document.addEventListener("selectionchange", () => {
+      if (pressed) return;
+      clearTimeout(settle);
+      settle = setTimeout(() => (selected() ? showSelection() : shown === "selection" && hide()), 300);
+    });
+    // The menu hides while the page moves, and comes back by selected text.
+    const moved = () => {
+      if (shown === null && getSelection()?.isCollapsed !== false) return;
+      hide();
+      clearTimeout(settle);
+      settle = setTimeout(() => selected() && showSelection(), 250);
+    };
+    addEventListener("scroll", moved, { capture: true, passive: true });
+    addEventListener("resize", moved, { passive: true });
+    addEventListener("keydown", (event) => event.key === "Escape" && hide(), true);
+  }
+
   window.__relayHighlights = {
-    /** Shows the highlights kept for this address: [{id, text, prefix, suffix}]. */
+    /** Shows the highlights kept for this address: [{id, text, prefix, suffix, color}]. */
     set(list) {
       kept = list;
       ranges.clear();
       painted.clear();
       lastRead = 0;
+      hide();
       place();
       watch();
     },
     /**
-     * Highlights the selected text as [id], or removes the highlights the
-     * selection touches. Answers {added: {text, prefix, suffix}},
-     * {removed: [ids]}, or null when there is nothing to do.
+     * Highlights the selected text as [id] in [color]. Answers
+     * {added: {text, prefix, suffix}}, or null when nothing is selected.
      */
-    toggle(id) {
+    add(id, color) {
       const selection = getSelection();
       if (!paints || !selection || selection.isCollapsed || !selection.rangeCount) return null;
       const chosen = selection.getRangeAt(0);
-      const touched = [...ranges].filter(([, range]) =>
-        range.compareBoundaryPoints(Range.START_TO_END, chosen) > 0
-        && range.compareBoundaryPoints(Range.END_TO_START, chosen) < 0).map(([key]) => key);
-      if (touched.length) {
-        kept = kept.filter((highlight) => !touched.includes(highlight.id));
-        for (const key of touched) drop(key);
-        selection.removeAllRanges();
-        paint();
-        watch();
-        return { removed: touched };
-      }
       const page = read();
       let start = position(page, chosen.startContainer, chosen.startOffset);
       let end = position(page, chosen.endContainer, chosen.endOffset);
@@ -194,16 +275,32 @@
       while (end > start && page.text[end - 1] === " ") end--;
       if (start >= end) return null;
       const made = {
-        id, text: page.text.slice(start, end),
+        id, color, text: page.text.slice(start, end),
         prefix: page.text.slice(Math.max(0, start - around), start),
         suffix: page.text.slice(end, end + around),
       };
       kept.push(made);
       put(id, rangeAt(page, start, end));
       selection.removeAllRanges();
+      shown = null;
       paint();
       watch();
       return { added: { text: made.text, prefix: made.prefix, suffix: made.suffix } };
+    },
+    /** Paints the highlight [id] in [color]. */
+    recolor(id, color) {
+      const highlight = kept.find((item) => item.id === id);
+      if (highlight) highlight.color = color;
+      shown = null;
+      paint();
+    },
+    /** Takes the highlight [id] off the page. */
+    remove(id) {
+      kept = kept.filter((item) => item.id !== id);
+      drop(id);
+      shown = null;
+      paint();
+      watch();
     },
   };
 })();

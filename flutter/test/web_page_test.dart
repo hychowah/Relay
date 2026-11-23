@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:relay_flutter/browser_transcript.dart';
+import 'package:relay_flutter/highlight_menu.dart';
 import 'package:relay_flutter/page_surface.dart';
 import 'package:relay_flutter/relay_api.dart';
 import 'package:relay_flutter/web_page.dart';
@@ -84,7 +85,7 @@ class TestController extends PlatformWebViewController {
       ? playTime
       : javaScript.startsWith('location.href')
       ? '${document ?? location}\n${(document ?? location).split('#').first}'
-      : javaScript.contains('__relayHighlights?.toggle')
+      : javaScript.contains('__relayHighlights?.add(')
       ? highlighted
       : jsonEncode({'url': location, 'title': 'YouTube', 'selection': ''});
   @override
@@ -335,8 +336,11 @@ void main() {
         'text': 'an earlier passage',
         'prefix': 'before ',
         'suffix': ' after',
+        'color': 'green',
       };
       final sent = <String>[];
+      // Whether the server refuses changes, as when it cannot be reached.
+      var refuse = false;
       final api = RelayApi(
         Uri.parse('http://relay.test'),
         client: MockClient((request) async {
@@ -348,6 +352,7 @@ void main() {
                     '${request.url.queryParameters['url'] ?? request.body}'
                 .trim(),
           );
+          if (refuse) return http.Response('{"error":"Down."}', 500);
           return request.method == 'GET'
               ? http.Response(jsonEncode([kept]), 200)
               : http.Response('', 204);
@@ -388,29 +393,72 @@ void main() {
         contains('window.__relayHighlights ='),
       );
 
-      // Highlight saves what the page's script quoted, and forgets what the
-      // script took off.
+      // The page's script says where its menu goes: by selected text, or
+      // by a highlight this page was given.
+      HighlightMenu? menu() => (page.widget as Stack).children
+          .whereType<HighlightMenu>()
+          .firstOrNull;
+      void say(String message) => controller.channel.onMessageReceived(
+        JavaScriptMessage(message: message),
+      );
+      const rect = {'left': 10, 'top': 40, 'right': 90, 'bottom': 56};
+      say('menu:${jsonEncode({'rect': rect})}');
+      expect(menu()!.at, const Rect.fromLTRB(10, 40, 90, 56));
+      expect(menu()!.color, isNull);
+      expect(menu()!.onRemove, isNull);
+
+      // A colour saves what the page's script quoted, in that colour.
       controller.highlighted = jsonEncode({
         'added': {'text': 'a passage', 'prefix': 'the ', 'suffix': ' ends'},
       });
-      await page.browser!.browserAction('highlight');
+      menu()!.onColor('blue');
+      await pumpEventQueue();
+      expect(menu(), isNull);
       final saved = jsonDecode(sent.last.split(' ').skip(2).join(' ')) as Map;
       expect(sent.last, startsWith('POST /api/highlights '));
       expect(saved['id'], hasLength(36));
       expect(saved..remove('id'), {
         'url': 'https://8.8.8.8/article',
         'text': 'a passage',
+        'color': 'blue',
         'prefix': 'the ',
         'suffix': ' ends',
       });
-      controller.highlighted = jsonEncode({
-        'removed': ['old'],
-      });
-      await page.browser!.browserAction('highlight');
+
+      // A clicked highlight's menu changes its colour or removes it, on the
+      // page and on the server. An id the page was not given opens nothing.
+      say('menu:${jsonEncode({'rect': rect, 'id': 'elsewhere'})}');
+      expect(menu(), isNull);
+      say('menu:${jsonEncode({'rect': rect, 'id': 'old'})}');
+      expect(menu()!.color, 'green');
+
+      // A change the server refuses is undone on the page.
+      refuse = true;
+      menu()!.onColor('purple');
+      await pumpEventQueue();
+      refuse = false;
+      expect(sent.last, 'PATCH /api/highlights/old {"color":"purple"}');
+      expect(controller.scripts.last, endsWith('.recolor("old", "green")'));
+      say('menu:${jsonEncode({'rect': rect, 'id': 'old'})}');
+      expect(menu()!.color, 'green');
+
+      menu()!.onColor('pink');
+      await pumpEventQueue();
+      expect(controller.scripts.last, endsWith('.recolor("old", "pink")'));
+      expect(sent.last, 'PATCH /api/highlights/old {"color":"pink"}');
+      say('menu:${jsonEncode({'rect': rect, 'id': 'old'})}');
+      expect(menu()!.color, 'pink');
+      menu()!.onRemove!();
+      await pumpEventQueue();
+      expect(controller.scripts.last, endsWith('.remove("old", null)'));
       expect(sent.last, 'DELETE /api/highlights/old');
+      say('menu:${jsonEncode({'rect': rect, 'id': 'old'})}');
+      expect(menu(), isNull, reason: 'the highlight is gone');
+
+      // The toolbar's Highlight with nothing selected saves nothing.
       controller.highlighted = 'null';
       await page.browser!.browserAction('highlight');
-      expect(sent, hasLength(3), reason: 'nothing was selected');
+      expect(sent, hasLength(5), reason: 'nothing was selected');
 
       // A page that moves to another of its addresses shows that one's; a
       // new #fragment is the same address.
@@ -418,10 +466,11 @@ void main() {
       controller.delegate.urlChange(UrlChange(url: controller.location));
       await pumpEventQueue();
       expect(sent.last, 'GET /api/highlights https://8.8.8.8/other');
+      expect(sent, hasLength(6));
       controller.location = 'https://8.8.8.8/other#part';
       controller.delegate.urlChange(UrlChange(url: controller.location));
       await pumpEventQueue();
-      expect(sent, hasLength(4));
+      expect(sent, hasLength(6));
 
       // A load under way moves the tab's address through each redirect
       // step, here back through the page's own address and on to another
@@ -439,7 +488,7 @@ void main() {
         controller.delegate.urlChange(UrlChange(url: step));
         await pumpEventQueue();
       }
-      expect(sent, hasLength(4));
+      expect(sent, hasLength(6));
       expect(controller.scripts, hasLength(given));
       controller.highlighted = jsonEncode({
         'added': {'text': 'kept here', 'prefix': '', 'suffix': ''},

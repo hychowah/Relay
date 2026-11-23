@@ -728,7 +728,7 @@ class _RelayShellState extends State<RelayShell> {
       if (browser?.canHighlight == true)
         IconButton(
           tooltip: selected
-              ? 'Highlight the selected text, or remove its highlight'
+              ? 'Highlight the selected text'
               : 'Select text on the page to highlight it',
           onPressed: selected ? () => w.browserAction('highlight') : null,
           icon: const Icon(Icons.border_color),

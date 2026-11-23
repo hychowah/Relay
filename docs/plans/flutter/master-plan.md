@@ -47,7 +47,7 @@ The implemented workflows include the following.
 - PDF viewer (desktop only): a PDF in a Browser tab gets zoom, and its
   selection and text reach the agent (see the Flutter README).
 - Highlights (desktop only): text marked on web pages and PDFs in Browser
-  tabs, kept on the server by address and quoted text.
+  tabs in five colours, kept on the server by address and quoted text.
 - Stored data: a Workspace menu screen lists what the server keeps (browsing
   history, highlights), with sizes, clear and auto-clean by age.
 - Night mode: Workspace menu → Appearance offers System, Light and Dark,
@@ -163,8 +163,7 @@ unready. Reading the code shows that each WKWebView starts loading when its page
 is created, before it is shown; no Mac run has yet confirmed that hidden tabs
 load on the real WebViews.
 
-Stable 0.0.10 to 0.0.14 were published from `main` on 2026-11-19, 0.0.15 and
-0.0.16 on 2026-11-20, and 0.0.17 on 2026-11-23. 0.0.17 (build 17) adds the
+Stable 0.0.17 (build 17) was published from `main` on 2026-11-23. It adds the
 PDF viewer, highlights, Stored data, the chat and tabs shared across devices,
 and the Browser on Relay's own port, so older builds cannot read pages or
 transcripts. Analysis, 81 Flutter tests and 107 backend tests passed on its
@@ -252,6 +251,7 @@ real WKWebViews.
    (the question must carry the selection); highlight on a few real sites,
    one a single-page app; and open **Stored data**. Unverified: a
    password-protected PDF. Why 0.0.16 lost the selection is unknown; embedded
-   PDFs still use that path.
+   PDFs still use that path. The highlight menu passed it on the second Mac
+   on 2026-11-23; after a backend deploy, check it and drag-selecting by hand.
 
 Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).

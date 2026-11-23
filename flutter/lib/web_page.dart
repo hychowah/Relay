@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 
 import 'browser_comment.dart';
 import 'browser_transcript.dart';
+import 'highlight_menu.dart';
 import 'page_surface.dart';
 import 'relay_api.dart';
 
@@ -21,14 +22,17 @@ const _readPage = '''JSON.stringify({url:location.protocol==='data:'?'about:blan
  text:document.body?.innerText.slice(0,24000)||'',
  links:[...document.querySelectorAll('a[href]')].filter(a=>a.getClientRects().length).slice(0,60).map(a=>({text:a.innerText.slice(0,500),url:a.href.slice(0,2000)})),
  capturedAt:new Date().toISOString()})''';
+// A drag changes the selection many times, and each report redraws the
+// whole workspace; Relay hears once it settles, as from the PDF viewer.
 const _observePage =
     '''(()=>{if(window.__relayObserved)return;window.__relayObserved=true;
- let timer;const notify=()=>{clearTimeout(timer);timer=setTimeout(()=>RelayBrowser.postMessage('interaction'),80)};
+ let timer,settle;const notify=()=>{clearTimeout(timer);timer=setTimeout(()=>RelayBrowser.postMessage('interaction'),80)};
  const selection=()=>window.getSelection()?.toString().slice(0,4000)||'';
  document.addEventListener('selectionchange',()=>{
    const text=selection();
    if(text || document.hasFocus()) window.__relaySelection=text;
-   RelayBrowser.postMessage('selection:'+(window.__relaySelection||''));
+   clearTimeout(settle);
+   settle=setTimeout(()=>RelayBrowser.postMessage('selection:'+(window.__relaySelection||'')),150);
  },true);
  for(const type of ['pointerdown','keydown'])document.addEventListener(type,()=>{
    window.__relaySelection='';notify();
@@ -118,11 +122,16 @@ final _pdfPages = <int, _BrowserPage>{};
 /// Answers the Mac runner's calls on the browser channel (desktop only):
 /// a Browser popup window asks before each main-frame load, the window says
 /// when the user left macOS fullscreen, and the PDF viewer reports the text
-/// selected in it.
+/// selected in it and where to show the highlight menu.
 Future<Object?> browserChannelCall(MethodCall call) async {
   if (call.method == 'pdfSelection') {
     final event = call.arguments as Map;
     _pdfPages[event['view']]?._message('selection:${event['text']}');
+    return null;
+  }
+  if (call.method == 'pdfMenu') {
+    final event = call.arguments as Map;
+    _pdfPages[event['view']]?._showMenu(event['menu']);
     return null;
   }
   if (call.method == 'allowPopupPage') {
@@ -317,12 +326,15 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   @override
   bool get canHighlight => _records != null;
   // The address of the document whose highlights are loaded, as that
-  // document reported it (see [_documentAddress]), and the ids of the
-  // highlights kept for it.
+  // document reported it (see [_documentAddress]), and the colour of each
+  // highlight kept for it, by id.
   String? _highlightsAddress;
   String _highlightsSite = '';
-  final _highlightIds = <String>{};
+  final _highlightColors = <String, String>{};
   static String? _highlightScript;
+  // Where the highlight menu shows, and the highlight it is for; none for
+  // selected text.
+  ({Rect at, String? id})? _menu;
 
   @override
   Widget get widget => Stack(
@@ -331,6 +343,15 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       super.widget,
       if (_comment != null)
         BrowserComment(text: _comment!, onDismiss: _dismissComment),
+      if (_menu case final menu?)
+        HighlightMenu(
+          at: menu.at,
+          color: _highlightColors[menu.id],
+          onColor: (color) =>
+              menu.id == null ? _highlight(color) : _recolor(menu.id!, color),
+          onRemove: menu.id == null ? null : () => _remove(menu.id!),
+          onDismiss: () => _showMenu(null),
+        ),
     ],
   );
 
@@ -371,8 +392,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       // been replaced. A load that only starts, then fails, says nothing.
       await _browserChannel.invokeMethod<void>('documentStartScript', {
         'view': _webViewId,
-        'source':
-            "if (window === top && !window.opener) (window.webkit?.messageHandlers?.RelayBrowser ?? window.RelayBrowser)?.postMessage('document');",
+        'source': "if (window === top && !window.opener) (window.webkit?.messageHandlers?.RelayBrowser ?? window.RelayBrowser)?.postMessage('document');",
       });
     }
     await controller.setNavigationDelegate(
@@ -383,6 +403,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
             : NavigationDecision.prevent,
         onPageStarted: (url) {
           _nativeSelection = null;
+          _menu = null;
           _url = url;
           _loading = true;
           final wasFullScreen = fullScreen;
@@ -484,6 +505,15 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       _newDocument();
       return;
     }
+    if (message.startsWith('menu:')) {
+      try {
+        final menu = message.substring('menu:'.length);
+        _showMenu(menu.isEmpty ? null : jsonDecode(menu));
+      } on FormatException {
+        // Not from the highlight script.
+      }
+      return;
+    }
     if (message.startsWith('title:')) {
       _title = message.substring('title:'.length);
       (_context?['state'] as Map?)?['title'] = _title;
@@ -520,19 +550,16 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     }
   }
 
-  Future<T?> _pdf<T>(String action, [Json more = const {}]) =>
-      _browserChannel.invokeMethod<T>('pdf', {
-        'view': _webViewId,
-        'do': action,
-        ...more,
-      });
+  Future<T?> _pdf<T>(String action, [Json more = const {}]) => _browserChannel
+      .invokeMethod<T>('pdf', {'view': _webViewId, 'do': action, ...more});
 
   // A new document shows in the tab: the viewer and the highlights belonged
   // to the one before.
   void _newDocument() {
     _documents++;
     _highlightsAddress = null;
-    _highlightIds.clear();
+    _highlightColors.clear();
+    _menu = null;
     if (!Platform.isMacOS) return;
     final closing = pdf;
     pdf = false;
@@ -598,7 +625,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       }
       final address = _highlightsAddress = here.address;
       _highlightsSite = here.site;
-      _highlightIds.clear();
+      _highlightColors.clear();
       if (address == null) return;
       final kept = await records.highlights(address);
       // The tab may show another document, or address, by now.
@@ -607,7 +634,10 @@ class _BrowserPage extends _WebPage with BrowserSurface {
           address != _highlightsAddress) {
         return;
       }
-      _highlightIds.addAll(kept.map((highlight) => highlight['id'] as String));
+      _highlightColors.addAll({
+        for (final highlight in kept)
+          highlight['id'] as String: '${highlight['color'] ?? 'yellow'}',
+      });
       if (pdf) {
         await _pdf<void>('marks', {
           'highlights': [
@@ -623,65 +653,143 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       await controller.runJavaScript(_highlightScript!);
       await controller.runJavaScript(
         'if ($_documentSite === ${jsonEncode(here.site)}) '
-        'window.__relayHighlights?.set(${jsonEncode([
-          for (final highlight in kept)
-            if (highlight['marks'] == null) highlight,
-        ])})',
+        'window.__relayHighlights?.set(${jsonEncode([for (final highlight in kept)
+          if (highlight['marks'] == null) highlight])})',
       );
     } catch (_) {
       // The page shows without its highlights.
     }
   }
 
-  /// Highlights the selected text, or removes the highlights it touches, and
-  /// keeps the change on the server.
-  Future<void> _toggleHighlight() async {
+  /// Shows the highlight menu where the page's highlight script or the PDF
+  /// viewer says: {rect: {left, top, right, bottom}, id?}. Anything else
+  /// hides it. A page's own scripts can send this too, so the menu opens
+  /// only for a highlight this page was given.
+  void _showMenu(Object? data) {
+    ({Rect at, String? id})? menu;
+    final rect = data is Map ? data['rect'] : null,
+        id = data is Map ? data['id'] : null;
+    if (_records != null &&
+        rect is Map &&
+        (id == null || _highlightColors.containsKey(id))) {
+      final sides = [
+        for (final side in ['left', 'top', 'right', 'bottom']) rect[side],
+      ];
+      if (sides.every((side) => side is num && side.isFinite)) {
+        final [left, top, right, bottom] = [
+          for (final side in sides) (side as num).toDouble(),
+        ];
+        menu = (at: Rect.fromLTRB(left, top, right, bottom), id: id as String?);
+      }
+    }
+    if (menu == _menu) return;
+    _menu = menu;
+    changed(false);
+  }
+
+  /// Highlights the selected text in [color] and keeps it on the server.
+  Future<void> _highlight(String color) async {
+    _showMenu(null);
     // The document on screen must be the one whose highlights are loaded.
     await _showHighlights();
     final here = await _documentAddress();
     if (here.address == null || here.address != _highlightsAddress) return;
     final id = const Uuid().v4();
     final viewer = pdf;
-    Map? change;
+    Object? added;
     if (viewer) {
-      change = await _pdf<Map>('highlight', {'id': id});
+      added = (await _pdf<Map>('highlight', {
+        'id': id,
+        'color': color,
+      }))?['added'];
     } else {
       // The page's selection is gone with the highlight; the page observer
       // keeps the last one while the page is out of focus.
       final raw = await controller.runJavaScriptReturningResult(
         '(() => { const change = $_documentSite === ${jsonEncode(_highlightsSite)}'
-        ' ? window.__relayHighlights?.toggle(${jsonEncode(id)}) ?? null : null;'
+        ' ? window.__relayHighlights?.add(${jsonEncode(id)}, ${jsonEncode(color)}) ?? null : null;'
         " if (change) window.__relaySelection = ''; return JSON.stringify(change); })()",
       );
       dynamic data = raw is String ? jsonDecode(raw) : raw;
       if (data is String) data = jsonDecode(data);
-      change = data as Map?;
-      if (change != null) _message('selection:');
+      added = data is Map ? data['added'] : null;
+      if (added != null) _message('selection:');
     }
     final records = _records, address = _highlightsAddress;
-    if (change == null || records == null || address == null) return;
+    if (added is! Map || added['text'] is! String) return;
+    if (records == null || address == null) return;
     // A web page's own scripts can answer in the highlight script's place, so
-    // only its quoted text is taken from the answer: the address and id are
-    // Relay's, and only highlights this page was given can be forgotten.
-    final added = change['added'];
-    if (added is Map && added['text'] is String) {
-      _highlightIds.add(id);
-      await records.saveHighlight(address, {
+    // only its quoted text is taken from the answer: the address, id and
+    // colour are Relay's.
+    _highlightColors[id] = color;
+    final quote = added;
+    await _keep(
+      () => records.saveHighlight(address, {
         'id': id,
-        'text': added['text'],
+        'text': quote['text'],
+        'color': color,
         if (viewer)
-          'marks': added['marks']
+          'marks': quote['marks']
         else ...{
-          'prefix': '${added['prefix'] ?? ''}',
-          'suffix': '${added['suffix'] ?? ''}',
+          'prefix': '${quote['prefix'] ?? ''}',
+          'suffix': '${quote['suffix'] ?? ''}',
         },
-      });
-    }
-    final removed = change['removed'];
-    for (final gone in removed is List ? removed : const []) {
-      if (_highlightIds.remove(gone)) {
-        await records.forgetHighlight(gone as String);
-      }
+      }),
+      undo: () async {
+        _highlightColors.remove(id);
+        await _changeShown('remove', {'id': id});
+      },
+    );
+  }
+
+  Future<void> _recolor(String id, String color) async {
+    _showMenu(null);
+    final before = _highlightColors[id];
+    if (before == null) return;
+    _highlightColors[id] = color;
+    await _changeShown('recolor', {'id': id, 'color': color});
+    await _keep(
+      () => _records!.recolorHighlight(id, color),
+      undo: () async {
+        _highlightColors[id] = before;
+        await _changeShown('recolor', {'id': id, 'color': before});
+      },
+    );
+  }
+
+  Future<void> _remove(String id) async {
+    _showMenu(null);
+    if (_highlightColors.remove(id) == null) return;
+    await _changeShown('remove', {'id': id});
+    // The removed highlight comes back with the others the server keeps.
+    await _keep(
+      () => _records!.forgetHighlight(id),
+      undo: () {
+        _highlightsAddress = null;
+        return _showHighlights();
+      },
+    );
+  }
+
+  // Changes a highlight in the PDF viewer or on the page.
+  Future<void> _changeShown(String action, Json change) async {
+    if (pdf) return _pdf<void>(action, change);
+    await controller.runJavaScript(
+      'if ($_documentSite === ${jsonEncode(_highlightsSite)}) '
+      'window.__relayHighlights?.$action(${jsonEncode(change['id'])}, ${jsonEncode(change['color'])})',
+    );
+  }
+
+  // Keeps a change on the server, or undoes it on screen when it cannot be
+  // kept, so what shows is what is kept.
+  Future<void> _keep(
+    Future<void> Function() change, {
+    required Future<void> Function() undo,
+  }) async {
+    try {
+      await change();
+    } catch (_) {
+      await undo();
     }
   }
 
@@ -834,7 +942,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       await controller.goForward();
     }
     if (action == 'reload') await controller.reload();
-    if (action == 'highlight') await _toggleHighlight();
+    if (action == 'highlight') await _highlight('yellow');
     if (pdf && pdfZoomActions.contains(action)) await _pdf<void>(action);
   }
 

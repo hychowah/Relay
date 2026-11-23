@@ -14,8 +14,15 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
   private static var key: UInt8 = 0
   /// Page text given to the agent in one read, as for a web page.
   private static let textLimit = 24000
+  /// Highlight colours, kept in step with page_highlights.js,
+  /// highlight_menu.dart and the server's highlightColors.
+  private static let colors: [String: NSColor] = ([
+    "yellow": (255, 214, 10), "green": (52, 199, 89), "blue": (10, 132, 255), "pink": (255, 55, 95),
+    "purple": (175, 82, 222),
+  ] as [String: (CGFloat, CGFloat, CGFloat)]).mapValues { NSColor(srgbRed: $0.0 / 255, green: $0.1 / 255, blue: $0.2 / 255, alpha: 0.45) }
+  private static func color(_ name: Any?) -> NSColor { colors[name as? String ?? ""] ?? colors["yellow"]! }
 
-  private let viewer = PDFView()
+  private let viewer = PressedPDFView()
   private let identifier: Int64
   private let channel: FlutterMethodChannel
   private var fetch: URLSessionDataTask?
@@ -24,6 +31,10 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
   /// The highlights shown, each with the marks drawn for its lines. Relay
   /// keeps them on its server and gives them back when the PDF opens.
   private var highlights: [String: [PDFAnnotation]] = [:]
+  /// Whether Relay shows its highlight menu for this viewer.
+  private var menuShown = false
+  /// Whether the menu hid for a scroll or zoom and may come back.
+  private var returning = false
 
   private init(identifier: Int64, channel: FlutterMethodChannel) {
     self.identifier = identifier
@@ -40,8 +51,8 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
   /// gave no PDF this viewer can show. `close` removes the viewer. `text`
   /// answers the text from the page in view onward. `zoomIn`, `zoomOut` and
   /// `zoomFit` act on the viewer. `highlight` marks the selection as the
-  /// highlight `id`, or removes the highlights it lies on, and answers which.
-  /// `marks` draws the kept highlights given.
+  /// highlight `id` in `color` and answers its text and marks. `recolor` and
+  /// `remove` change the highlight `id`. `marks` draws the kept highlights.
   static func perform(
     _ arguments: [String: Any], on webView: WKWebView, identifier: Int64, channel: FlutterMethodChannel,
     result: @escaping FlutterResult
@@ -60,7 +71,13 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
     case "text":
       result(shown(on: webView)?.text())
     case "highlight":
-      result((arguments["id"] as? String).flatMap { shown(on: webView)?.toggleHighlight(as: $0) })
+      result((arguments["id"] as? String).flatMap { shown(on: webView)?.addHighlight(as: $0, in: arguments["color"]) })
+    case "recolor":
+      shown(on: webView)?.recolor(arguments["id"] as? String ?? "", to: arguments["color"])
+      result(nil)
+    case "remove":
+      shown(on: webView)?.remove(arguments["id"] as? String ?? "")
+      result(nil)
     case "marks":
       shown(on: webView)?.draw(arguments["highlights"] as? [[String: Any]] ?? [])
       result(nil)
@@ -192,8 +209,85 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
     viewer.document = document
     viewer.displayMode = .singlePageContinuous
     viewer.autoScales = true
-    NotificationCenter.default.addObserver(
-      self, selector: #selector(selectionChanged), name: .PDFViewSelectionChanged, object: viewer)
+    viewer.pressed = { [weak self] in
+      self?.returning = false
+      self?.hideMenu()
+    }
+    viewer.released = { [weak self] in self?.released() }
+    let center = NotificationCenter.default
+    center.addObserver(self, selector: #selector(selectionChanged), name: .PDFViewSelectionChanged, object: viewer)
+    center.addObserver(self, selector: #selector(moved), name: .PDFViewScaleChanged, object: viewer)
+    if let clip = viewer.documentView?.enclosingScrollView?.contentView {
+      clip.postsBoundsChangedNotifications = true
+      center.addObserver(self, selector: #selector(moved), name: NSView.boundsDidChangeNotification, object: clip)
+    }
+  }
+
+  /// Tells Relay where to show its highlight menu: by `rects`, in the
+  /// viewer's points from its top left, and for the highlight `id` when
+  /// one was clicked. Nothing in view hides it.
+  private func showMenu(_ rects: [NSRect], id: String? = nil) {
+    let visible = viewer.bounds
+    var box = NSRect.null
+    for rect in rects {
+      let part = rect.intersection(visible)
+      if !part.isEmpty { box = box.union(part) }
+    }
+    if box.isNull { return hideMenu() }
+    let top = viewer.isFlipped ? box.minY - visible.minY : visible.maxY - box.maxY
+    let rect = ["left": box.minX - visible.minX, "top": top, "right": box.maxX - visible.minX, "bottom": top + box.height]
+    var menu: [String: Any] = ["rect": rect]
+    if let id = id { menu["id"] = id }
+    menuShown = true
+    channel.invokeMethod("pdfMenu", arguments: ["view": NSNumber(value: identifier), "menu": menu])
+  }
+
+  private func hideMenu() {
+    guard menuShown else { return }
+    menuShown = false
+    channel.invokeMethod("pdfMenu", arguments: ["view": NSNumber(value: identifier)])
+  }
+
+  /// Shows the menu by the selected text in view, if any. Only the pages in
+  /// view are measured, and the text is not read: a whole long PDF can be
+  /// selected.
+  private func showSelectionMenu() -> Bool {
+    guard let selection = viewer.currentSelection else { return false }
+    let rects = viewer.visiblePages.map { viewer.convert(selection.bounds(for: $0), from: $0) }
+      .filter { !$0.isEmpty }
+    if rects.isEmpty { return false }
+    showMenu(rects)
+    return true
+  }
+
+  // The mouse is up: the menu goes by the selected text, or by the
+  // highlight clicked.
+  private func released() {
+    if showSelectionMenu() { return }
+    guard let window = viewer.window else { return }
+    let point = viewer.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+    guard let page = viewer.page(for: point, nearest: false) else { return }
+    let onPage = viewer.convert(point, to: page)
+    guard let hit = highlights.first(where: { _, marks in
+      marks.contains { $0.page === page && $0.bounds.contains(onPage) }
+    }) else { return }
+    showMenu(hit.value.compactMap { mark in mark.page.map { viewer.convert(mark.bounds, from: $0) } }, id: hit.key)
+  }
+
+  // The menu hides while the pages scroll or zoom, and comes back by
+  // selected text once they stop.
+  @objc private func moved() {
+    guard menuShown || returning else { return }
+    hideMenu()
+    returning = true
+    NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(stopped), object: nil)
+    self.perform(#selector(stopped), with: nil, afterDelay: 0.25)
+  }
+
+  @objc private func stopped() {
+    guard returning else { return }
+    returning = false
+    _ = showSelectionMenu()
   }
 
   // A drag changes the selection many times; Relay hears once it settles.
@@ -205,6 +299,8 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
   @objc private func reportSelection() {
     let event: [String: Any] = ["view": NSNumber(value: identifier), "text": selection ?? ""]
     channel.invokeMethod("pdfSelection", arguments: event)
+    // Text selected with the keyboard; a drag shows the menu once released.
+    if NSEvent.pressedMouseButtons & 1 == 0 { _ = showSelectionMenu() }
   }
 
   private func text() -> [String: Any]? {
@@ -222,17 +318,18 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
     ]
   }
 
-  private func mark(_ bounds: NSRect, on page: PDFPage) -> PDFAnnotation {
+  private func mark(_ bounds: NSRect, on page: PDFPage, in color: Any?) -> PDFAnnotation {
     let mark = PDFAnnotation(bounds: bounds, forType: .highlight, withProperties: nil)
-    mark.color = NSColor.systemYellow.withAlphaComponent(0.5)
+    mark.color = BrowserPDF.color(color)
     page.addAnnotation(mark)
     return mark
   }
 
-  /// Draws kept highlights: each has an `id` and, for every line, a
-  /// [page, x, y, width, height] in `marks`.
+  /// Draws the kept highlights in place of those shown: each has an `id`, a
+  /// `color` and, for every line, a [page, x, y, width, height] in `marks`.
   private func draw(_ kept: [[String: Any]]) {
     guard let document = viewer.document else { return }
+    for id in Array(highlights.keys) { remove(id) }
     for item in kept {
       guard let id = item["id"] as? String, highlights[id] == nil,
             let lines = item["marks"] as? [[NSNumber]] else { continue }
@@ -243,55 +340,73 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
         let bounds = NSRect(
           x: line[1].doubleValue, y: line[2].doubleValue, width: line[3].doubleValue,
           height: line[4].doubleValue)
-        drawn.append(mark(bounds, on: page))
+        drawn.append(mark(bounds, on: page, in: item["color"]))
       }
       if !drawn.isEmpty { highlights[id] = drawn }
     }
   }
 
-  /// Highlights the selected lines as `id` and answers `added` with their
-  /// text and marks, or removes the highlights the selection lies on and
-  /// answers `removed` with their ids.
-  private func toggleHighlight(as id: String) -> [String: Any]? {
+  /// Highlights the selected lines as `id` in `color` and answers `added`
+  /// with their text and marks.
+  private func addHighlight(as id: String, in color: Any?) -> [String: Any]? {
     guard let selection = viewer.currentSelection, let document = viewer.document else { return nil }
-    var lines: [(page: PDFPage, bounds: NSRect)] = []
+    var drawn: [PDFAnnotation] = []
+    var marks: [[Double]] = []
     for line in selection.selectionsByLine() {
       for page in line.pages {
         let bounds = line.bounds(for: page)
-        if !bounds.isEmpty { lines.append((page, bounds)) }
+        if bounds.isEmpty { continue }
+        drawn.append(mark(bounds, on: page, in: color))
+        marks.append([
+          Double(document.index(for: page)), Double(bounds.minX), Double(bounds.minY), Double(bounds.width),
+          Double(bounds.height),
+        ])
       }
     }
-    if lines.isEmpty { return nil }
-    defer { viewer.clearSelection() }
-    // Neighbouring lines' boxes touch, so only a real overlap counts.
-    let covered = highlights.filter { _, drawn in
-      drawn.contains { mark in
-        lines.contains { line in
-          let overlap = line.bounds.intersection(mark.bounds)
-          return line.page === mark.page && overlap.width > 1
-            && overlap.height > min(line.bounds.height, mark.bounds.height) / 2
-        }
-      }
-    }.map { $0.key }
-    if !covered.isEmpty {
-      for key in covered {
-        for mark in highlights.removeValue(forKey: key) ?? [] { mark.page?.removeAnnotation(mark) }
-      }
-      return ["removed": covered]
-    }
-    var drawn: [PDFAnnotation] = []
-    var marks: [[Double]] = []
-    for line in lines {
-      drawn.append(mark(line.bounds, on: line.page))
-      marks.append([
-        Double(document.index(for: line.page)), Double(line.bounds.minX), Double(line.bounds.minY),
-        Double(line.bounds.width), Double(line.bounds.height),
-      ])
-    }
+    if drawn.isEmpty { return nil }
+    menuShown = false
+    viewer.clearSelection()
     highlights[id] = drawn
     let quoted = String(decoding: (selection.string ?? "").utf16.prefix(4000), as: UTF16.self)
     let added: [String: Any] = ["text": quoted, "marks": marks]
     return ["added": added]
+  }
+
+  private func recolor(_ id: String, to color: Any?) {
+    menuShown = false
+    for mark in highlights[id] ?? [] { mark.color = BrowserPDF.color(color) }
+  }
+
+  private func remove(_ id: String) {
+    menuShown = false
+    for mark in highlights.removeValue(forKey: id) ?? [] { mark.page?.removeAnnotation(mark) }
+  }
+}
+
+/// PDFKit's viewer, saying when a press of the mouse starts and ends.
+/// PDFView may follow a drag inside its own mouseDown, so the end is
+/// caught both there and in mouseUp.
+private final class PressedPDFView: PDFView {
+  var pressed: (() -> Void)?
+  var released: (() -> Void)?
+  private var down = false
+
+  override func mouseDown(with event: NSEvent) {
+    down = true
+    pressed?()
+    super.mouseDown(with: event)
+    if NSEvent.pressedMouseButtons & 1 == 0 { release() }
+  }
+
+  override func mouseUp(with event: NSEvent) {
+    super.mouseUp(with: event)
+    release()
+  }
+
+  private func release() {
+    guard down else { return }
+    down = false
+    released?()
   }
 }
 

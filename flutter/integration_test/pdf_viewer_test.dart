@@ -15,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:relay_flutter/highlight_menu.dart';
 import 'package:relay_flutter/page_surface.dart';
 import 'package:relay_flutter/relay_api.dart';
 import 'package:relay_flutter/web_page.dart';
@@ -41,7 +42,8 @@ void main() {
       reason: "Run through npm run test:mac so the installed app's data stays untouched.",
     );
 
-    // The Relay server's highlight routes; every other call is accepted.
+    // The Relay server's highlight list and save; every other call is
+    // accepted.
     final kept = <String, List<Json>>{};
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
@@ -53,10 +55,6 @@ void main() {
       } else if (path == '/api/highlights') {
         final body = jsonDecode(await utf8.decodeStream(request)) as Json;
         kept.putIfAbsent(body.remove('url') as String, () => []).add(body);
-      } else if (path.startsWith('/api/highlights/')) {
-        for (final list in kept.values) {
-          list.removeWhere((item) => item['id'] == path.split('/').last);
-        }
       }
       request.response.statusCode = reply == null ? 204 : 200;
       if (reply != null) request.response.write(jsonEncode(reply));
@@ -92,10 +90,8 @@ void main() {
         (controller.platform as WebKitWebViewController).webViewIdentifier;
     const channel = MethodChannel('app.relay/browser');
     // Debug builds can select the whole PDF; a test cannot drag over it.
-    Future<void> selectAll() => channel.invokeMethod<void>('pdf', {
-      'view': viewId,
-      'do': 'selectAll',
-    });
+    Future<void> selectAll() =>
+        channel.invokeMethod<void>('pdf', {'view': viewId, 'do': 'selectAll'});
 
     Future<void> until(
       bool Function() done,
@@ -116,6 +112,8 @@ void main() {
     }
 
     String selection() => page.context!['selection'] as String;
+    HighlightMenu? menu() =>
+        (page.widget as Stack).children.whereType<HighlightMenu>().firstOrNull;
     Future<void> openPaper() async {
       await browser.navigate(paper);
       await until(() => browser.pdf, 'the viewer did not open', seconds: 60);
@@ -162,14 +160,18 @@ void main() {
     await browser.browserAction('zoomOut');
     await browser.browserAction('zoomFit');
 
-    // Highlighting marks the selected text, clears the selection and keeps
-    // the highlight on the server with where its lines are.
+    // The menu shows by the selected text. A colour there marks the text,
+    // clears the selection and keeps the highlight on the server with its
+    // colour and where its lines are.
     final unmarked = await shown();
-    await browser.browserAction('highlight');
+    await until(() => menu() != null, 'no menu by the selected text');
+    menu()!.onColor('green');
     await until(() => selection().isEmpty, 'highlighting kept the selection');
+    expect(menu(), isNull);
     expect(await shown(), isNot(unmarked), reason: 'No highlight showed');
     final saved = highlights(paper).single;
     expect(saved['text'], contains('Word Representations'));
+    expect(saved['color'], 'green');
     expect(saved['marks'], isNotEmpty);
 
     // A load that starts and fails leaves the PDF and its viewer in place.
@@ -179,16 +181,21 @@ void main() {
     expect((await browser.read())['pdf'], isNotNull);
     await controller.runJavaScript('window.stop()');
 
-    // Opened again, the PDF has its highlight back: highlighting the same
-    // text now removes it, here and on the server.
+    // Opened again, the PDF has its highlight back: removing it changes
+    // what shows. A click on it opens its menu, which a test cannot do on a
+    // native view; the unit tests cover that menu.
     await openPaper();
     await wait(1);
-    await selectAll();
-    await until(() => selection().isNotEmpty, 'nothing was selected');
-    await browser.browserAction('highlight');
-    await until(
-      () => highlights(paper).isEmpty,
-      'the kept highlight was not drawn again',
+    final marked = await shown();
+    await channel.invokeMethod<void>('pdf', {
+      'view': viewId,
+      'do': 'remove',
+      'id': saved['id'],
+    });
+    expect(
+      await shown(),
+      isNot(marked),
+      reason: 'the kept highlight was not drawn again',
     );
 
     // A web page: the highlight quotes the selected text, is painted without
@@ -198,7 +205,7 @@ void main() {
     expect(browser.pdf, isFalse);
     Future<String> painted() async {
       final ranges = await controller.runJavaScriptReturningResult(
-        "String([...(CSS.highlights.get('relay-highlight') ?? [])]"
+        "String([...(CSS.highlights.get('relay-highlight-yellow') ?? [])]"
         ".map((range) => range.startContainer.isConnected + ' ' + range.toString().replace(/\\s+/g, ' ').trim()))",
       );
       return '$ranges'.replaceAll('"', '');
@@ -212,6 +219,7 @@ void main() {
       "getSelection().selectAllChildren(document.querySelector('h1.title'))",
     );
     await until(() => selection().contains(title), 'nothing was selected');
+    await until(() => menu() != null, 'no menu by the selected page text');
     await browser.browserAction('highlight');
     await until(() => selection().isEmpty, 'highlighting kept the selection');
     final quoted = highlights(site).single['text'] as String;
@@ -249,7 +257,10 @@ void main() {
     );
     expect(await controller.currentUrl(), '$paper.pdf');
     expect(
-      await channel.invokeMethod<Object?>('pdf', {'view': viewId, 'do': 'open'}),
+      await channel.invokeMethod<Object?>('pdf', {
+        'view': viewId,
+        'do': 'open',
+      }),
       isNull,
       reason: 'The fetch followed a redirect',
     );
