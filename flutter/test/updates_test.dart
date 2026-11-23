@@ -51,7 +51,17 @@ void main() {
     expect(updates.ready, isTrue);
     expect(await updates.download!.readAsBytes(), bytes);
     offline = false;
+    await updates.check();
+    var notified = 0;
+    updates.addListener(() => notified++);
+    await updates.check();
+    // An unchanged feed entry leaves the ready download, its status and
+    // listeners alone.
+    expect(notified, 0);
+    expect(updates.status, contains('ready to install'));
     await updates.download!.writeAsString('corrupt');
+    await updates.install(() async {});
+    expect(updates.status, contains('changed'));
     await updates.check();
     expect(downloads, 2);
     expect(updates.ready, isTrue);
@@ -129,7 +139,13 @@ void main() {
       expect(requests, hasLength(4));
       corrupt = false;
       requests.clear();
+      // A failed download is not fetched again on every minute's check, but
+      // Refresh retries it at once.
       await updates.check();
+      expect(requests, ['latest.json']);
+      expect(updates.ready, isFalse);
+      requests.clear();
+      await updates.refresh();
       expect(updates.ready, isTrue);
       expect(requests, ['latest.json', binary]);
       await updates.check();
@@ -280,6 +296,13 @@ void main() {
       addTearDown(preview.dispose);
       await preview.check();
       expect(preview.release!['build'], '103');
+      var notified = 0;
+      void count() => notified++;
+      preview.addListener(count);
+      await preview.check();
+      expect(notified, 0);
+      expect(preview.ready, isTrue);
+      preview.removeListener(count);
       await preview.selectPreview(two);
       expect(preview.release, two);
       await preview.selectStable();

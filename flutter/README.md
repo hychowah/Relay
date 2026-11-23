@@ -329,9 +329,12 @@ when the card closes.
 
 ## Mac updates
 
-Downloads run at startup and hourly. A dot on the Workspace menu button and
-its Updates item marks a downloaded update ready to install. Workspace menu →
-Updates shows progress;
+The app checks the update feed at startup, every minute and when its window
+comes to the front, and downloads a new build in the background. A check that
+finds the same feed entry as the last one does nothing more; a download that
+failed is tried again after an hour, or at once with Refresh. A dot on the
+Workspace menu button and its Updates item marks a downloaded update ready to
+install. Workspace menu → Updates shows progress;
 **Install and restart** remains manual and waits for this window's agent work.
 The package is checked against the release hash, bundle signature, identity and
 version before replacement. The previous app is kept only until the new version

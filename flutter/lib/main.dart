@@ -304,7 +304,10 @@ class _RelayShellState extends State<RelayShell> {
   void initState() {
     super.initState();
     _lifecycle = AppLifecycleListener(
-      onResume: () => unawaited(w.openCurrentConversation()),
+      onResume: () {
+        unawaited(w.openCurrentConversation());
+        unawaited(widget.updates?.check());
+      },
     );
     draft = TextEditingController(text: widget.initialDraft);
     draft.addListener(_save);

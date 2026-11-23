@@ -92,7 +92,7 @@ class AppUpdates extends ChangeNotifier {
     await File('${updates.directory.path}/$receipt').writeAsString('ready');
     await updates.discardInstallLeftovers(receipt, updates.bundle!);
     updates.timer = Timer.periodic(
-      const Duration(hours: 1),
+      const Duration(minutes: 1),
       (_) => updates.check(),
     );
     unawaited(updates.check());
@@ -202,6 +202,7 @@ class AppUpdates extends ChangeNotifier {
   }
 
   Future<void> loadPreviews() async {
+    final before = (jsonEncode(previews), catalogError);
     try {
       final entries = await _manifest('previews.json') as List? ?? [];
       previews = entries.map((item) => _release(item, preview: true)).toList();
@@ -209,26 +210,51 @@ class AppUpdates extends ChangeNotifier {
     } catch (e) {
       catalogError = 'Test build list unavailable. Check the update feed.';
     }
-    changed();
+    if ((jsonEncode(previews), catalogError) != before) changed();
   }
 
   Future<void> check() => _prepare();
+
+  /// Checks now even when the feed entry is unchanged, such as to retry a
+  /// download that failed.
+  Future<void> refresh() {
+    _handled = null;
+    return _prepare();
+  }
+
   Future<void> selectStable() => _prepare(explicit: true);
   Future<void> selectPreview(Json choice) =>
       _prepare(choice: choice, explicit: true);
 
+  /// The feed entry the last check finished with. A background check that
+  /// finds the same entry does nothing, so checking every minute costs one
+  /// small request and leaves a ready download and its menu dot alone. An
+  /// entry whose download failed is tried again after [_retryAt], not every
+  /// minute.
+  String? _handled;
+  DateTime? _retryAt;
+  bool _polling = false;
+
   Future<void> _prepare({Json? choice, bool explicit = false}) async {
-    if (working || installing || closed) return;
+    if (_polling || working || installing || closed) return;
     if (!explicit && _pinned) return;
-    working = true;
+    _polling = true;
     _pinned = false;
+    var quiet = false;
+    String? entry;
+    // Only real work shows as busy; the feed request alone does not.
+    void begin() {
+      working = true;
+      status = 'Checking for updates…';
+      progress = null;
+      changed();
+    }
+
     if (explicit) {
       download = null;
       release = null;
+      begin();
     }
-    status = 'Checking for updates…';
-    progress = null;
-    changed();
     try {
       final followPreview = !explicit && previewName.isNotEmpty;
       if (followPreview) {
@@ -241,12 +267,23 @@ class AppUpdates extends ChangeNotifier {
       final raw =
           choice ?? (followPreview ? null : await _manifest('latest.json'));
       final data = raw == null ? null : _release(raw, preview: choice != null);
+      entry = jsonEncode(data);
+      final waiting = !(_retryAt?.isBefore(DateTime.now()) ?? false);
+      // An install that started during the feed request owns the download.
+      if (!explicit && (installing || (entry == _handled && waiting))) {
+        quiet = true;
+        return;
+      }
+      _handled = null;
+      _retryAt = null;
+      if (!explicit) begin();
       download = null;
       release = null;
       if (data == null) {
         status = followPreview
             ? 'This test build is no longer listed. Stable is available in Updates.'
             : 'No Stable release has been published.';
+        _handled = entry;
         return;
       }
       final next = data['version'] as String;
@@ -264,6 +301,7 @@ class AppUpdates extends ChangeNotifier {
       if (current) {
         status = 'You have the latest published version';
         await _discardDownloads();
+        _handled = entry;
         return;
       }
       release = data;
@@ -290,14 +328,21 @@ class AppUpdates extends ChangeNotifier {
       _pinned = explicit;
       status = '${label(data)} is ready to install';
       progress = 1;
+      _handled = entry;
     } catch (e) {
+      // A failed feed request is cheap to repeat; a failed download waits.
+      _handled = entry;
+      _retryAt = entry == null
+          ? null
+          : DateTime.now().add(const Duration(hours: 1));
       status = ready
           ? 'Could not refresh the feed. ${label(release!)} is still ready to install.'
           : e.toString();
       if (ready) progress = 1;
     } finally {
+      _polling = false;
       working = false;
-      changed();
+      if (!quiet) changed();
     }
   }
 
@@ -512,6 +557,8 @@ class AppUpdates extends ChangeNotifier {
       ], mode: ProcessStartMode.detached);
       exit(0);
     } catch (e) {
+      // A download found damaged here is fetched again by the next check.
+      _handled = null;
       status = e.toString();
       installing = false;
       changed();
@@ -647,7 +694,7 @@ class UpdateDialog extends StatelessWidget {
               ? null
               : () async {
                   await updates.loadPreviews();
-                  await updates.check();
+                  await updates.refresh();
                 },
           child: const Text('Refresh'),
         ),
