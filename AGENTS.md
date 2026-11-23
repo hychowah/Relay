@@ -39,6 +39,16 @@ status, assumptions, and the next step. Update its Next section at handoff.
   the checkout that runs the services, and never point a test backend at the
   live records. Retire feature worktrees with `tools/remove-worktree <path>`
   so their published Flutter previews are cleaned up.
+- Name a new worktree for its work, in two to four lowercase words joined by
+  hyphens, such as `search-input`, so that a person reading the list knows
+  what each one holds. Put a kind before those words when the work is not a
+  feature or a fix: `plan-` for a plan, `record-` for a record of what was
+  done, `check-` for a copy made to review a branch, `build-` for a copy made
+  to publish a build. Its branch carries the same name; a `worktree-` that a
+  tool puts in front is fine. Do not let a tool pick the name, as in `agent-`
+  and an id: whoever starts a subagent creates its worktree under a name
+  first and starts the subagent there. Do not rename a branch that a test
+  build was published from.
 - Build the Mac client with `tools/publish-flutter`, which leaves nothing on
   the Mac. Before you finish, remove anything else your session put on the Mac:
   build folders, test apps, and the settings and data of any test app.
