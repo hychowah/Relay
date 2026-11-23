@@ -87,15 +87,21 @@ page's own `history.back()` across documents adds a history entry.
 - Unverified: page dialogs, typing in pages, sign-ins surviving a reinstall,
   and sending a chat message.
 - Cross-device chat and tabs: source only. 107 server and 80 Flutter tests
-  pass; the backend is not deployed and no Mac and Windows run has been made.
+  pass. The backend was deployed and Stable 0.0.17 published with them on
+  2026-11-23; no run across both devices has been made.
 
 ## Next
 
-1. After the backend is deployed and a Mac build published, check on the Mac
-   and Windows: the chat opened last on one device opens on the other when it
-   comes to the front, a new unsaved chat is not pulled back, and **Open Mac's
-   tabs here** copies the Mac's tabs once. Also check Browser history and
-   highlights on Windows.
+On 2026-11-23 the user said they are not testing Windows for now; items 1
+and 3 wait for that.
+
+1. With Stable 0.0.17 on the Mac and a Windows app built from `main` at or
+   after `acad2d8` (older ones cannot read pages), check on the Mac and
+   Windows: the
+   chat opened last on one device opens on the other when it comes to the
+   front, a new unsaved chat is not pulled back, and **Open Mac's tabs here**
+   copies the Mac's tabs once. Also check Browser history and highlights on
+   Windows.
 2. Ask the user how old device cards go away: a device that reinstalls gets a
    new id, and its old tabs stay on the server, outside Stored data.
 3. User trial on Windows: chat, each app, a page confirm dialog and the
