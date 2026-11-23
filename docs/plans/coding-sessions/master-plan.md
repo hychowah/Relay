@@ -178,9 +178,10 @@ Covers C07 in practice. Read those rules before this phase starts.
    the session list. Since 2026-11-23 conversations started outside hapi
    are read from their Claude Code and Codex transcripts, because hapi's copy
    froze silently whenever its terminal attachment ended. Claude Code sessions
-   are started (`claude --bg`, auto mode by default) and continued (`claude
-   stop`, then `claude --bg --resume`) with Claude Code's own commands, so they
-   show in the user's TUI; hapi's screen-reading input is no longer used.
+   are started with `claude --bg` (auto mode by default), so they show in the
+   user's TUI. A message reaches a running one through Claude Code's internal
+   daemon socket, mid-turn while it works (verified live); if that channel
+   fails, an idle one is stopped and resumed. hapi's screen reading is unused.
    Codex and hapi-started sessions still act through hapi. A workspace opens
    in about 0.2 s. A real send through the screen is unverified. The backend that passes the theme on is deployed since
    2026-11-23 and Stable 0.0.18 sends it; whether the screen
