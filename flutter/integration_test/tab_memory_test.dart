@@ -1,9 +1,11 @@
-// Mac check of tab memory readings and the playing-sound check against real
+// Mac check of tab memory readings, a hidden tab's hover-card picture and
+// the playing-sound check against real
 // WKWebViews. Run it from WSL with `npm run test:mac -- tab_memory_test.dart`,
 // which builds under its own bundle id so it cannot read or write the
 // installed app's settings and data. Its pages are local documents: no
 // server, no records.
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -38,18 +40,22 @@ void main() {
     final light = open('light'), heavy = open('heavy');
     addTearDown(light.dispose);
     addTearDown(heavy.dispose);
-    await tester.pumpWidget(
+    // Hidden like a tab off screen: Flutter takes its view out of the window.
+    Future<void> show({bool heavyHidden = false}) => tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: Column(
             children: [
               Expanded(child: light.widget),
-              Expanded(child: heavy.widget),
+              Expanded(
+                child: Offstage(offstage: heavyHidden, child: heavy.widget),
+              ),
             ],
           ),
         ),
       ),
     );
+    await show();
     await light.ready.timeout(const Duration(seconds: 20));
     await heavy.ready.timeout(const Duration(seconds: 20));
     WebViewController controller(PageSurface page) =>
@@ -107,6 +113,29 @@ void main() {
       'app ${reading.app >> 20} MB',
     );
     expect(micros, lessThan(5000), reason: 'A reading must stay cheap.');
+
+    // A hidden tab's hover-card picture: small, and of the page itself.
+    await controller(heavy).runJavaScript(
+      "document.documentElement.style.background = 'rgb(200, 0, 0)'",
+    );
+    await show(heavyHidden: true);
+    await tester.pump(const Duration(milliseconds: 300));
+    final bytes = await heavy.preview();
+    expect(bytes, isNotNull, reason: 'A hidden tab must give a picture.');
+    final picture = (await (await ui.instantiateImageCodec(
+      bytes!,
+    )).getNextFrame()).image;
+    final pixels = (await picture.toByteData())!;
+    final middle =
+        4 * (picture.width * (picture.height ~/ 2) + picture.width ~/ 2);
+    final (red, green) = (pixels.getUint8(middle), pixels.getUint8(middle + 1));
+    // ignore: avoid_print
+    print(
+      'TAB PREVIEW hidden tab: ${picture.width}x${picture.height}, '
+      '${bytes.length ~/ 1024} KB, middle red $red green $green',
+    );
+    expect(picture.width, inInclusiveRange(240, 480));
+    expect((red > 150, green < 80), (true, true), reason: 'The page is red.');
 
     // Silent looping audio counts as playing sound, so its tab stays loaded.
     // It is never added to the page, which only WebKit's own flag can see.

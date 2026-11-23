@@ -20,6 +20,7 @@ class WorkspaceTabs extends StatefulWidget {
     this.split,
     this.draggable = false,
     this.memory,
+    this.hoverCard,
   });
   final List<WorkspaceTab> tabs;
   final WorkspaceTab? selected;
@@ -33,6 +34,10 @@ class WorkspaceTabs extends StatefulWidget {
 
   /// Desktop only: while tab memory is shown, each page's figure.
   final MemoryReading? memory;
+
+  /// Desktop only: the card shown while the pointer rests on an app's or a
+  /// website's tab; [shown] says whether its page is on screen.
+  final Widget Function(WorkspaceTab tab, bool shown)? hoverCard;
 
   @override
   State<WorkspaceTabs> createState() => _WorkspaceTabsState();
@@ -309,6 +314,31 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
     },
   );
 
+  /// Wraps an app's or a website's chip in its hover card when [enabled].
+  Widget _withCard(
+    WorkspaceTab tab,
+    Widget chip, {
+    required bool shown,
+    required bool enabled,
+  }) {
+    final card = widget.hoverCard;
+    if (card == null || !enabled || tab is SplitTab || tab.appId == null) {
+      return chip;
+    }
+    return Tooltip(
+      richMessage: WidgetSpan(child: card(tab, shown)),
+      waitDuration: const Duration(milliseconds: 500),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainer,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colors.outlineVariant),
+        boxShadow: const [BoxShadow(blurRadius: 12, color: Color(0x33000000))],
+      ),
+      child: chip,
+    );
+  }
+
   Widget _chip(
     _Placed placed, {
     required bool selected,
@@ -350,63 +380,74 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
               child: Row(
                 children: [
                   Expanded(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(8),
-                      onTap: onSelect,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(10, 9, 6, 9),
-                        child: Row(
-                          children: [
-                            if (tab is SplitTab)
-                              _SplitMap(tab, color: colors.primary)
-                            else
-                              Icon(
-                                tab.isBrowser
-                                    ? Icons.language
-                                    : tab.appId == null
-                                    ? Icons.add
-                                    : Icons.grid_view_rounded,
-                                size: 15,
-                                color: selected
-                                    ? colors.primary
-                                    : colors.onSurfaceVariant,
-                              ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                tab.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: tab is SplitTab
+                    child: _withCard(
+                      tab,
+                      shown: selected || inSplit,
+                      enabled: onSelect != null,
+                      InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: onSelect,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 9, 6, 9),
+                          child: Row(
+                            children: [
+                              if (tab is SplitTab)
+                                _SplitMap(tab, color: colors.primary)
+                              else
+                                Icon(
+                                  tab.isBrowser
+                                      ? Icons.language
+                                      : tab.appId == null
+                                      ? Icons.add
+                                      : Icons.grid_view_rounded,
+                                  size: 15,
+                                  color: selected
                                       ? colors.primary
-                                      : selected
-                                      ? colors.onSurface
                                       : colors.onSurfaceVariant,
                                 ),
-                              ),
-                            ),
-                            if (widget.memory case final reading?
-                                when reading.pages.containsKey(tab.page))
-                              Padding(
-                                padding: const EdgeInsets.only(left: 4),
-                                child: TabMemoryLabel(
-                                  reading: reading,
-                                  page: tab.page!,
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  tab.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: tab is SplitTab
+                                        ? colors.primary
+                                        : selected
+                                        ? colors.onSurface
+                                        : colors.onSurfaceVariant,
+                                  ),
                                 ),
                               ),
-                            if (inSplit)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 4),
-                                child: Icon(
-                                  Icons.vertical_split,
-                                  size: 13,
-                                  color: colors.primary,
-                                  semanticLabel: 'Split view',
+                              if (widget.memory?.pages[tab.page]
+                                  case final use?)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 4),
+                                  child: Text(
+                                    memoryText(use.bytes),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                      color: colors.onSurfaceVariant,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                          ],
+                              if (inSplit)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 4),
+                                  child: Icon(
+                                    Icons.vertical_split,
+                                    size: 13,
+                                    color: colors.primary,
+                                    semanticLabel: 'Split view',
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

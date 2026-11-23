@@ -230,7 +230,8 @@ Trash cleanup deletes it with the conversation.
 one self-contained integration test on the Mac against real WKWebViews:
 `popup_windows_test.dart` (with its own loopback fixture),
 `tab_memory_test.dart`, which checks each tab's memory figure, reports what a
-reading costs and plays silent audio to check the playing-sound rule,
+reading costs, pictures a hidden tab and plays silent audio to check the
+playing-sound rule,
 `video_fullscreen_test.dart`, which puts the test window into macOS fullscreen
 for a few seconds, `pdf_viewer_test.dart`, which opens one arXiv paper as
 a PDF and as a web page and so needs the internet on the Mac, or
@@ -274,11 +275,18 @@ processes count for the app whose launchd domain started them, so other apps'
 pages are excluded; WebKit's shared GPU and networking processes count in full.
 
 On macOS, **Show tab memory** in the Workspace menu puts each tab's memory on its
-chip while it is on, the same physical footprint; the tooltip adds all pages and
-Relay itself. Every two seconds one native call reads all tabs; nothing is read
-while it is off or Relay is not the active app, and the strip redraws only when
-a shown figure changes. A tab's process comes from WebKit's private
-`_webProcessIdentifier`, so a WebKit update can make the figures disappear.
+chip while it is on, the same physical footprint. Every two seconds one native
+call reads all tabs; nothing is read while it is off or Relay is not the active
+app, and the strip redraws only when a shown figure changes. A tab's process
+comes from WebKit's private `_webProcessIdentifier`, so a WebKit update can make
+the figures disappear.
+
+Also on macOS, resting the pointer on a tab for half a second shows its card:
+the title, a small picture of the page when the tab is off screen, and the
+memory of that page, of all pages and of Relay itself, or that the tab is
+unloaded. The card captures the picture, 240 points wide, and reads the memory
+once as it opens. The picture is kept only in the card's memory, never saved or
+sent, and is gone when the card closes.
 
 ## Mac updates
 

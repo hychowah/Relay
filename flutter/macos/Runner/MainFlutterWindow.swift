@@ -106,12 +106,15 @@ class MainFlutterWindow: NSWindow {
         BrowserPDF.perform(arguments, on: view, identifier: identifier.int64Value, channel: browser, result: result)
         return
       }
-      if call.method == "snapshot" || call.method == "selection" {
+      // A preview is a small picture for the tab's hover card, kept only in
+      // Flutter's memory while the card shows; a PDF in Relay's viewer gives
+      // its full-size picture, which the card scales down.
+      if call.method == "snapshot" || call.method == "selection" || call.method == "preview" {
         guard let registry = flutterViewController, let identifier = call.arguments as? NSNumber,
               let view = FWFWebViewFlutterWKWebViewExternalAPI.webView(
                 forIdentifier: identifier.int64Value, withPluginRegistry: registry
               ), !view.bounds.isEmpty else {
-          if call.method == "selection" { result(nil); return }
+          if call.method != "snapshot" { result(nil); return }
           result(FlutterError(code: "capture", message: "Open the page before capturing it.", details: nil))
           return
         }
@@ -142,7 +145,7 @@ class MainFlutterWindow: NSWindow {
           return
         }
         let config = WKSnapshotConfiguration()
-        config.snapshotWidth = NSNumber(value: Double(min(view.bounds.width, 1600)))
+        config.snapshotWidth = NSNumber(value: Double(min(view.bounds.width, call.method == "preview" ? 240 : 1600)))
         view.takeSnapshot(with: config) { image, error in
           guard let data = image?.tiffRepresentation,
                 let png = NSBitmapImageRep(data: data)?.representation(using: .png, properties: [:]) else {

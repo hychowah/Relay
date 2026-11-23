@@ -45,6 +45,10 @@ abstract class PageSurface {
   bool get canCapture => false;
   Future<Uint8List> snapshot() =>
       throw UnsupportedError('Page capture is unavailable.');
+
+  /// Desktop only (macOS). A small picture of the page for its tab's hover
+  /// card; null where there is none.
+  Future<Uint8List?> preview() async => null;
   Future<Json> present(Json command);
   Future<Json> presentOnCurrentView(Json command) =>
       present({...command, 'expectedGeneration': context?['generation'] ?? 0});

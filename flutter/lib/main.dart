@@ -29,6 +29,7 @@ import 'region_capture.dart';
 import 'split_layout.dart';
 import 'stored_data.dart';
 import 'tab_memory.dart';
+import 'tab_preview.dart';
 import 'window_capture.dart';
 import 'bug_reports.dart';
 import 'capture_flight.dart';
@@ -296,10 +297,8 @@ class _RelayShellState extends State<RelayShell> {
   // The conversation last opened on another device opens here too.
   late final AppLifecycleListener _lifecycle;
   // Desktop only (macOS).
-  late final tabMemory = TabMemory(
-    readMemory,
-    () => [for (final tab in w.tabs) ?tab.page],
-  );
+  late final tabMemory = TabMemory(readMemory, _loadedPages);
+  List<PageSurface> _loadedPages() => [for (final tab in w.tabs) ?tab.page];
 
   @override
   void initState() {
@@ -1423,6 +1422,13 @@ class _RelayShellState extends State<RelayShell> {
                   split: split?.layout.tabs,
                   draggable: MediaQuery.sizeOf(context).width >= 900,
                   memory: memory,
+                  hoverCard: Platform.isMacOS
+                      ? (tab, shown) => TabPreview(
+                          tab: tab,
+                          shown: shown,
+                          read: () => readMemory(_loadedPages()),
+                        )
+                      : null,
                   onSelect: (tab) {
                     w.recorder.action('select tab', {'tab': tab.title});
                     setState(() => chatOnly = false);

@@ -234,7 +234,8 @@ real WKWebViews.
    user chose to unload Browser tabs after 30 minutes off screen (a model may
    choose later), and on 2026-11-23 accepted that this loses unsent typed text
    and closes the tab's popups. Check on the Mac: a hidden page unloads, its
-   process exits (`npm run perf:mem`), and it reloads at its address.
+   process exits (`npm run perf:mem`), and it reloads at its address; tab
+   hover cards show the page and its memory.
 18. On the Mac, try YouTube fullscreen alone, in a split pane and embedded in
    another site, then leave macOS fullscreen by hand: the tab strip and chat
    must return. A video in a sign-in popup must fill only the popup; a popup

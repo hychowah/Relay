@@ -1,16 +1,34 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:relay_flutter/page_surface.dart';
 import 'package:relay_flutter/relay_api.dart';
 import 'package:relay_flutter/tab_memory.dart';
+import 'package:relay_flutter/tab_preview.dart';
 import 'package:relay_flutter/workspace.dart';
 import 'package:relay_flutter/workspace_tabs.dart';
 
+// A 1-pixel PNG.
+final _picture = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+);
+
 class _Page extends PageSurface {
+  _Page([this.title = 'Page']);
+  @override
+  final String title;
+  int previews = 0;
+  @override
+  Future<Uint8List?> preview() async {
+    previews++;
+    return _picture;
+  }
+
   @override
   Widget get widget => const SizedBox();
-  @override
-  String get title => 'Page';
   @override
   String get url => 'about:blank';
   @override
@@ -90,5 +108,76 @@ void main() {
     await tester.pump(const Duration(seconds: 6));
     expect(reads, 3);
     expect(find.textContaining(' MB'), findsNothing);
+  });
+
+  testWidgets('a hover card pictures a hidden tab and gives its memory', (
+    tester,
+  ) async {
+    final shown = _Page('Shown'), hidden = _Page('Hidden');
+    final tabs = [
+      WorkspaceTab(appId: 'browser', isBrowser: true)..page = shown,
+      WorkspaceTab(appId: 'browser', isBrowser: true)..page = hidden,
+      WorkspaceTab(appId: 'browser', isBrowser: true)
+        ..unloaded = (url: 'https://example.com', title: 'Unloaded'),
+    ];
+    final reading = (
+      app: 180 << 20,
+      pages: {
+        shown: (process: 7, bytes: 100 << 20),
+        hidden: (process: 8, bytes: 412 << 20),
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 48,
+            child: WorkspaceTabs(
+              tabs: tabs,
+              selected: tabs.first,
+              onSelect: (_) {},
+              onClose: (_) {},
+              hoverCard: (tab, onScreen) => TabPreview(
+                tab: tab,
+                shown: onScreen,
+                read: () async => reading,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(1, 400));
+    addTearDown(mouse.removePointer);
+    Future<void> hover(String title) async {
+      await mouse.moveTo(const Offset(1, 400));
+      await tester.pump(const Duration(seconds: 1));
+      await mouse.moveTo(tester.getCenter(find.text(title)));
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump();
+    }
+
+    expect(hidden.previews, 0, reason: 'Nothing is captured before a hover.');
+    await hover('Hidden');
+    expect(hidden.previews, 1);
+    expect(find.byType(Image), findsOneWidget);
+    expect(
+      find.text('Memory 412 MB · all pages 512 MB · Relay 180 MB'),
+      findsOneWidget,
+    );
+
+    await hover('Shown');
+    expect(shown.previews, 0, reason: 'A tab on screen needs no picture.');
+    expect(
+      find.text('Memory 100 MB · all pages 512 MB · Relay 180 MB'),
+      findsOneWidget,
+    );
+
+    await hover('Unloaded');
+    expect(
+      find.text('Unloaded to free memory; click to load it again.'),
+      findsOneWidget,
+    );
   });
 }

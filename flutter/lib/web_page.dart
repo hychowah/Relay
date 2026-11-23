@@ -296,6 +296,16 @@ abstract class _WebPage extends PageSurface {
     return bytes;
   }
 
+  @override
+  Future<Uint8List?> preview() async {
+    if (!Platform.isMacOS || _disposed) return null;
+    final webKit = controller.platform as WebKitWebViewController;
+    return _browserChannel.invokeMethod<Uint8List>(
+      'preview',
+      webKit.webViewIdentifier,
+    );
+  }
+
   Future<void> _load();
   void _fail(Object error) {
     if (!_ready.isCompleted) _ready.completeError(error);

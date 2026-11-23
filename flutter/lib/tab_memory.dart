@@ -83,39 +83,3 @@ class TabMemory extends ValueNotifier<MemoryReading?> {
     super.dispose();
   }
 }
-
-/// The figure on a tab's chip; its tooltip gives Relay's own memory and the
-/// total of all pages, counting a shared process once.
-class TabMemoryLabel extends StatelessWidget {
-  const TabMemoryLabel({super.key, required this.reading, required this.page});
-  final MemoryReading reading;
-  final PageSurface page;
-
-  @override
-  Widget build(BuildContext context) {
-    final use = reading.pages[page]!;
-    final processes = {
-      for (final other in reading.pages.values) other.process: other.bytes,
-    };
-    final pages = processes.values.fold(0, (sum, bytes) => sum + bytes);
-    final shared = reading.pages.values
-        .where((other) => other.process == use.process)
-        .length;
-    return Tooltip(
-      message: [
-        shared > 1
-            ? 'This page shares its process with ${shared - 1} other tab${shared > 2 ? 's' : ''}.'
-            : 'This page: ${memoryText(use.bytes)}.',
-        'All pages: ${memoryText(pages)}. Relay itself: ${memoryText(reading.app)}.',
-      ].join('\n'),
-      child: Text(
-        memoryText(use.bytes),
-        style: TextStyle(
-          fontSize: 11,
-          fontFeatures: const [FontFeature.tabularFigures()],
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      ),
-    );
-  }
-}
