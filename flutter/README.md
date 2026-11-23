@@ -225,7 +225,11 @@ a PDF and as a web page and so needs the internet on the Mac, or
 `highlight_clicks_test.dart`. That one drags and clicks with real mouse
 events (a debug build's runner queues them), so the Mac must be awake,
 unlocked and left alone for about half a minute: with its lid closed, or
-another app in front, the app cannot come forward and no click arrives. Like the
+another app in front, the app cannot come forward and no click arrives.
+Queued events never hold the mouse button down, so a PDF press always ends
+at once there; by hand, drag-select and click a highlight in a PDF, click
+elsewhere after dragging the PDF's scroll bar, and highlight on a few real
+sites, one a single-page app. Like the
 smoothness suite below, it builds a temporary copy under its own bundle id,
 `app.relay.flutterTest`, and removes the copy and the test app's data
 afterwards. It refuses `workflow_test.dart`,

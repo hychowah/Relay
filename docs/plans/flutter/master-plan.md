@@ -253,8 +253,7 @@ real WKWebViews.
    an arXiv PDF, click chat and send (the question must carry the
    selection), and open **Stored data**. Unverified: a password-protected
    PDF. Why 0.0.16 lost the selection is unknown; embedded PDFs still use
-   that path. The highlight menu fix (bug report of 2026-11-23) passed
-   `highlight_clicks_test.dart`; in the next build, highlight on real sites
-   and a single-page app, check drag smoothness, then mark it solved.
+   that path. In the next build, make the README's by-hand highlight
+   checks and check drag smoothness, then mark the 2026-11-23 report solved.
 
 Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).
