@@ -257,5 +257,6 @@ real WKWebViews.
    that path. Rerun `highlight_clicks_test.dart` (not run since its last
    edits); in Stable 0.0.18, make the README's by-hand highlight checks and
    check drag smoothness, then mark the 2026-11-23 report solved.
+21. Check **Updates** build times on Mac.
 
 Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).

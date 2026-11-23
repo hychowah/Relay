@@ -2052,16 +2052,6 @@ class _NewTabPageState extends State<NewTabPage> {
     unawaited(widget.onShow());
   }
 
-  String _ago(int at) {
-    final minutes = DateTime.now()
-        .difference(DateTime.fromMillisecondsSinceEpoch(at))
-        .inMinutes;
-    if (minutes < 1) return 'just now';
-    if (minutes < 60) return '$minutes min ago';
-    if (minutes < 24 * 60) return '${minutes ~/ 60} h ago';
-    return '${minutes ~/ (24 * 60)} days ago';
-  }
-
   /// What a saved tab shows: a website's host, or its app or report name.
   String? _tabName(Json tab) {
     if (tab['split'] != null) return null;
@@ -2127,7 +2117,11 @@ class _NewTabPageState extends State<NewTabPage> {
                               const SizedBox(height: 3),
                               Text(
                                 [
-                                  _ago(device['updatedAt'] as int),
+                                  timeAgo(
+                                    DateTime.fromMillisecondsSinceEpoch(
+                                      device['updatedAt'] as int,
+                                    ),
+                                  ),
                                   ...{
                                     for (final tab
                                         in ((device['tabs'] as Json)['tabs']

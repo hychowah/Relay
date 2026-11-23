@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:relay_flutter/app_updates.dart';
 import 'package:relay_flutter/relay_api.dart';
 
@@ -292,6 +293,47 @@ void main() {
       addTearDown(newerStable.dispose);
       await newerStable.selectStable();
       expect(newerStable.ready, isFalse);
+    },
+  );
+  testWidgets(
+    'Updates shows when the installed app and each test build were built',
+    (tester) async {
+      String ago(Duration age) =>
+          DateTime.now().subtract(age).toUtc().toIso8601String();
+      final updates = AppUpdates(
+        origin: Uri.parse('http://feed.test'),
+        version: '0.0.6',
+        directory: Directory.systemTemp,
+        previewName: 'tabs',
+        buildNumber: '101',
+        built: ago(const Duration(hours: 3)),
+      );
+      addTearDown(updates.dispose);
+      Json preview(String name, {String? built}) => {
+        'name': name,
+        'version': '0.0.6',
+        'sha256': 'a' * 64,
+        'branch': 'feature/$name',
+        'commit': 'abcdef0123456789',
+        'built': ?built,
+      };
+      updates.previews = [
+        preview('tabs', built: ago(const Duration(minutes: 24))),
+        preview('search'),
+      ];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: UpdateDialog(
+            updates: updates,
+            busy: () => false,
+            install: () async {},
+          ),
+        ),
+      );
+      expect(find.textContaining('Built 3 h ago, '), findsOneWidget);
+      expect(find.textContaining('Built 24 min ago, '), findsOneWidget);
+      // A build published before builds recorded their time lists without one.
+      expect(find.text('feature/search · abcdef0'), findsOneWidget);
     },
   );
   test(

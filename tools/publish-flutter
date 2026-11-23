@@ -3,6 +3,7 @@
 
 The Mac build runs in a temporary folder that is removed afterwards, so
 publishing leaves nothing on the Mac."""
+from datetime import datetime, timezone
 import fcntl
 import gzip
 import hashlib
@@ -63,6 +64,9 @@ def main():
         build = str(uuid.uuid4().int % 10**15)
         flags = [f"--build-number={build}", f"--dart-define=RELAY_PREVIEW={name}"]
         identity = ("CFBundleVersion", build)
+    # Updates shows when the installed app and each listed test build were made.
+    built_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    flags.append(f"--dart-define=RELAY_BUILT={built_at}")
     remote = subprocess.check_output([ssh, "mktemp -d /tmp/relay-build.XXXXXXXX"], text=True).strip()
     if not re.fullmatch(r"/tmp/relay-build\.[A-Za-z0-9]+", remote):
         sys.exit("Mac did not return a build directory")
@@ -148,7 +152,7 @@ ditto -c -k --sequesterRsrc --keepParent "$bundle" {remote}/release.zip"""
                 filename = f"Relay-Flutter-preview-{digest}.zip"
                 manifest = dict(name=name, branch=branch, commit=commit, dirty=dirty,
                                 version=info["CFBundleShortVersionString"], build=build,
-                                file=filename, sha256=digest, size=size)
+                                file=filename, sha256=digest, size=size, built=built_at)
             metadata = stage / "manifest.json"
             with (releases / preview_feed.LOCK).open("a") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)

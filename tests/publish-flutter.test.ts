@@ -110,6 +110,11 @@ test('one tool publishes test builds and Stable with their stored files, and Sta
   assert.equal(engine.exec, true);
   assert.equal(stored(engine.sha256).toString(), 'engine');
   assert.equal(entries.find((entry: {path: string}) => entry.path === 'Contents/Info.plist').exec, false);
+  // The update list and the app itself show the same build time.
+  const built = listed('preview-search.json').built;
+  assert.match(built, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\+00:00$/);
+  const flags = entries.find((entry: {path: string}) => entry.path === 'Contents/flags');
+  assert.ok(stored(flags.sha256).toString().includes(`--dart-define=RELAY_BUILT=${built}`));
   // Republishing a name keeps its earlier ZIP (see the Flutter plan's Next) but not its unused list.
   const earlier = listed('preview-search.json').file;
   published('search');
