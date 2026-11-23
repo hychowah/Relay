@@ -52,7 +52,7 @@ with `html:false`. The terminal is drawn by `@xterm/xterm` and its fit add-on.
 | --- | --- | --- |
 | `hapi.ts` | All of hapi's API: sign-in (JWT cached, signs in again on 401), routes, events, terminal socket | `sessions()`, `session(id)` (the latest 200 raw messages, agent state, metadata), `send`, `resume`, `approve`, `deny`, `abort`, `setSettings`, `events(signal)` (yields changed session ids), `openTerminal` (step 3), and the existing `start` and `openOutside`. Error text is safe to show and never contains the token. It no longer groups sessions. |
 | `conversation.ts` | hapi's block shapes and tool names | `toBlocks(messages, agentState) → {blocks, contextUsed}`. The block kinds are `user`, `agent`, `step` and `note`. A `step` has a title, state and duration, and optionally a `diff`, an `output`, an `approval:{requestId,state}` and child `steps`. A `note` is an event, an error or thinking. Common Claude and Codex tools get titles; any other tool shows its name and a short input summary. |
-| `diff.ts` | How diffs are made | `Diff = {file, added, removed, hunks:[{lines:[{kind,text,oldLine?,newLine?}]}]}`, built by `fromStrings(old,new)`, and in step 2 by `fromGit(text)`. The page has one diff renderer. |
+| `diff.ts` | How diffs are made | `Diff = {file, added, removed, hunks:[{lines:[{kind,text,oldLine?,newLine?}]}]}`, built with jsdiff: `fromStrings(old,new)` (50 ms limit; over it, or over 2,000 lines, only counts) and `fromPatch(text)` for unified diffs (Codex now, `git diff` in step 2). The page has one diff renderer. |
 | `workspace.ts` | git | `worktrees(target)` returns branch, folder, last change, and from step 2 the added, removed and file counts. Also `changes(target, worktree)` and `fileDiff(target, worktree, file)`. A session belongs to the worktree whose path equals its hapi folder. |
 | `server.ts` | The HTTP boundary; **every check happens here, once** | Relay protocol routes (unchanged) plus the screen API. Session grouping moves here from `hapi.ts`. |
 | `build.ts` | How hapi's chat code is bundled | `HAPI_SOURCE_DIR` → `build/hapi-chat.js` |
@@ -69,12 +69,12 @@ existing `/api/*` middleware.
 | `GET /api/workspaces/:targetId` | `{name, worktrees[], sessions[]}`, including conversations from outside hapi in those worktrees |
 | `GET /api/sessions?all=1` | Today's list across projects, which keeps C08 |
 | `GET /api/sessions/:id` | `{session:{id,title,agent,model,effort,permissionMode,status,folder,branch,worktree?,targetId?,startedAt,contextUsed?,hapiUrl,canSend}, blocks, earlier}`. Blocks come from the latest 200 messages; when `earlier` is true the page shows "Earlier messages in hapi ↗". |
-| `GET /api/events` | SSE lines of `{sessionId}`. The page refetches the open session, one fetch at a time; changes that arrive meanwhile become one more fetch. It also refetches the bar. |
-| `POST /api/sessions/:id/messages {text}` | Sends exactly that text. A stopped session is resumed first, with the permission mode sent explicitly; the button then reads "Resume and send". |
+| `GET /api/events` | SSE lines of `{type, sessionId, active?}`. The page refetches the open session, one fetch at a time; changes that arrive meanwhile become one more fetch. The bar reloads only when a session is added, removed or changes running state, after the user's own actions, and on reconnect, because hapi repeats updates for every active session every 10 s. |
+| `POST /api/sessions/:id/messages {text}` | Sends exactly that text. A stopped session is resumed first, with the session's permission mode, else the target's, else hapi's "default"; the button then reads "Resume and send". |
 | `POST /api/sessions/:id/approvals/:requestId {decision}` | `approve` or `deny` |
 | `POST /api/sessions/:id/stop` | Stop |
 | `POST /api/sessions/:id/settings {model?,effort?,permissionMode?}` | Composer menu |
-| `POST /api/sessions {targetId, agent, worktree, text}` | New session from "+". It saves a draft record and starts it through the same `startDraft()` as `/api/drafts/:id/start`, so there is one start path that starts at most once. |
+| `POST /api/sessions {targetId, agent, worktree, text}` | New session from "+". It shares one `start()` (with the refused, unclear and created-but-unsent outcomes) with draft Start; only draft Start keeps a record and starts at most once. |
 | `GET /api/workspaces/:t/worktrees/changes?worktree=…`, `…/file?worktree=…&file=…` | Step 2 |
 | `POST /api/sessions/:id/terminal` → `{terminalId}`; `GET /api/terminals/:id/output` (SSE); `POST …/input`, `…/resize` | Step 3. Using SSE plus POST keeps the existing origin and JSON checks, with no WebSocket server. The terminal closes when its output stream closes. |
 
@@ -82,7 +82,8 @@ existing `/api/*` middleware.
 
 - **Checked once, in `server.ts`.** `targetId` is configured; `worktree` is in
   that target's current `git worktree list`; `file` is in that worktree's
-  current change list; text is at most `MAX_REQUEST`. Code behind the server
+  current change list; text the user typed is not blank (only the agent's
+  `sessions.draft` input is capped at `MAX_REQUEST`). Code behind the server
   trusts its input. Folders come only from configured targets and the
   worktrees git reports for them.
 - **hapi down, sign-in failure or a hapi refusal.** The server answers 502
@@ -159,7 +160,7 @@ existing `/api/*` middleware.
 2. **Worktree tree and Changes tab.**
    - `workspace.ts` gains counts: `git diff HEAD --numstat` plus untracked
      files, so "Clean" means nothing uncommitted. It also gains `changes()`
-     and `fileDiff()`, and `diff.ts` gains `fromGit()`.
+     and `fileDiff()`, which reuses `diff.ts`'s `fromPatch()`.
    - The page gets the tree (branch, "Updated …", +/− or Clean, running dot,
      "N active"), the Changes tab with its count, and the sessions filter.
    - Two tests on a temporary git repository: the counts and the change list,
