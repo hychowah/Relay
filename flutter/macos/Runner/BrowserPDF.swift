@@ -188,6 +188,11 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
     }
   }
 
+  // A web view that goes before its close call arrives takes this with it.
+  deinit {
+    if let watching = monitor { NSEvent.removeMonitor(watching) }
+  }
+
   private func close() {
     fetch?.cancel()
     fetch = nil
@@ -275,25 +280,33 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
   private func mouse(_ event: NSEvent) {
     guard let window = viewer.window, event.window === window else { return }
     let point = viewer.convert(event.locationInWindow, from: nil)
+    let at = NSValue(point: point)
     if event.type == .leftMouseDown {
+      // A press elsewhere, such as on Relay's menu, ends any press here
+      // whose release a tracking loop took.
+      pressing = false
       guard let content = window.contentView, let frame = content.superview,
             content.hitTest(frame.convert(event.locationInWindow, from: nil))?.isDescendant(of: viewer) == true
       else { return }
       pressing = true
       returning = false
       hideMenu()
-      DispatchQueue.main.async { [weak self] in
-        if NSEvent.pressedMouseButtons & 1 == 0 { self?.release(at: point) }
-      }
+      // In the default run loop mode only, so not inside a tracking loop,
+      // such as a scroller's, while the button is still down.
+      perform(#selector(pressHandled(_:)), with: at, afterDelay: 0)
     } else if pressing {
-      DispatchQueue.main.async { [weak self] in self?.release(at: point) }
+      perform(#selector(ended(at:)), with: at, afterDelay: 0)
     }
   }
 
-  private func release(at point: NSPoint) {
+  @objc private func pressHandled(_ at: NSValue) {
+    if NSEvent.pressedMouseButtons & 1 == 0 { ended(at: at) }
+  }
+
+  @objc private func ended(at value: NSValue) {
     guard pressing else { return }
     pressing = false
-    released(at: point)
+    released(at: value.pointValue)
   }
 
   // The mouse is up at `point`: the menu goes by the selected text, or by

@@ -25,15 +25,20 @@ const _readPage = '''JSON.stringify({url:location.protocol==='data:'?'about:blan
  capturedAt:new Date().toISOString()})''';
 // A drag changes the selection many times, and each report redraws the
 // whole workspace; Relay hears once it settles, as from the PDF viewer.
+// WKWebView clears the selection when a press on Relay takes the page's
+// focus; read once settled, the page no longer has focus and the last
+// selection stays, so a held press on Highlight still finds it enabled.
 const _observePage =
     '''(()=>{if(window.__relayObserved)return;window.__relayObserved=true;
  let timer,settle;const notify=()=>{clearTimeout(timer);timer=setTimeout(()=>RelayBrowser.postMessage('interaction'),80)};
  const selection=()=>window.getSelection()?.toString().slice(0,4000)||'';
  document.addEventListener('selectionchange',()=>{
-   const text=selection();
-   if(text || document.hasFocus()) window.__relaySelection=text;
    clearTimeout(settle);
-   settle=setTimeout(()=>RelayBrowser.postMessage('selection:'+(window.__relaySelection||'')),150);
+   settle=setTimeout(()=>{
+     const text=selection();
+     if(text || document.hasFocus()) window.__relaySelection=text;
+     RelayBrowser.postMessage('selection:'+(window.__relaySelection||''));
+   },150);
  },true);
  for(const type of ['pointerdown','keydown'])document.addEventListener(type,()=>{
    window.__relaySelection='';notify();

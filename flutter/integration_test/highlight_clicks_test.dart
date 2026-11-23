@@ -208,6 +208,10 @@ void main() {
         'a real click on the menu over a page highlighted nothing',
       );
       expect(highlights(site).single['color'], 'green');
+      expect(
+        highlights(site).single['text'],
+        'Gears turn slowly in the quiet workshop',
+      );
 
       // A click on the highlight opens its menu: recolour, then remove.
       await click(Offset.lerp(start, end, .5)!);

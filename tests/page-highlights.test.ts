@@ -136,6 +136,28 @@ test("a highlight goes on the text selected before the page lost focus", async (
   await page.evaluate("getSelection().removeAllRanges()");
   await page.waitForTimeout(50);
   assert.equal(await add(page, "cleared"), null);
+
+  // Nor once focus has gone to a text field.
+  await page.evaluate(() => document.body.insertAdjacentHTML("beforeend", "<textarea id=field>typed</textarea>"));
+  await select(page, "second", "second", "paragraph");
+  await page.evaluate("document.getElementById('field').focus(); getSelection().removeAllRanges()");
+  await page.waitForTimeout(50);
+  assert.equal(await add(page, "in-field"), null);
+});
+
+test("the menu by selected text stays while a press on it takes the page's focus", async (t) => {
+  const page = await open(t);
+  const box = await page.locator("#second").boundingBox();
+  const y = box!.y + box!.height / 2;
+  await page.mouse.move(box!.x + 2, y);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + 120, y, { steps: 5 });
+  await page.mouse.up();
+  await page.waitForTimeout(50);
+  assert.equal((await menus(page)).length, 1);
+  await page.evaluate("document.hasFocus = () => false; getSelection().removeAllRanges()");
+  await page.waitForTimeout(400);
+  assert.deepEqual(await menus(page), [], "the menu was not hidden");
 });
 
 test("a highlight has a colour that can change", async (t) => {
