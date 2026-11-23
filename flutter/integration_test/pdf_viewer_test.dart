@@ -99,7 +99,8 @@ void main() {
     final viewId =
         (controller.platform as WebKitWebViewController).webViewIdentifier;
     const channel = MethodChannel('app.relay/browser');
-    // Debug builds can select the whole PDF; a test cannot drag over it.
+    // Debug builds can select the whole PDF without mouse input;
+    // highlight_clicks_test drags with real mouse events.
     Future<void> selectAll() =>
         channel.invokeMethod<void>('pdf', {'view': viewId, 'do': 'selectAll'});
 

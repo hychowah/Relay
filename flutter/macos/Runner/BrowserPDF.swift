@@ -22,7 +22,7 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
   ] as [String: (CGFloat, CGFloat, CGFloat)]).mapValues { NSColor(srgbRed: $0.0 / 255, green: $0.1 / 255, blue: $0.2 / 255, alpha: 0.45) }
   private static func color(_ name: Any?) -> NSColor { colors[name as? String ?? ""] ?? colors["yellow"]! }
 
-  private let viewer = PressedPDFView()
+  private let viewer = PDFView()
   private let identifier: Int64
   private let channel: FlutterMethodChannel
   private var fetch: URLSessionDataTask?
@@ -35,6 +35,10 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
   private var menuShown = false
   /// Whether the menu hid for a scroll or zoom and may come back.
   private var returning = false
+  /// The app's watch on mouse presses, while the viewer shows, and whether
+  /// a press began on the viewer and has not been handled yet.
+  private var monitor: Any?
+  private var pressing = false
 
   private init(identifier: Int64, channel: FlutterMethodChannel) {
     self.identifier = identifier
@@ -91,7 +95,7 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
       shown(on: webView)?.viewer.autoScales = true
       result(nil)
     #if DEBUG
-      // The Mac check cannot drag over a native view; debug builds only.
+      // pdf_viewer_test selects without mouse input; debug builds only.
       case "selectAll":
         shown(on: webView)?.viewer.selectAll(nil)
         result(nil)
@@ -190,6 +194,8 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
     opened?(nil)
     opened = nil
     NotificationCenter.default.removeObserver(self)
+    if let watching = monitor { NSEvent.removeMonitor(watching) }
+    monitor = nil
     NSObject.cancelPreviousPerformRequests(withTarget: self)
     viewer.removeFromSuperview()
   }
@@ -209,11 +215,10 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
     viewer.document = document
     viewer.displayMode = .singlePageContinuous
     viewer.autoScales = true
-    viewer.pressed = { [weak self] in
-      self?.returning = false
-      self?.hideMenu()
+    monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { [weak self] event in
+      self?.mouse(event)
+      return event
     }
-    viewer.released = { [weak self] in self?.released() }
     let center = NotificationCenter.default
     center.addObserver(self, selector: #selector(selectionChanged), name: .PDFViewSelectionChanged, object: viewer)
     center.addObserver(self, selector: #selector(moved), name: .PDFViewScaleChanged, object: viewer)
@@ -260,12 +265,41 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
     return true
   }
 
-  // The mouse is up: the menu goes by the selected text, or by the
-  // highlight clicked.
-  private func released() {
+  /// PDFKit's own page views take the viewer's mouse events, so presses are
+  /// watched as the app receives them, and only those on the viewer itself,
+  /// not on Relay's menu drawn over it. A press hides the menu. Once it
+  /// ends, after PDFKit has handled it, the menu goes by the selected text
+  /// or the highlight clicked. PDFKit may follow a drag in a loop of its
+  /// own that keeps the release from this watch, so the end is also looked
+  /// for once the press has been handled.
+  private func mouse(_ event: NSEvent) {
+    guard let window = viewer.window, event.window === window else { return }
+    let point = viewer.convert(event.locationInWindow, from: nil)
+    if event.type == .leftMouseDown {
+      guard let content = window.contentView, let frame = content.superview,
+            content.hitTest(frame.convert(event.locationInWindow, from: nil))?.isDescendant(of: viewer) == true
+      else { return }
+      pressing = true
+      returning = false
+      hideMenu()
+      DispatchQueue.main.async { [weak self] in
+        if NSEvent.pressedMouseButtons & 1 == 0 { self?.release(at: point) }
+      }
+    } else if pressing {
+      DispatchQueue.main.async { [weak self] in self?.release(at: point) }
+    }
+  }
+
+  private func release(at point: NSPoint) {
+    guard pressing else { return }
+    pressing = false
+    released(at: point)
+  }
+
+  // The mouse is up at `point`: the menu goes by the selected text, or by
+  // the highlight clicked.
+  private func released(at point: NSPoint) {
     if showSelectionMenu() { return }
-    guard let window = viewer.window else { return }
-    let point = viewer.convert(window.mouseLocationOutsideOfEventStream, from: nil)
     guard let page = viewer.page(for: point, nearest: false) else { return }
     let onPage = viewer.convert(point, to: page)
     guard let hit = highlights.first(where: { _, marks in
@@ -380,33 +414,6 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
   private func remove(_ id: String) {
     menuShown = false
     for mark in highlights.removeValue(forKey: id) ?? [] { mark.page?.removeAnnotation(mark) }
-  }
-}
-
-/// PDFKit's viewer, saying when a press of the mouse starts and ends.
-/// PDFView may follow a drag inside its own mouseDown, so the end is
-/// caught both there and in mouseUp.
-private final class PressedPDFView: PDFView {
-  var pressed: (() -> Void)?
-  var released: (() -> Void)?
-  private var down = false
-
-  override func mouseDown(with event: NSEvent) {
-    down = true
-    pressed?()
-    super.mouseDown(with: event)
-    if NSEvent.pressedMouseButtons & 1 == 0 { release() }
-  }
-
-  override func mouseUp(with event: NSEvent) {
-    super.mouseUp(with: event)
-    release()
-  }
-
-  private func release() {
-    guard down else { return }
-    down = false
-    released?()
   }
 }
 

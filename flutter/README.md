@@ -220,8 +220,12 @@ Trash cleanup deletes it with the conversation.
 one self-contained integration test on the Mac against real WKWebViews:
 `popup_windows_test.dart` (with its own loopback fixture),
 `video_fullscreen_test.dart`, which puts the test window into macOS fullscreen
-for a few seconds, or `pdf_viewer_test.dart`, which opens one arXiv paper as
-a PDF and as a web page and so needs the internet on the Mac. Like the
+for a few seconds, `pdf_viewer_test.dart`, which opens one arXiv paper as
+a PDF and as a web page and so needs the internet on the Mac, or
+`highlight_clicks_test.dart`. That one drags and clicks with real mouse
+events (a debug build's runner queues them), so the Mac must be awake,
+unlocked and left alone for about half a minute: with its lid closed, or
+another app in front, the app cannot come forward and no click arrives. Like the
 smoothness suite below, it builds a temporary copy under its own bundle id,
 `app.relay.flutterTest`, and removes the copy and the test app's data
 afterwards. It refuses `workflow_test.dart`,

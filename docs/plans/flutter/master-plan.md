@@ -249,12 +249,12 @@ real WKWebViews.
    is not counted again; one title per visit; inline fill-in (none after
    paste; Right+Enter opens real URL) and first-click select-all.
 20. The PDF viewer and highlights passed `npm run test:mac --
-   pdf_viewer_test.dart` on 2026-11-20. In Stable 0.0.17, by hand on the
-   Mac: drag-select in an arXiv PDF, click chat and send
-   (the question must carry the selection); highlight on a few real sites,
-   one a single-page app; and open **Stored data**. Unverified: a
-   password-protected PDF. Why 0.0.16 lost the selection is unknown; embedded
-   PDFs still use that path. In test build `pre-0-0-18`, also check the
-   highlight menu, with clicks over a PDF, and drag-selecting.
+   pdf_viewer_test.dart` on 2026-11-20. By hand on the Mac: drag-select in
+   an arXiv PDF, click chat and send (the question must carry the
+   selection), and open **Stored data**. Unverified: a password-protected
+   PDF. Why 0.0.16 lost the selection is unknown; embedded PDFs still use
+   that path. The highlight menu fix (bug report of 2026-11-23) passed
+   `highlight_clicks_test.dart`; in the next build, highlight on real sites
+   and a single-page app, check drag smoothness, then mark it solved.
 
 Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).

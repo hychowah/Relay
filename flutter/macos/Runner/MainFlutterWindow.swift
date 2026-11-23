@@ -58,6 +58,42 @@ class MainFlutterWindow: NSWindow {
           ? BrowserPopups.install(on: view, channel: browser) : BrowserPopups.close(on: view))
         return
       }
+      #if DEBUG
+        // Mac checks send real mouse input this way: queued AppKit events
+        // reach Flutter, WebKit and PDFKit as a user's would, unlike a
+        // test's own taps. `type` is down, dragged or up, at Flutter's
+        // logical `x` and `y` from the window's content top left.
+        if call.method == "mouse" {
+          guard let window = self, let view = window.contentView,
+                let arguments = call.arguments as? [String: Any],
+                let type = arguments["type"] as? String,
+                let x = arguments["x"] as? Double, let y = arguments["y"] as? Double else {
+            result(nil)
+            return
+          }
+          let kinds: [String: NSEvent.EventType] = [
+            "down": .leftMouseDown, "dragged": .leftMouseDragged, "up": .leftMouseUp,
+          ]
+          if type == "down" {
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+          }
+          let point = view.convert(NSPoint(x: x, y: view.isFlipped ? y : view.bounds.height - y), to: nil)
+          if let kind = kinds[type], let event = NSEvent.mouseEvent(
+            with: kind, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+            pressure: type == "up" ? 0 : 1) {
+            NSApp.postEvent(event, atStart: false)
+          }
+          // Where AppKit sends a click at that point, for the check to report.
+          let hit = view.superview.flatMap { view.hitTest($0.convert(point, from: nil)) }
+          result([
+            "hit": hit.map { String(describing: Swift.type(of: $0)) } ?? "none",
+            "key": window.isKeyWindow, "active": NSApp.isActive,
+          ])
+          return
+        }
+      #endif
       if call.method == "pdf" {
         guard let registry = flutterViewController, let arguments = call.arguments as? [String: Any],
               let identifier = arguments["view"] as? NSNumber,

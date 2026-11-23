@@ -168,6 +168,11 @@
   // Where Relay shows its menu: a box in the viewport's CSS pixels, with
   // the id of the highlight clicked, or nothing to hide it.
   let pressed = false, shown = null, settle;
+  // The text last selected on the page. A click on Relay's menu or toolbar
+  // takes focus from the page, and WKWebView then clears its selection,
+  // possibly while the page still reports focus; the highlight goes on
+  // this. A press in the page, which starts a new selection, clears it.
+  let lastRange = null;
   const post = (menu) => {
     try { RelayBrowser.postMessage("menu:" + (menu ? JSON.stringify(menu) : "")); } catch (_) { /* No Relay. */ }
   };
@@ -219,6 +224,7 @@
     addEventListener("pointerdown", (event) => {
       if (event.button !== 0) return;
       pressed = true;
+      lastRange = null;
       hide();
     }, true);
     addEventListener("pointerup", (event) => {
@@ -229,6 +235,8 @@
     }, true);
     // Text selected with the keyboard, or selected text that went away.
     document.addEventListener("selectionchange", () => {
+      const range = selected();
+      if (range) lastRange = range.cloneRange();
       if (pressed) return;
       clearTimeout(settle);
       settle = setTimeout(() => (selected() ? showSelection() : shown === "selection" && hide()), 300);
@@ -257,13 +265,13 @@
       watch();
     },
     /**
-     * Highlights the selected text as [id] in [color]. Answers
-     * {added: {text, prefix, suffix}}, or null when nothing is selected.
+     * Highlights the selected text, or else the text last selected before
+     * a click outside the page cleared it, as [id] in [color]. Answers
+     * {added: {text, prefix, suffix}}, or null when there is neither.
      */
     add(id, color) {
-      const selection = getSelection();
-      if (!paints || !selection || selection.isCollapsed || !selection.rangeCount) return null;
-      const chosen = selection.getRangeAt(0);
+      const chosen = selected() ?? lastRange;
+      if (!paints || !chosen?.startContainer.isConnected || !chosen.endContainer.isConnected) return null;
       const page = read();
       let start = position(page, chosen.startContainer, chosen.startOffset);
       let end = position(page, chosen.endContainer, chosen.endOffset);
@@ -281,7 +289,8 @@
       };
       kept.push(made);
       put(id, rangeAt(page, start, end));
-      selection.removeAllRanges();
+      getSelection()?.removeAllRanges();
+      lastRange = null;
       shown = null;
       paint();
       watch();

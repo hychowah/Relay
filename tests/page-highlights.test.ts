@@ -120,6 +120,24 @@ test("a highlight follows a page that redraws or changes its content under one a
   assert.deepEqual(await painted(page), shown);
 });
 
+test("a highlight goes on the text selected before the page lost focus", async (t) => {
+  const page = await open(t);
+  // WKWebView clears the selection once a click on Relay's menu takes
+  // focus from the page, possibly while the page still reports focus.
+  await select(page, "first", "sector", "gear");
+  await page.evaluate("getSelection().removeAllRanges()");
+  await page.waitForTimeout(50);
+  assert.equal((await add(page, "out-of-focus"))?.added.text, "sector gear");
+  assert.equal(await add(page, "again"), null, "the selection was used once");
+
+  // A press in the page starts again: the text selected before is not used.
+  await select(page, "second", "second", "paragraph");
+  await page.mouse.click(5, 5);
+  await page.evaluate("getSelection().removeAllRanges()");
+  await page.waitForTimeout(50);
+  assert.equal(await add(page, "cleared"), null);
+});
+
 test("a highlight has a colour that can change", async (t) => {
   const page = await open(t);
   await page.evaluate(() => (window as any).__relayHighlights.set([
