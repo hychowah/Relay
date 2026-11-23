@@ -189,6 +189,7 @@ whose setup was made to fail loaded nothing. Two earlier runs that day are
 not evidence: one lost its output, and one showed that swapping in an empty
 navigation delegate before loading an empty page left the page running.
 Nothing was left on the Mac.
+Test build `browser-vpn` was republished from `9227f06`, with the fixes.
 
 ## Limits
 
