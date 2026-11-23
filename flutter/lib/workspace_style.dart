@@ -333,6 +333,15 @@ Duration workspaceMotion(BuildContext context) =>
     ? Duration.zero
     : const Duration(milliseconds: 220);
 
+/// How long ago [time] was, such as "24 min ago".
+String timeAgo(DateTime time) {
+  final minutes = DateTime.now().difference(time).inMinutes;
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return '$minutes min ago';
+  if (minutes < 24 * 60) return '${minutes ~/ 60} h ago';
+  return '${minutes ~/ (24 * 60)} days ago';
+}
+
 /// A trash button that asks for a second click instead of opening a dialog.
 /// The first click turns it into a red button that grows to the left, so the
 /// pointer is still on it for the second click. A click soon after arming is

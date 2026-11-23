@@ -350,11 +350,13 @@ tools/publish-flutter search-input
 
 Choose a short, distinct name for each experiment. Reuse it to publish the next
 iteration. The command builds the current Flutter source on the Mac, including
-local edits, and records the branch, commit and dirty flag. Each name has its own
+local edits, and records the branch, commit, dirty flag and build time. Each name has its own
 entry. The ZIP is addressed by SHA-256, so a download keeps the exact build selected.
 Previews can use the same app version as each other and Stable.
 
-In **Workspace → Updates**, choose a test build, then **Install and restart**.
+**Workspace → Updates** shows when the installed app and each test build were
+built, such as "24 min ago, 2026-11-23 14:05"; a build with no recorded time
+shows none. Choose a test build, then **Install and restart**.
 From a preview, **Stable** switches back even at the same or a lower version. Background checks
 follow the installed build's feed. Drafts and tabs go through the usual restart flow.
 

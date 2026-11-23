@@ -10,6 +10,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'relay_api.dart';
+import 'workspace_style.dart';
 
 class AppUpdates extends ChangeNotifier {
   AppUpdates({
@@ -18,12 +19,16 @@ class AppUpdates extends ChangeNotifier {
     required this.directory,
     this.previewName = '',
     this.buildNumber = '',
+    this.built = '',
     this.bundle,
     http.Client? client,
   }) : api = RelayApi(origin, client: client);
   final RelayApi api;
   Uri get origin => api.origin;
   final String version, previewName, buildNumber;
+
+  /// When this app was built, as an ISO 8601 time; empty for older builds.
+  final String built;
   List<Json> previews = [];
   String? catalogError;
   bool _pinned = false;
@@ -35,6 +40,17 @@ class AppUpdates extends ChangeNotifier {
   static String label(Json data) => data['name'] == null
       ? 'Stable ${data['version']}'
       : "${data['name']} · ${data['version']} · ${(data['sha256'] as String).substring(0, 8)}";
+
+  /// When a build was made, such as "24 min ago, 2026-11-23 14:05" in local
+  /// time, or null when the build did not record it.
+  static String? builtTime(Object? iso) {
+    final time = DateTime.tryParse('${iso ?? ''}')?.toLocal();
+    if (time == null) return null;
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${timeAgo(time)}, ${time.year}-${two(time.month)}-${two(time.day)} '
+        '${two(time.hour)}:${two(time.minute)}';
+  }
+
   final Directory directory;
 
   /// The running app, whose unchanged files an update reuses.
@@ -63,6 +79,7 @@ class AppUpdates extends ChangeNotifier {
       origin: origin,
       version: info.version,
       buildNumber: info.buildNumber,
+      built: const String.fromEnvironment('RELAY_BUILT'),
       previewName: const String.fromEnvironment('RELAY_PREVIEW'),
       directory: Directory('${support.path}/updates'),
       bundle: File(Platform.resolvedExecutable).parent.parent.parent,
@@ -570,6 +587,8 @@ class UpdateDialog extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Installed: ${updates.installedLabel}'),
+              if (AppUpdates.builtTime(updates.built) case final time?)
+                Text('Built $time'),
               ListTile(
                 title: const Text('Stable'),
                 onTap: updates.working || updates.installing
@@ -588,7 +607,11 @@ class UpdateDialog extends StatelessWidget {
                 ListTile(
                   title: Text(AppUpdates.label(build)),
                   subtitle: Text(
-                    "${build['branch']} · ${(build['commit'] as String).substring(0, 7)}${build['dirty'] == true ? ' + local edits' : ''}",
+                    [
+                      if (AppUpdates.builtTime(build['built']) case final time?)
+                        'Built $time',
+                      "${build['branch']} · ${(build['commit'] as String).substring(0, 7)}${build['dirty'] == true ? ' + local edits' : ''}",
+                    ].join('\n'),
                   ),
                   onTap: updates.working || updates.installing
                       ? null
