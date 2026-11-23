@@ -38,11 +38,16 @@ has no password of its own.
 
 **VPN check.** Each tunnel first passes the NordVPN check Relay uses before
 model calls (`requireNordVPN`, which also honours `RELAY_VPN_CHECK=off`). The
-check took 10–20 ms on WSL, so every tunnel runs it fresh; no reuse or
-sharing is needed.
+check takes about 20 ms, but 30 at once took 0.45 s, so tunnels that start
+while a check runs share it; no result is reused after it ends.
 
-**Address rule (V06).** The proxy looks up the name in WSL and refuses unless
-every address is public. It then connects to the address it checked, so a
+**Name lookups (V02).** WSL's own resolver hands names to Windows, which
+looks them up over the home network. The proxy asks public name servers
+(`1.1.1.1`, `8.8.8.8`) instead, which WSL reaches through NordVPN, for IPv4
+addresses only, since WSL has no IPv6 route.
+
+**Address rule (V06).** The proxy refuses unless every address of the name is
+public. It then connects to the address it checked, so a
 second lookup cannot swap in a local one. Without this rule a web page could
 reach WSL's local services through the tab.
 
@@ -118,6 +123,29 @@ Done when:
 - The VPN-down message (V03) is checked by briefly disconnecting NordVPN in
   WSL, with the user's OK at the time; otherwise it stays unverified.
 
+## Phase 1 evidence (2026-11-23)
+
+Built in `server/browser-proxy.ts`, attached in `tools/flutter-experiment.ts`.
+The VPN check runs before the name lookup, so no lookup leaves WSL while
+NordVPN is down. IPv4-mapped, IPv4-compatible, NAT64 and 6to4 addresses are
+judged by the IPv4 ranges they carry or refused.
+
+- `npm test` (122 pass) and `npm run build` pass. Proxy tests: the address
+  rule, 403 for local targets and for a name with one private address, 503
+  with no lookup when the check fails, one check shared by tunnels opened
+  together, and the Browser socket still connects.
+- Scratch backend on WSL with temporary data and the real NordVPN check:
+  `curl -x` to an IP-check service returned the same address as a direct WSL
+  request; `curl -p -x` to a plain `http://` site (a real CONNECT) returned
+  200; a tunnel to Relay's own port got 403. The route to `1.1.1.1` is
+  `nordlynx`, and Akamai's resolver-echo name showed a Cloudflare resolver
+  for the proxy's lookups but the home provider's for WSL's own resolver.
+  The output logged no destinations.
+
+Unverified: the real check's 503 while NordVPN is down, the 502 when a
+target refuses the connection, and that shutdown closes open tunnels (added
+after a bug review; checked in the code only).
+
 ## Limits
 
 - No proxy password: any tailnet device, and any local process that can reach
@@ -125,17 +153,25 @@ Done when:
   boundary (it has no sign-in either).
 - NordVPN's Kill Switch is off in WSL. The check runs before each tunnel, so a
   VPN drop during an open connection can send traffic out over the normal
-  network. Turning the Kill
-  Switch on would close this; that is the user's choice and outside this plan.
+  network. Turning the Kill Switch on would close this; that is the user's
+  choice and outside this plan.
 - WebRTC is off in VPN tabs, so video calls do not work there.
 - Unverified until the Mac run: that WebKit applies a proxy set on the
   profile after the view exists but before its first load. If it does not,
   set the proxy inside the patched creation option instead.
+- `RELAY_VPN_CHECK=off` turns the proxy into a plain relay over WSL's
+  network. The live service does not set it.
+- A tunnel tries only the first address of a name, so a dead first address
+  gives 502.
+- Cloudflare and Google, the proxy's name servers, see the names VPN tabs
+  visit, from the VPN's address. If NordVPN drops between the check and a
+  lookup, that lookup leaves over the home network (the Kill Switch limit).
 - The Windows client ignores the saved flag, so a copy of Mac tabs opened
   there loads VPN tabs over Windows' network.
 
 ## Next
 
-1. Merge Phase 1 and deploy `relay-app`; the restart stops in-flight replies.
+1. Deploy `relay-app` (Phase 1 is in `main`); the restart stops in-flight
+   replies.
 2. Run `browser_vpn_test.dart` once on the MacBook, then merge Phase 2 and
    publish a test build for the hand checks.
