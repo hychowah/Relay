@@ -263,6 +263,30 @@ ThemeData workspaceTheme(Brightness brightness) {
   );
 }
 
+/// The `relay.theme` payload an app view receives (docs/integration.md).
+Map<String, Object> appTheme(ThemeData theme) {
+  final colors = theme.colorScheme;
+  String hex(Color color) =>
+      '#${(color.toARGB32() & 0xffffff).toRadixString(16).padLeft(6, '0')}';
+  return {
+    'mode': theme.brightness.name,
+    'colors': {
+      'background': hex(colors.surfaceContainerHighest),
+      'surface': hex(colors.surface),
+      'raised': hex(colors.surfaceContainerHigh),
+      'text': hex(colors.onSurface),
+      'muted': hex(colors.onSurfaceVariant),
+      'accent': hex(colors.primary),
+      'onAccent': hex(colors.onPrimary),
+      'line': hex(colors.outline),
+      'tint': hex(colors.primaryContainer),
+      'danger': hex(colors.error),
+    },
+    'font': '-apple-system, system-ui, "Helvetica Neue", Arial, sans-serif',
+    'monoFont': 'ui-monospace, Menlo, monospace',
+  };
+}
+
 class RelayMark extends StatelessWidget {
   const RelayMark({super.key, this.size = 26});
   final double size;

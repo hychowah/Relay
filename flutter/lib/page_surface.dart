@@ -90,7 +90,8 @@ mixin BrowserSurface {
   Future<void> browserAction(String action) async {}
 
   /// Whether the `highlight` action of [browserAction] works here: it marks
-  /// the selected text, or removes the highlights the selection touches.
+  /// the selected text in yellow. Relay's menu by the selection also
+  /// recolours and removes.
   bool get canHighlight => false;
 
   /// Desktop only. Whether the tab shows a PDF in the Mac's own PDF viewer,

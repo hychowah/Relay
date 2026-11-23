@@ -152,12 +152,14 @@ with auto-clean off. A period is saved with **Save**; when it would delete
 items now, the button first says how many and a second click agrees. The
 server cleans at start, every hour and when a period is saved.
 
-On the desktop (Windows not yet checked), select text on a page in a Browser
-tab and press **Highlight**
-beside the address bar to mark it; select marked text and press it again to
-remove the mark. Highlights are kept on the Relay server for the page's
-address (without its #fragment), so they return on the next visit and on
-every desktop. A web page's highlight is the quoted text and a little of the text
+On the desktop (Windows not yet checked), select text on a page or PDF in a
+Browser tab: once the mouse is released, a menu of colours shows beside it,
+and a colour marks the text. Click marked text for the same menu, with its
+colour ticked, to change the colour or remove the mark (a second click on
+**Remove** confirms). The menu hides while the page scrolls or a PDF zooms.
+**Highlight** beside the address bar marks the selected text in yellow.
+Highlights are kept on the Relay server for the page's address (without its
+#fragment), so they return on the next visit and on every desktop. A web page's highlight is the quoted text and a little of the text
 around it, not a place in the page: it shows wherever that text is on a page
 with that address, and only while it is there. A page that redraws itself, or
 changes its content under one address as single-page apps do, keeps its

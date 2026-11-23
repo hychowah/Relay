@@ -24,10 +24,17 @@ session there adds the paper under that repository's own rules.
 | C06 | The Relay agent can prepare a follow-up message; the user confirms each one before it is sent. |
 | C07 | Commits, merges and server restarts happen inside the coding session, with the user's approval there and under that repository's rules. |
 | C08 | The user can open any recent session of the session tool from the coding app's screen, not only one the app started. |
+| C09 | The coding screen feels like part of Relay, not another app: it fills the tab and follows Relay's look. A folding left bar shows the workspace (a configured repository), its worktrees and its sessions; the right side shows one session's conversation, changes and terminal with one composer. The session tool's own page is only a link. |
+
+C09 was added on 2026-11-19 after the user's bug report: the framed session
+tool page, with its own header, composer and colours inside the coding app's
+page, felt like a separate app. Its layout follows the user's mockup of
+2026-11-23.
 
 Not included: the two agents talking without the user, the Relay agent acting
-when a session finishes, the Relay agent answering approval requests, and a
-session screen built into Relay.
+when a session finishes, the Relay agent answering approval requests, a
+session screen in Relay core (it lives in the coding app), and rewriting the
+session tool or giving it Relay-specific screens.
 
 ## Approach and boundaries
 
@@ -37,7 +44,19 @@ through a small coding app in its own project. That app speaks Relay's
 [integration contract](../../integration.md) on one side and the session tool's
 interface on the other. Relay core has no coding-specific code.
 
-The Start and Send controls are on the coding app's own screen. The Relay agent
+The session tool is the engine; the coding app draws the screen. The tool's
+server already offers what the screen needs: messages, sending a message,
+approve and deny, stop, model and effort, and a live event stream. The tool's
+own web page is not framed. The tool is the user's copy of an outside project
+(about 500,000 lines, nine of its commits the user's own), so it is not
+rewritten. A change to it is a small, general addition to its interface that
+could go back to the original project. The coding app reaches the tool through
+one module and tests against a stand-in, so a tool update is fixed in one
+place. The tool's token stays on the coding app's server; the screen talks only
+to its own server.
+
+The Start, Send, Approve, Deny and Stop controls are on the coding app's own
+screen. The Relay agent
 reaches the app only through published operations, and no operation starts a
 session or sends a message. This keeps C02 and C06 true without a confirm step
 in Relay.
@@ -94,28 +113,78 @@ only while Codex has it loaded and is otherwise listed with that reason. Ten
 tests pass, and the live app listed 30 conversations in 6 projects. Opening an
 outside conversation through the real session tool is unverified.
 
-### Phase 2 — Check-back
+Phase 2 replaces the frame described above with the coding app's own session
+screen.
 
-Reading a session's state and result for the Relay agent, and follow-up drafts
-the user sends from the screen. Covers C05–C06.
+### Phase 2 — Workspace screen
+
+Replaces the framed session tool page with the coding app's own screen, and
+adds a theme message to Relay core. Covers C03 and C09. The
+[design](phases/phase-02/working/design.md) holds the modules, routes, error
+model and probes.
+
+1. **Session screen.** The workspace bar, conversation, composer and
+   approvals, with Relay's theme. Done when the stand-in tests pass, the
+   theme message is in the [integration contract](../../integration.md), and
+   on the Mac one real session in the scratch target is started, approved and
+   answered inside the tab beside the chat, in light and dark.
+2. **Worktree tree and Changes tab.** Done when the tree's counts and a
+   worktree's changes match git on the Mac.
+3. **Terminal tab.** Done when typing in a session's terminal works on the
+   Mac.
+
+Built in source on 2026-11-23 in the coding app's branch `workspace-screen`
+(steps 1–3), with the theme in Relay. Evidence: 23 stand-in tests and the type
+check pass; headless runs against a stand-in showed each view at full and
+narrow width; each step had an audit and a bug review, and a first-principles
+review covered all three. Not yet verified: any action against the real hapi
+(send, resume, approve, "+", the terminal), the Mac client, light mode in the
+Mac and typing speed in its WebView.
+
+Agreed with the user on 2026-11-23:
+- "Open workspace…" lists the configured targets plus "Recent sessions in all
+  projects";
+- counts and changes are uncommitted work compared with HEAD;
+- sending to a stopped session resumes it;
+- "+" starts a session in an existing worktree.
+
+### Phase 3 — Check-back
+
+Reading sessions for the Relay agent, and follow-up drafts the user sends from
+the screen. Covers C05–C06.
+
+- Operations to list sessions and read one, agreed on 2026-11-23: title, project name, agent, status (running, waiting for approval,
+  idle, finished), waiting approvals, recent messages and the result. Never the
+  tool's token or address, or folder paths.
+- A follow-up draft shows as a card on the session screen; only the user's
+  Send delivers it.
+- Answer Relay's app search with sessions, so the agent's search no longer
+  fails with 404.
 
 Done when: the agent reports a session correctly while it runs and after it
 ends, and a follow-up reaches the session only after the user sends it.
 
-### Phase 3 — First real use
+### Phase 4 — First real use
 
 Add one paper to Research Web end to end, following that repository's rules.
 Covers C07 in practice. Read those rules before this phase starts.
 
 ## Next
 
-1. Check the Mac client: one request to the scratch target, the review screen
-   and Start, the session link, and the layout at the chat-side width. Since
-   2026-11-19 the coding app runs as a local service, registered with the live
-   Flutter backend, with a scratch target, the Research Web target and the
-   Relay target.
-2. The app is registered as trusted since 2026-11-19, at the user's request,
-   so the framed session page can submit its sign-in and message forms. Check
-   on the Mac that signing in, typing and approving work inside the tab.
-3. Build phase 2 after that check. Decide there what the agent may read about
-   a session; today operations and results carry no session data.
+1. Deploy, with the user's word for each live step:
+   - the orchestrator merges this Relay branch (the theme and this plan),
+     deploys the backend and publishes a client build that sends the theme;
+   - merge the coding app's `workspace-screen` into its main checkout, which
+     the live service runs; install dependencies; make the service build
+     first (`node build.ts`) with `HAPI_SOURCE_DIR` set to the clean checkout
+     the running hapi was built from; restart it;
+   - drop `trustedNative` from the coding app's entry in Relay's apps file.
+2. One Mac check of phase 2's three "Done when" items together: a real
+   session in the scratch target is started, approved and answered; the
+   tree's counts and a worktree's changes match git; the terminal takes
+   typing; in light and dark, beside the chat.
+3. Then phase 3 (check-back). At phase 2's handoff, rewrite the Phase 1 frame
+   text above and remove the phase 2 design note.
+4. Suggested on 2026-11-19, not yet agreed: show in Relay's tab bar and in the
+   conversation when a session waits for approval or finishes (display only),
+   and send a Browser selection or capture to a session as a draft.

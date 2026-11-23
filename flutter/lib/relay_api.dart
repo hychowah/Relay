@@ -320,6 +320,12 @@ class RelayApi {
 
   Future<void> saveHighlight(String url, Json highlight) =>
       _request('/api/highlights', {...highlight, 'url': url}, 'POST', true);
+  Future<void> recolorHighlight(String id, String color) => _request(
+    '/api/highlights/${Uri.encodeComponent(id)}',
+    {'color': color},
+    'PATCH',
+    true,
+  );
   Future<void> forgetHighlight(String id) => _request(
     '/api/highlights/${Uri.encodeComponent(id)}',
     null,

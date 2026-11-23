@@ -40,12 +40,19 @@ test("highlights are kept for each page address and found again", async () => {
   const s = server();
   const marks = [[0, 72, 640.5, 300, 12], [0, 72, 626.5, 180, 12]];
   assert.equal(await s.highlight("https://example.com/paper.pdf#page=2", "a", "first passage", 0, { marks }), 204);
-  assert.equal(await s.highlight("https://example.com/paper.pdf", "b", "second passage"), 204);
+  assert.equal(await s.highlight("https://example.com/paper.pdf", "b", "second passage", 0, { color: "blue" }), 204);
   assert.equal(await s.highlight("https://example.com/other", "c", "elsewhere"), 204);
   assert.deepEqual(await s.highlights("https://example.com/paper.pdf"), [
-    { id: "a", text: "first passage", prefix: "before ", suffix: " after", marks },
-    { id: "b", text: "second passage", prefix: "before ", suffix: " after" },
+    { id: "a", text: "first passage", prefix: "before ", suffix: " after", color: "yellow", marks },
+    { id: "b", text: "second passage", prefix: "before ", suffix: " after", color: "blue" },
   ]);
+
+  // Its colour changes in place; an unknown colour is refused.
+  assert.equal((await s.send("PATCH", "/api/highlights/a", { color: "pink" })).status, 204);
+  assert.equal((await s.send("PATCH", "/api/highlights/a", { color: "red" })).status, 400);
+  assert.equal((await s.send("PATCH", "/api/highlights/none", { color: "pink" })).status, 404);
+  assert.deepEqual((await s.highlights("https://example.com/paper.pdf")).map((item) => [item.id, item.color]),
+    [["a", "pink"], ["b", "blue"]]);
 
   assert.equal((await s.send("DELETE", "/api/highlights/a")).status, 204);
   assert.deepEqual((await s.highlights("https://example.com/paper.pdf#top")).map((item) => item.id), ["b"]);
@@ -58,6 +65,7 @@ test("a highlight that is not text on a web address is refused", async () => {
   assert.equal(await s.highlight("https://example.com/", "a", ""), 400);
   assert.equal(await s.highlight("https://example.com/", "a", "text", 0, { marks: [[0, 1, 2, "wide", 4]] }), 400);
   assert.equal(await s.highlight("https://example.com/", "a", "text", 0, { marks: [[0, 1, 2]] }), 400);
+  assert.equal(await s.highlight("https://example.com/", "a", "text", 0, { color: "red" }), 400);
   assert.deepEqual(await s.highlights("https://example.com/"), []);
 });
 

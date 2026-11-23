@@ -61,7 +61,16 @@ export interface Highlight {
   suffix: string;
   /** PDF only: one [page, x, y, width, height] for each highlighted line. */
   marks?: number[][];
+  /** One of [highlightColors]; yellow when absent. */
+  color?: string;
 }
+
+/**
+ * The colours a highlight can have. The Flutter app draws each in its own
+ * shade, kept in step in page_highlights.js, BrowserPDF.swift and
+ * highlight_menu.dart.
+ */
+export const highlightColors = ["yellow", "green", "blue", "pink", "purple"];
 
 /** How much one stored-data category holds. */
 export interface StoredUsage {
@@ -409,6 +418,12 @@ export class Store {
 
   addHighlight(url: string, { id, ...data }: Highlight, at: number) {
     this.db.prepare("INSERT OR REPLACE INTO highlights VALUES (?, ?, ?, ?)").run(id, url, JSON.stringify(data), at);
+  }
+
+  /** Whether the highlight [id] was there to change. */
+  recolorHighlight(id: string, color: string) {
+    return this.db.prepare("UPDATE highlights SET data = json_set(data, '$.color', ?) WHERE id = ?")
+      .run(color, id).changes > 0;
   }
 
   forgetHighlight(id: string) {
