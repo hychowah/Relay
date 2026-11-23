@@ -38,8 +38,8 @@ has no password of its own.
 
 **VPN check.** Each tunnel first passes the NordVPN check Relay uses before
 model calls (`requireNordVPN`, which also honours `RELAY_VPN_CHECK=off`). The
-check took 10–20 ms on WSL, so every tunnel runs it fresh; no reuse or
-sharing is needed.
+check takes about 20 ms, but 30 at once took 0.45 s, so tunnels that start
+while a check runs share it; no result is reused after it ends.
 
 **Address rule (V06).** The proxy looks up the name in WSL and refuses unless
 every address is public. It then connects to the address it checked, so a
@@ -117,6 +117,25 @@ Done when:
 - The VPN-down message (V03) is checked by briefly disconnecting NordVPN in
   WSL, with the user's OK at the time; otherwise it stays unverified.
 
+## Phase 1 evidence (2026-11-23)
+
+Built in `server/browser-proxy.ts`, attached in `tools/flutter-experiment.ts`.
+The VPN check runs before the name lookup, so no lookup leaves WSL while
+NordVPN is down. IPv4-mapped IPv6 addresses are judged by the IPv4 rule.
+
+- `npm test` (122 pass) and `npm run build` pass. Proxy tests: the address
+  rule, 403 for local targets including an IPv4-mapped one, 503 when the
+  check fails, one check shared by tunnels opened together, no connection
+  opened, and the Browser socket still connects.
+- Scratch backend on WSL with temporary data and the real NordVPN check:
+  through the proxy, an IP-check service returned the same address as a
+  direct WSL request; a plain `http://` site returned 200; a tunnel to
+  Relay's own port got 403. The output logged no destinations.
+
+Unverified: the real check's 503 while NordVPN is down, the 502 when a
+target refuses the connection, and that shutdown closes open tunnels (added
+after a bug review; checked in the code only).
+
 ## Limits
 
 - No proxy password: any tailnet device, and any local process that can reach
@@ -135,6 +154,5 @@ Done when:
 
 ## Next
 
-1. Build Phase 1 in its own worktree, with the WSL checks above.
-2. After the user approves the merge and deploy, build Phase 2 and publish a
-   Mac test build for the one Mac run.
+1. Merge Phase 1 and deploy `relay-app`; the restart stops in-flight replies.
+2. Phase 2 (VPN tabs on the Mac) follows; its one Mac run needs step 1.
