@@ -12,6 +12,7 @@ import 'browser_comment.dart';
 import 'browser_transcript.dart';
 import 'page_surface.dart';
 import 'relay_api.dart';
+import 'workspace_style.dart';
 
 const _readPage = '''JSON.stringify({url:location.href,title:document.title,
  selection:window.__relaySelection||window.getSelection()?.toString().slice(0,4000)||'',
@@ -538,8 +539,9 @@ abstract class _HostedPage extends _WebPage {
           _context = Map<String, dynamic>.from(data['context'] as Map);
         }
         final manual = _updateContext(data);
-        if (data['type'] == 'relay.ready' && !_ready.isCompleted) {
-          _ready.complete();
+        if (data['type'] == 'relay.ready') {
+          if (!_ready.isCompleted) _ready.complete();
+          _readied();
         }
         if (result && _presentation?.isCompleted == false) {
           _presentation!.complete(data);
@@ -552,6 +554,7 @@ abstract class _HostedPage extends _WebPage {
 
   bool _acceptsVersion(Json data);
   bool _updateContext(Json data);
+  void _readied() {}
   Json _bridgeCommand(Json command);
 
   @override
@@ -589,6 +592,33 @@ class _AppPage extends _HostedPage {
   _AppPage(super.spec, super.changed) {
     _initialize();
   }
+  String? _theme, _sentTheme;
+
+  @override
+  Widget get widget => Builder(
+    builder: (context) {
+      _theme = jsonEncode({
+        'type': 'relay.theme',
+        'theme': appTheme(Theme.of(context)),
+      });
+      _sendTheme();
+      return super.widget;
+    },
+  );
+
+  // A reloaded app starts with its own defaults, so each ready gets the theme.
+  @override
+  void _readied() {
+    _sentTheme = null;
+    _sendTheme();
+  }
+
+  void _sendTheme() {
+    if (_disposed || !_ready.isCompleted || _theme == _sentTheme) return;
+    _sentTheme = _theme;
+    unawaited(controller.runJavaScript('window.relayPresent($_theme)'));
+  }
+
   @override
   bool _acceptsVersion(Json data) => data['version'] == 2;
   @override

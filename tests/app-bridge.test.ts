@@ -205,3 +205,17 @@ test("cancelling before presentation finishes never leaves an explanation behind
   assert.equal(dom.document.body.children.length, 0);
   assert.equal(app.sent.some(message => message.status === "applied"), false);
 });
+
+test("theme sets Relay CSS variables and ignores a wrong token", async () => {
+  const variables: Record<string, string> = {};
+  const document = { documentElement: { style: { setProperty(name: string, value: string) { variables[name] = value; } } } };
+  const app = await setup(undefined, undefined, { document } as unknown as ReturnType<typeof explanationDOM>);
+  const theme = { mode: "dark", colors: { background: "#141917", onAccent: "#10241b" }, font: "system-ui", monoFont: "ui-monospace" };
+  await app.message({ type: "relay.theme", token: "wrong", theme: { ...theme, mode: "light" } });
+  assert.deepEqual(variables, {});
+  await app.message({ type: "relay.theme", theme });
+  assert.deepEqual(variables, {
+    "--relay-background": "#141917", "--relay-on-accent": "#10241b",
+    "--relay-font": "system-ui", "--relay-mono-font": "ui-monospace", "color-scheme": "dark",
+  });
+});

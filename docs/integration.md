@@ -169,6 +169,7 @@ The shared helper checks parent window, origin and token. All messages carry
 | `relay.present` | Relay → app | `commandId`, `expectedGeneration`, `intent` |
 | `relay.presented` | App → Relay | `commandId`, `status`, resulting `context`, optional `error` |
 | `relay.cancel` | Relay → app | `commandId` |
+| `relay.theme` | Relay → app | `theme` (see Theme) |
 
 Only completed rendering/animation produces `applied`; other results are `stale`
 or `failed`. Captured pointer/key input immediately invalidates pending work.
@@ -182,6 +183,15 @@ actual context and token so a corrected retry uses the current view; the action
 stays failed. Stale/manual changes never advance that chain.
 Commands remain pending until acknowledged; a server result is not proof of a
 visible change. A disconnected browser does not block the agent indefinitely.
+
+### Theme
+
+The Mac client sends `relay.theme` after `relay.ready` and on each theme change:
+`theme:{mode:"light"|"dark", colors:{background, surface, raised, text, muted,
+accent, onAccent, line, tint, danger}, font, monoFont}`. The helper sets
+`color-scheme` and `--relay-<key>` variables (kebab case, such as
+`--relay-on-accent` and `--relay-mono-font`) on the root element. Use them with
+your own default, `var(--relay-text, #222)`, because other hosts send no theme.
 
 ## V1 evidence and retained views
 

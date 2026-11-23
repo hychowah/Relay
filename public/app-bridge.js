@@ -136,6 +136,13 @@
           if (pending?.id === data.commandId) manualInteraction();
           return;
         }
+        if (data.type === 'relay.theme') {
+          const { mode, colors, font, monoFont } = data.theme;
+          const style = document.documentElement.style;
+          for (const [key, value] of Object.entries({ ...colors, font, monoFont })) style.setProperty(`--relay-${key.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`)}`, value);
+          style.setProperty('color-scheme', mode);
+          return;
+        }
         if (data.type !== 'relay.present' || typeof data.commandId !== 'string' || !Number.isSafeInteger(data.expectedGeneration) || data.expectedGeneration < 0) return;
         if (data.expectedGeneration !== context.generation) {
           send('relay.presented', { commandId: data.commandId, status: 'stale', context });
