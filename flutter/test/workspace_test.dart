@@ -94,8 +94,10 @@ class FakePage extends PageSurface with BrowserSurface {
     return time;
   }
 
+  static Object? navigateError;
   @override
   Future<void> navigate(String text, {bool restoring = false}) async {
+    if (navigateError != null) throw navigateError!;
     navigated.add(restoring ? 'restore $text' : text);
     changed(true);
   }
@@ -563,6 +565,46 @@ void main() {
     expect(next.w.tabs.map((tab) => tab.appId), ['room-layout', 'browser']);
     expect(next.w.active!.appId, 'room-layout');
     expect(next.w.pendingSession, isNull);
+  });
+  test('the VPN switch reopens a Browser tab and is saved with it', () async {
+    final first = Fixture();
+    addTearDown(first.w.dispose);
+    await first.w.start();
+    final tab = await first.w.openApp(first.w.apps[0]);
+    final before = tab.page as FakePage;
+    await first.w.toggleVpn();
+    final after = tab.page as FakePage;
+    expect(before.disposed, isTrue);
+    expect(after.spec.vpn, isTrue);
+    expect(after.navigated, ['https://example.com/desk']);
+    expect(first.stored.last['tabs'][0]['vpn'], isTrue);
+    final next = Fixture(
+      session: jsonDecode(jsonEncode(first.stored.last)) as Json,
+    );
+    addTearDown(next.w.dispose);
+    await next.w.start();
+    expect((next.w.active!.page as FakePage).spec.vpn, isTrue);
+    await next.w.toggleVpn();
+    expect(next.stored.last['tabs'][0], isNot(contains('vpn')));
+  });
+  test('a VPN tab that cannot be restored stays, with its error', () async {
+    final first = Fixture();
+    addTearDown(first.w.dispose);
+    await first.w.start();
+    await first.w.openApp(first.w.apps[0]);
+    await first.w.toggleVpn();
+    first.w.newTab();
+    await first.w.openApp(first.w.apps[0]);
+    FakePage.navigateError = StateError('The VPN route failed.');
+    addTearDown(() => FakePage.navigateError = null);
+    final next = Fixture(
+      session: jsonDecode(jsonEncode(first.stored.last)) as Json,
+    );
+    addTearDown(next.w.dispose);
+    await next.w.start();
+    // The normal tab closes as before.
+    expect(next.w.tabs.map((tab) => tab.vpn), [true]);
+    expect(next.w.error, contains('The VPN route failed.'));
   });
   test(
     'newest tab first moves opened tabs left and restores saved order',

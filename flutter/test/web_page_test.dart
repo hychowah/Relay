@@ -128,8 +128,16 @@ void main() {
   });
 
   test('popup pages follow the Browser address rule', () async {
-    Future<Object?> ask(String url) =>
-        browserChannelCall(MethodCall('allowPopupPage', url));
+    Future<Object?> ask(String url, {bool vpn = false}) => browserChannelCall(
+      MethodCall('allowPopupPage', {'url': url, 'vpn': vpn}),
+    );
+    // A VPN tab's names are looked up in WSL, by the backend's proxy; a name
+    // the Mac cannot resolve passes, but address literals are still checked.
+    expect(await ask('https://vpn-only.invalid/', vpn: true), isTrue);
+    expect(await ask('http://10.1.2.3/', vpn: true), isFalse);
+    expect(await ask('http://localhost/', vpn: true), isFalse);
+    expect(await ask('https://user@8.8.8.8/', vpn: true), isFalse);
+    expect(await ask('file:///etc/hosts', vpn: true), isFalse);
     for (final url in [
       'http://127.0.0.1:8080/',
       'http://localhost/',

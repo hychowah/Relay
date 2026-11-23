@@ -55,7 +55,8 @@ void main() {
     // it. Only the fixture's own popup address is let through.
     const channel = MethodChannel('app.relay/browser');
     Future<Object?> allow(MethodCall call) async =>
-        call.method == 'allowPopupPage' && call.arguments == '$fixture/popup'
+        call.method == 'allowPopupPage' &&
+            (call.arguments as Map)['url'] == '$fixture/popup'
         ? true
         : browserChannelCall(call);
 

@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import Network
 import WebKit
 import webview_flutter_wkwebview
 
@@ -43,6 +44,34 @@ class MainFlutterWindow: NSWindow {
             WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: false)
           )
         }
+        result(nil)
+        return
+      }
+      // A VPN tab's profile sends every load through the Relay backend's
+      // tunnel (HTTP CONNECT), with no fallback to a direct connection. The
+      // tunnel carries only TCP, so WebRTC, whose UDP would show the Mac's
+      // address, is turned off with WebKit's private setting, which also
+      // covers frames and popups; a VPN tab without it does not load.
+      if call.method == "vpnProxy" {
+        guard let registry = flutterViewController, let arguments = call.arguments as? [String: Any],
+              let identifier = arguments["view"] as? NSNumber, let host = arguments["host"] as? String,
+              let port = arguments["port"] as? Int,
+              let view = FWFWebViewFlutterWKWebViewExternalAPI.webView(
+                forIdentifier: identifier.int64Value, withPluginRegistry: registry
+              ) else {
+          result(FlutterError(code: "vpnProxy", message: "The page has no web view.", details: nil))
+          return
+        }
+        var proxy = ProxyConfiguration(httpCONNECTProxy: .hostPort(
+          host: NWEndpoint.Host(host), port: NWEndpoint.Port(integerLiteral: UInt16(port))))
+        proxy.allowFailover = false
+        view.configuration.websiteDataStore.proxyConfigurations = [proxy]
+        let preferences = view.configuration.preferences
+        guard preferences.responds(to: Selector(("_setPeerConnectionEnabled:"))) else {
+          result(FlutterError(code: "vpnProxy", message: "WebRTC cannot be turned off on this macOS.", details: nil))
+          return
+        }
+        preferences.setValue(false, forKey: "peerConnectionEnabled")
         result(nil)
         return
       }

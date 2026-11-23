@@ -14,11 +14,16 @@ class PageSpec {
     required this.relayOrigin,
     this.appView,
     this.report,
+    this.vpn = false,
   });
   final String id, appId, name, sessionId;
   final Uri relayOrigin;
   final Json? appView;
   final Json? report;
+
+  /// Desktop (macOS) only: a Browser tab whose pages go out through the Relay
+  /// backend and WSL's NordVPN.
+  final bool vpn;
   bool get browser => appId == WorkspaceApp.browserId;
   Uri get hostUri => relayOrigin
       .resolve('/flutter-host.html')

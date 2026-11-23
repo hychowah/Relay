@@ -8,6 +8,17 @@ and public websites. The WSL backend owns all model calls and credentials.
 Uses Flutter 3.50.0 / Dart 3.14.0; dependency versions are pinned in pubspec.lock.
 Use a Flutter SDK of that version; this machine's SDK location is in the local machine notes.
 
+`packages/webview_flutter_wkwebview` is a copy of that package's 3.27.2
+release with one addition: `websiteDataStoreIdentifier` on
+`WebKitWebViewControllerCreationParams`, a named, persistent WebKit profile,
+which VPN tabs use (pubspec.yaml overrides the package with it). Its bridge
+files are generated: change `pigeons/web_kit.dart`, then in that folder run
+`flutter pub get` and `dart run pigeon --input pigeons/web_kit.dart` (pigeon
+is pinned so the output matches the committed files), and format the output
+with `dart format --page-width 100` and Xcode's `swift-format`. On a package
+upgrade, reapply the addition, or drop the copy if the package gains the
+option.
+
 ```sh
 flutter pub get
 flutter analyze
@@ -52,6 +63,7 @@ App library and Bots dialog show them when they open. See
 `RELAY_SERVERS_FILE` optionally names the app servers the App servers screen
 controls; see [Manage app servers](../README.md#manage-app-servers).
 
+The Mac app needs macOS 14 or later.
 A Mac build needs full Xcode and Flutter's macOS plugin toolchain. Android needs
 its SDK/device. The official WebView plugin does not support Linux, so WSL tests
 use fake page surfaces and separately exercise the real HTML app bridge.
@@ -99,7 +111,8 @@ update restart, reopens the previous tabs and their views, the conversation, the
 draft and the chat panel as it was left; the Mac window keeps its size and position.
 The last active tab shows first, and the other tabs load together in the background.
 A tab that cannot be restored is reported; **Reconnect** retries it during that run.
-All pages share WebKit's persistent website data, which keeps cookies between starts.
+A VPN tab stays open with the error instead, and Reload retries it.
+All pages except VPN tabs share WebKit's persistent website data, which keeps cookies between starts.
 On desktop only, drag a tab onto a page to split it. A new split tab opens in
 the tab strip. The page's edge nearest the pointer (left, right, top or bottom)
 is where the tab goes, and the highlighted half shows it. Drop more tabs onto
@@ -123,6 +136,20 @@ as a link that opens a new tab, loads in the same tab as before, so a sign-in
 that opens an unsized window loses its opener.
 App views keep sending a new window's address to the default browser. A page
 dialog raised inside a popup window is not shown.
+
+On macOS only, **VPN** beside Reload sends a Browser tab's pages, its popups
+and the PDFs it shows through the Relay backend, which tunnels them (HTTP
+CONNECT on its own port) out of WSL through NordVPN. New tabs start with it
+off; the setting is saved with the tab. Switching reopens the tab's address in
+a new web view, without its back history. Nothing falls back to the Mac's
+network: if the route fails, for example while NordVPN in WSL is off, the page
+does not load and says so. VPN tabs share one WebKit profile of their own, so
+their sign-ins persist and stay apart from normal tabs. The backend applies
+the Browser's address rule to them, looking names up through NordVPN. WebRTC is off in
+VPN tabs, through a private WebKit setting that also covers frames and popups,
+so video calls do not work there: the tunnel carries only TCP, and WebRTC's
+UDP would show the Mac's own address. A macOS without that setting does not
+load VPN tabs. The Windows client ignores the setting.
 
 A click that focuses the Browser address bar selects the whole address, as in
 other browsers; a further click places the caret.
@@ -235,6 +262,10 @@ smoothness suite below, it builds a temporary copy under its own bundle id,
 `app.relay.flutterTest`, and removes the copy and the test app's data
 afterwards. It refuses `workflow_test.dart`,
 which uses the Flutter deployment's records.
+`browser_vpn_test.dart` checks that a VPN tab's address differs from a normal
+tab's and that WebRTC is gone from it, even in a fresh frame, but not from a
+normal tab. It needs the Mac on the tailnet, the deployed backend and NordVPN
+in WSL; the tool passes `relay.appUrl` to it as `RELAY_URL`.
 
 ### Measure performance
 

@@ -49,7 +49,7 @@ reach WSL's local services through the tab.
 **Privacy.** The proxy does not log destinations; browsing addresses stay out
 of Relay's logs.
 
-**Separate profile per tab (Mac).** The web view package
+**Separate profile for VPN tabs (Mac).** The web view package
 `webview_flutter_wkwebview` 3.27.2, the latest release, gives every web view
 the one shared default profile, and WebKit fixes a view's profile when the
 view is created. Relay therefore keeps a patched copy of the package in
@@ -61,8 +61,9 @@ package gains the option.
 
 **Mac name lookups.** The Browser's address rule (`browserUrl` in
 `web_page.dart`) looks up each page's host on the Mac before loading it. In a
-VPN tab and its popups that lookup is skipped, keeping the scheme and
-no-credentials checks; the backend's address rule guards those tabs instead.
+VPN tab and its popups that lookup is skipped, keeping the scheme,
+no-credentials, address-literal and `localhost` checks; only names are left
+to the backend's address rule.
 
 **Proxy setting (Mac).** Relay's Swift code sets the VPN profile's
 `proxyConfigurations` to an HTTP CONNECT proxy at the tab's Relay host and
@@ -97,23 +98,23 @@ Prerequisite: Phase 1 deployed.
 
 Deliver the patched package, the profile and proxy setting, the switch in
 the Browser address bar (macOS only), the saved flag (`vpn` in the tab's
-session entry), the proxy for PDF downloads, the skipped Mac lookup, and the
-V03 load-failure message. Document the switch beside the other Browser
-behaviour in `flutter/README.md`, with the patched package and the macOS 14
-minimum.
+session entry), the proxy for PDF downloads, the skipped Mac lookup, WebRTC
+turned off in VPN tabs (the tunnel carries only TCP, so WebRTC's UDP would
+show the Mac's address), and the V03 load-failure message. Document the
+switch beside the other Browser behaviour in `flutter/README.md`, with the
+patched package and the macOS 14 minimum.
 
 Done when:
 
 - `flutter analyze` and `flutter test` pass; a test shows a saved session
   keeps a tab's VPN flag.
-- One Mac run of about 10 minutes, a second only if the first is
-  inconclusive: an IP-check page shows the home address in a normal tab and
-  WSL's address in a VPN tab; a popup from the VPN tab shows WSL's address; a
-  PDF opens in a VPN tab; switching a tab both ways changes its address on
-  the IP-check page; after an app restart the tab is still VPN and still
-  signed in; a WebRTC leak-test page in a VPN tab shows no home address.
-- If WebRTC shows the home address, turn WebRTC off in VPN tabs with a
-  document-start script and recheck it.
+- One run of `npm run test:mac -- browser_vpn_test.dart` on the MacBook
+  (about 2 minutes, a second only if inconclusive): a VPN tab's IP-check
+  address differs from a normal tab's, and WebRTC is gone from the VPN tab,
+  even in a fresh frame, but not from a normal one.
+- By hand in the published test build: switching a tab both ways, a popup,
+  a PDF and a plain `http://` page from a VPN tab, and a VPN tab still signed
+  in after a restart. Until then they are unverified.
 - The VPN-down message (V03) is checked by briefly disconnecting NordVPN in
   WSL, with the user's OK at the time; otherwise it stays unverified.
 
@@ -126,15 +127,15 @@ Done when:
   VPN drop during an open connection can send traffic out over the normal
   network. Turning the Kill
   Switch on would close this; that is the user's choice and outside this plan.
+- WebRTC is off in VPN tabs, so video calls do not work there.
 - Unverified until the Mac run: that WebKit applies a proxy set on the
-  profile after the view exists but before its first load; that plain
-  `http://` pages also tunnel; and that popups inherit the profile. If the
-  first fails, set the proxy inside the patched creation option instead.
+  profile after the view exists but before its first load. If it does not,
+  set the proxy inside the patched creation option instead.
 - The Windows client ignores the saved flag, so a copy of Mac tabs opened
   there loads VPN tabs over Windows' network.
 
 ## Next
 
-1. Build Phase 1 in its own worktree, with the WSL checks above.
-2. After the user approves the merge and deploy, build Phase 2 and publish a
-   Mac test build for the one Mac run.
+1. Merge Phase 1 and deploy `relay-app`; the restart stops in-flight replies.
+2. Run `browser_vpn_test.dart` once on the MacBook, then merge Phase 2 and
+   publish a test build for the hand checks.

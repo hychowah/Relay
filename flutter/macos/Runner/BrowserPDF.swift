@@ -151,12 +151,15 @@ final class BrowserPDF: NSObject, PDFViewDelegate {
       return
     }
     opened = result
+    // A VPN tab's PDF comes through the tab's proxy too.
+    let proxies = webView.configuration.websiteDataStore.proxyConfigurations
     // WebKit keeps its cookies apart from URLSession's, so a signed-in PDF
     // needs them copied.
     webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self, weak webView] cookies in
       guard let pdf = self, pdf.opened != nil else { return }
       let configuration = URLSessionConfiguration.ephemeral
       for cookie in cookies { configuration.httpCookieStorage?.setCookie(cookie) }
+      configuration.proxyConfigurations = proxies
       var request = URLRequest(url: url)
       if let agent = webView?.customUserAgent, !agent.isEmpty {
         request.setValue(agent, forHTTPHeaderField: "User-Agent")
