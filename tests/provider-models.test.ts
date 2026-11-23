@@ -13,7 +13,7 @@ import { Store } from "../server/store.ts";
 import { createWorkspace } from "../server/app.ts";
 
 test("model discovery uses provider authentication, labels and pagination with a VPN check per page", async () => {
-  for (const mode of ["deepseek", "anthropic"] as const) {
+  for (const mode of ["deepseek", "anthropic", "openai"] as const) {
     let checks = 0, requests = 0, connected = true;
     const original = liveProviders[mode].baseURL;
     const server = createServer((req, res) => {

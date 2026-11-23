@@ -6,6 +6,7 @@ import 'workspace.dart';
 const providerNames = {
   'deepseek': 'DeepSeek',
   'anthropic': 'Claude',
+  'openai': 'OpenAI',
   'fixture': 'Demo',
 };
 const effortNames = {

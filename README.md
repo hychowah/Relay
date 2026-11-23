@@ -52,8 +52,8 @@ app, copy `apps.example.json`, set the app's address, and start Relay with
 `RELAY_APPS_FILE` pointing at your copy. Later edits to that file apply
 without a restart; reload the page to see them.
 
-**Use a real model.** Open **Model connection** in the page and add a Claude or
-DeepSeek key, or set a key file as shown in `.env.example`. By default live
+**Use a real model.** Open **Model connection** in the page and add a Claude,
+DeepSeek or OpenAI key, or set a key file as shown in `.env.example`. By default live
 requests are sent only while the host's NordVPN client is connected; set
 `RELAY_VPN_CHECK=off` to turn that check off.
 

@@ -2,7 +2,7 @@
 
 2026-11-17. The user requested direct Anthropic Console support, preservation of
 DeepSeek, a structure suitable for OpenAI later, and NordVPN checks before API key
-use from this WSL host. OpenAI is not implemented in this slice.
+use from this WSL host. OpenAI was added on 2026-11-23; see [OpenAI](#openai).
 
 ## Design and review
 
@@ -76,9 +76,39 @@ container networking were added.
   and no horizontal overflow at 390px width. Tests did not save settings.
 - Records and whitespace checks passed. No commit or push; VPN settings unchanged.
 
+## OpenAI
+
+The user asked for OpenAI API key support on 2026-11-23. OpenAI is a third
+saved connection on OpenCode's native `openai` adapter (Responses API), using
+the same gateway, Bearer key and per-request NordVPN check. Discovery reads the
+unpaginated `/v1/models` list, which gives IDs only. Image input is on. The
+default is `gpt-6.2-sol`, the mid-price model in OpenAI's current list. Like
+Claude, OpenAI has no thinking-effort control and runs on OpenAI's default; its
+documented values differ by model and none was checked live. The 200,000-token
+context limit matches Claude to keep each step's cost bounded.
+
+OpenCode's built-in OpenAI plugin switches the connection to WebSocket unless a
+transport is set. The gateway relays HTTP POST only, so the harness sets
+`transport: "http"` for every provider. Before that, a synthetic run showed one
+refused WebSocket attempt at the gateway and an HTTP fallback; nothing reached
+the upstream.
+
+Evidence: in an existing conversation, the OpenAI adapter completed a synthetic
+tool round trip with an image through the gateway. Both model calls passed the
+VPN check, the key stayed out of OpenCode's configuration, and a Disconnected
+status blocked the next call with the NordVPN message. Request bodies for all
+three adapters carry no `transport` field. Discovery tests cover OpenAI
+authentication and VPN blocking. The full suite (123 tests), the build, Flutter
+analyze and the Flutter settings tests passed.
+
+Unverified: any real OpenAI request, key or model list, that `gpt-6.2-sol` is
+available to the user's key, and whether OpenAI's addresses route through
+`nordlynx`. OpenAI's model list also includes non-chat models such as embeddings.
+
 ## Next
 
 Refresh Relay to use the model picker. A real Claude conversation is the
-remaining provider-readiness check. OpenAI remains
-future work. Treat the documented precheck and OS egress guarantee separately;
-the observed disabled kill switch has not been enabled by this change.
+remaining provider-readiness check. For OpenAI, after merge and deployment,
+save a key in Model connection, load models and send one short reply; this
+needs the user's key and approval of the small spend. Treat the documented
+precheck and OS egress guarantee separately; the observed disabled kill switch has not been enabled by this change.

@@ -18,6 +18,15 @@ export const liveProviders = {
     auth: { header: "x-api-key", prefix: "" },
     models: { headers: { "anthropic-version": "2023-06-01" }, paginated: true },
   },
+  openai: {
+    name: "OpenAI", defaultModel: "gpt-6.2-sol",
+    effortModels: [] as string[],
+    limit: { context: 200000, output: 8192 },
+    envPrefix: "OPENAI", package: "@opencode/ai/providers/openai",
+    baseURL: "https://api.openai.com/v1",
+    auth: { header: "authorization", prefix: "Bearer " },
+    models: { headers: undefined, paginated: false },
+  },
 };
 
 const providers = { fixture: { name: "Demo", defaultModel: "deepseek-flash" }, ...liveProviders };
@@ -29,7 +38,7 @@ export const reasoningEfforts = ["default", "none", "low", "high", "max"] as con
 export type ReasoningEffort = typeof reasoningEfforts[number];
 
 export function supportsImageInput(mode: ProviderMode): boolean {
-  return mode === "anthropic";
+  return mode === "anthropic" || mode === "openai";
 }
 
 export function supportsReasoningEffort(mode: ProviderMode, model: string): boolean {

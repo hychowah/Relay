@@ -580,7 +580,7 @@ class Workspace extends ChangeNotifier {
       if (capture != null) {
         if (provider['supportsImageInput'] != true) {
           throw StateError(
-            'Choose Claude on a capture-enabled Relay backend to send this image.',
+            'Choose Claude or OpenAI on a capture-enabled Relay backend to send this image.',
           );
         }
         if (!allowedApps.any((app) => app.id == capture.appId)) {

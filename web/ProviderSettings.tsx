@@ -112,7 +112,7 @@ export default function ProviderSettings({running, onClose, onSaved}: {
         <div><span className="eyebrow">WORKSPACE SETTINGS</span><h2 id="provider-title">Model connection</h2></div>
         <button className="icon-button" aria-label="Close provider settings" onClick={close}>×</button>
       </div>
-      <p className="settings-description">Connect Claude or DeepSeek, or use the scripted demo.</p>
+      <p className="settings-description">Connect Claude, DeepSeek or OpenAI, or use the scripted demo.</p>
       {error && <p className="settings-error" role="alert">{error}</p>}
       {!settings ? <p className="muted" role="status">{error ? "Settings are unavailable. Close and try again." : "Loading settings…"}</p> : (
         <form onSubmit={event => { event.preventDefault(); void save(); }}>
