@@ -50,6 +50,7 @@ test("highlights are kept for each page address and found again", async () => {
   // Its colour changes in place; an unknown colour is refused.
   assert.equal((await s.send("PATCH", "/api/highlights/a", { color: "pink" })).status, 204);
   assert.equal((await s.send("PATCH", "/api/highlights/a", { color: "red" })).status, 400);
+  assert.equal((await s.send("PATCH", "/api/highlights/none", { color: "pink" })).status, 404);
   assert.deepEqual((await s.highlights("https://example.com/paper.pdf")).map((item) => [item.id, item.color]),
     [["a", "pink"], ["b", "blue"]]);
 

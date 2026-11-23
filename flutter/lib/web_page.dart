@@ -326,12 +326,19 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   @override
   bool get canHighlight => _records != null;
   // The address of the document whose highlights are loaded, as that
-  // document reported it (see [_documentAddress]), and the colour of each
-  // highlight kept for it, by id.
+  // document reported it (see [_documentAddress]), and its highlights by
+  // id: as the server keeps them, and as shown, with changes still on their
+  // way to the server.
   String? _highlightsAddress;
   String _highlightsSite = '';
-  final _highlightColors = <String, String>{};
+  final _kept = <String, Json>{}, _shown = <String, Json>{};
   static String? _highlightScript;
+  // Changes reach the server one at a time, in the order they were made.
+  // The latest change of each highlight is numbered, so an earlier one that
+  // fails is not undone over it.
+  Future<void> _saving = Future.value();
+  final _latestChange = <String, int>{};
+  int _changes = 0;
   // Where the highlight menu shows, and the highlight it is for; none for
   // selected text.
   ({Rect at, String? id})? _menu;
@@ -346,11 +353,15 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       if (_menu case final menu?)
         HighlightMenu(
           at: menu.at,
-          color: _highlightColors[menu.id],
+          color: menu.id == null
+              ? null
+              : '${_shown[menu.id]?['color'] ?? 'yellow'}',
+          // A change the server does not take shows as the server keeps it
+          // (see [_keep]); the menu reports nothing to the user.
           onColor: (color) =>
-              menu.id == null ? _highlight(color) : _recolor(menu.id!, color),
-          onRemove: menu.id == null ? null : () => _remove(menu.id!),
-          onDismiss: () => _showMenu(null),
+              (menu.id == null ? _highlight(color) : _recolor(menu.id!, color))
+                  .ignore(),
+          onRemove: menu.id == null ? null : () => _remove(menu.id!).ignore(),
         ),
     ],
   );
@@ -558,7 +569,8 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   void _newDocument() {
     _documents++;
     _highlightsAddress = null;
-    _highlightColors.clear();
+    _kept.clear();
+    _shown.clear();
     _menu = null;
     if (!Platform.isMacOS) return;
     final closing = pdf;
@@ -625,7 +637,9 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       }
       final address = _highlightsAddress = here.address;
       _highlightsSite = here.site;
-      _highlightColors.clear();
+      _kept.clear();
+      _shown.clear();
+      _showMenu(null);
       if (address == null) return;
       final kept = await records.highlights(address);
       // The tab may show another document, or address, by now.
@@ -634,31 +648,40 @@ class _BrowserPage extends _WebPage with BrowserSurface {
           address != _highlightsAddress) {
         return;
       }
-      _highlightColors.addAll({
-        for (final highlight in kept)
-          highlight['id'] as String: '${highlight['color'] ?? 'yellow'}',
-      });
-      if (pdf) {
-        await _pdf<void>('marks', {
-          'highlights': [
-            for (final highlight in kept)
-              if (highlight['marks'] != null) highlight,
-          ],
-        });
-        return;
+      for (final highlight in kept) {
+        final id = highlight['id'] as String;
+        _kept[id] = highlight;
+        // A highlight made while the list was on its way stays as made.
+        _shown.putIfAbsent(id, () => highlight);
       }
-      _highlightScript ??= await rootBundle.loadString(
-        'assets/page_highlights.js',
-      );
-      await controller.runJavaScript(_highlightScript!);
-      await controller.runJavaScript(
-        'if ($_documentSite === ${jsonEncode(here.site)}) '
-        'window.__relayHighlights?.set(${jsonEncode([for (final highlight in kept)
-          if (highlight['marks'] == null) highlight])})',
-      );
+      await _draw();
     } catch (_) {
       // The page shows without its highlights.
     }
+  }
+
+  /// Draws the shown highlights in place of those drawn before: in the Mac's
+  /// viewer for a PDF, and through the page's highlight script for a web page.
+  Future<void> _draw() async {
+    final shown = _shown.values;
+    if (pdf) {
+      await _pdf<void>('marks', {
+        'highlights': [
+          for (final highlight in shown)
+            if (highlight['marks'] != null) highlight,
+        ],
+      });
+      return;
+    }
+    _highlightScript ??= await rootBundle.loadString(
+      'assets/page_highlights.js',
+    );
+    await controller.runJavaScript(_highlightScript!);
+    await controller.runJavaScript(
+      'if ($_documentSite === ${jsonEncode(_highlightsSite)}) '
+      'window.__relayHighlights?.set(${jsonEncode([for (final highlight in shown)
+        if (highlight['marks'] == null) highlight])})',
+    );
   }
 
   /// Shows the highlight menu where the page's highlight script or the PDF
@@ -671,7 +694,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
         id = data is Map ? data['id'] : null;
     if (_records != null &&
         rect is Map &&
-        (id == null || _highlightColors.containsKey(id))) {
+        (id == null || _shown.containsKey(id))) {
       final sides = [
         for (final side in ['left', 'top', 'right', 'bottom']) rect[side],
       ];
@@ -694,6 +717,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     await _showHighlights();
     final here = await _documentAddress();
     if (here.address == null || here.address != _highlightsAddress) return;
+    final place = _place;
     final id = const Uuid().v4();
     final viewer = pdf;
     Object? added;
@@ -715,60 +739,56 @@ class _BrowserPage extends _WebPage with BrowserSurface {
       added = data is Map ? data['added'] : null;
       if (added != null) _message('selection:');
     }
-    final records = _records, address = _highlightsAddress;
+    final records = _records;
+    if (!_still(place) || records == null) return;
     if (added is! Map || added['text'] is! String) return;
-    if (records == null || address == null) return;
     // A web page's own scripts can answer in the highlight script's place, so
     // only its quoted text is taken from the answer: the address, id and
     // colour are Relay's.
-    _highlightColors[id] = color;
-    final quote = added;
-    await _keep(
-      () => records.saveHighlight(address, {
-        'id': id,
-        'text': quote['text'],
-        'color': color,
-        if (viewer)
-          'marks': quote['marks']
-        else ...{
-          'prefix': '${quote['prefix'] ?? ''}',
-          'suffix': '${quote['suffix'] ?? ''}',
-        },
-      }),
-      undo: () async {
-        _highlightColors.remove(id);
-        await _changeShown('remove', {'id': id});
+    final Json highlight = {
+      'id': id,
+      'text': added['text'],
+      'color': color,
+      if (viewer)
+        'marks': added['marks']
+      else ...{
+        'prefix': '${added['prefix'] ?? ''}',
+        'suffix': '${added['suffix'] ?? ''}',
       },
+    };
+    _shown[id] = highlight;
+    await _keep(
+      place,
+      id,
+      _number(id),
+      highlight,
+      () => records.saveHighlight(place.address!, highlight),
     );
   }
 
   Future<void> _recolor(String id, String color) async {
     _showMenu(null);
-    final before = _highlightColors[id];
-    if (before == null) return;
-    _highlightColors[id] = color;
+    final shown = _shown[id], place = _place;
+    if (shown == null) return;
+    final recolored = _shown[id] = {...shown, 'color': color};
+    final change = _number(id);
     await _changeShown('recolor', {'id': id, 'color': color});
     await _keep(
+      place,
+      id,
+      change,
+      recolored,
       () => _records!.recolorHighlight(id, color),
-      undo: () async {
-        _highlightColors[id] = before;
-        await _changeShown('recolor', {'id': id, 'color': before});
-      },
     );
   }
 
   Future<void> _remove(String id) async {
     _showMenu(null);
-    if (_highlightColors.remove(id) == null) return;
+    final place = _place;
+    if (_shown.remove(id) == null) return;
+    final change = _number(id);
     await _changeShown('remove', {'id': id});
-    // The removed highlight comes back with the others the server keeps.
-    await _keep(
-      () => _records!.forgetHighlight(id),
-      undo: () {
-        _highlightsAddress = null;
-        return _showHighlights();
-      },
-    );
+    await _keep(place, id, change, null, () => _records!.forgetHighlight(id));
   }
 
   // Changes a highlight in the PDF viewer or on the page.
@@ -780,17 +800,54 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     );
   }
 
-  // Keeps a change on the server, or undoes it on screen when it cannot be
-  // kept, so what shows is what is kept.
+  // The document and address whose highlights are loaded.
+  ({int document, String? address}) get _place =>
+      (document: _documents, address: _highlightsAddress);
+
+  bool _still(({int document, String? address}) place) =>
+      !_disposed && place == _place;
+
+  // Numbers a change of the highlight [id] when it is made, before the
+  // screen shows it, so a quicker failure of an earlier one sees it.
+  int _number(String id) => _latestChange[id] = ++_changes;
+
+  /// Sends the [change] of the highlight [id] to the server after those
+  /// before it; [now] is the highlight as the change leaves it, none once
+  /// removed.
+  /// What the server takes is kept. When it takes nothing and no later
+  /// change of the highlight waits, the highlight shows again as the server
+  /// keeps it. Neither touches a document or address the tab has left.
   Future<void> _keep(
-    Future<void> Function() change, {
-    required Future<void> Function() undo,
-  }) async {
-    try {
-      await change();
-    } catch (_) {
-      await undo();
-    }
+    ({int document, String? address}) place,
+    String id,
+    int change,
+    Json? now,
+    Future<void> Function() send,
+  ) {
+    return _saving = _saving.then((_) async {
+      try {
+        await send();
+        if (!_still(place)) return;
+        if (now == null) {
+          _kept.remove(id);
+        } else {
+          _kept[id] = now;
+        }
+      } catch (_) {
+        if (!_still(place) || _latestChange[id] != change) return;
+        final kept = _kept[id];
+        if (kept == null) {
+          _shown.remove(id);
+        } else {
+          _shown[id] = kept;
+        }
+        try {
+          await _draw();
+        } catch (_) {
+          // The tab is closing or has moved on.
+        }
+      }
+    });
   }
 
   @override

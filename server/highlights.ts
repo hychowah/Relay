@@ -40,7 +40,8 @@ export function addHighlights(app: Hono, store: Store, now = Date.now) {
   app.patch("/api/highlights/:id", async (c) => {
     const shade = color(((await c.req.json()) as Record<string, unknown>).color);
     if (!shade) return c.json({ error: "Choose one of the highlight colours." }, 400);
-    store.recolorHighlight(c.req.param("id"), shade);
+    // The app undoes a colour the server did not keep, as after a lost save.
+    if (!store.recolorHighlight(c.req.param("id"), shade)) return c.json({ error: "No such highlight." }, 404);
     return c.body(null, 204);
   });
   app.delete("/api/highlights/:id", (c) => {

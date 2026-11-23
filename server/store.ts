@@ -420,8 +420,10 @@ export class Store {
     this.db.prepare("INSERT OR REPLACE INTO highlights VALUES (?, ?, ?, ?)").run(id, url, JSON.stringify(data), at);
   }
 
+  /** Whether the highlight [id] was there to change. */
   recolorHighlight(id: string, color: string) {
-    this.db.prepare("UPDATE highlights SET data = json_set(data, '$.color', ?) WHERE id = ?").run(color, id);
+    return this.db.prepare("UPDATE highlights SET data = json_set(data, '$.color', ?) WHERE id = ?")
+      .run(color, id).changes > 0;
   }
 
   forgetHighlight(id: string) {

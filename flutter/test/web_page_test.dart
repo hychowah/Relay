@@ -339,8 +339,9 @@ void main() {
         'color': 'green',
       };
       final sent = <String>[];
-      // Whether the server refuses changes, as when it cannot be reached.
-      var refuse = false;
+      // How the server answers a change, or a list, for now; by default it
+      // takes the change and lists what it keeps.
+      Future<http.Response> Function()? answer, listing;
       final api = RelayApi(
         Uri.parse('http://relay.test'),
         client: MockClient((request) async {
@@ -352,10 +353,13 @@ void main() {
                     '${request.url.queryParameters['url'] ?? request.body}'
                 .trim(),
           );
-          if (refuse) return http.Response('{"error":"Down."}', 500);
-          return request.method == 'GET'
-              ? http.Response(jsonEncode([kept]), 200)
-              : http.Response('', 204);
+          if (request.method == 'GET') {
+            if (listing != null) return listing();
+            final url = request.url.queryParameters['url'];
+            final list = url == 'https://8.8.8.8/article' ? [kept] : [];
+            return http.Response(jsonEncode(list), 200);
+          }
+          return answer?.call() ?? http.Response('', 204);
         }),
       );
       final page = createWebPage(
@@ -432,25 +436,35 @@ void main() {
       say('menu:${jsonEncode({'rect': rect, 'id': 'old'})}');
       expect(menu()!.color, 'green');
 
-      // A change the server refuses is undone on the page.
-      refuse = true;
+      // A change the server refuses, or cannot be reached for, shows the
+      // highlight as the server keeps it again, and its menu still opens.
+      String drawn() => controller.scripts.last;
+      answer = () async => http.Response('{"error":"Down."}', 500);
       menu()!.onColor('purple');
       await pumpEventQueue();
-      refuse = false;
       expect(sent.last, 'PATCH /api/highlights/old {"color":"purple"}');
-      expect(controller.scripts.last, endsWith('.recolor("old", "green")'));
+      expect(drawn(), contains('.set([${jsonEncode(kept)},'));
+      answer = null;
       say('menu:${jsonEncode({'rect': rect, 'id': 'old'})}');
       expect(menu()!.color, 'green');
 
       menu()!.onColor('pink');
       await pumpEventQueue();
-      expect(controller.scripts.last, endsWith('.recolor("old", "pink")'));
+      expect(drawn(), endsWith('.recolor("old", "pink")'));
       expect(sent.last, 'PATCH /api/highlights/old {"color":"pink"}');
+      say('menu:${jsonEncode({'rect': rect, 'id': 'old'})}');
+      expect(menu()!.color, 'pink');
+      answer = () => throw http.ClientException('Unreachable.');
+      menu()!.onRemove!();
+      await pumpEventQueue();
+      expect(sent.last, 'DELETE /api/highlights/old');
+      expect(drawn(), contains('{"id":"old","text":"an earlier passage"'));
+      answer = null;
       say('menu:${jsonEncode({'rect': rect, 'id': 'old'})}');
       expect(menu()!.color, 'pink');
       menu()!.onRemove!();
       await pumpEventQueue();
-      expect(controller.scripts.last, endsWith('.remove("old", null)'));
+      expect(drawn(), endsWith('.remove("old", null)'));
       expect(sent.last, 'DELETE /api/highlights/old');
       say('menu:${jsonEncode({'rect': rect, 'id': 'old'})}');
       expect(menu(), isNull, reason: 'the highlight is gone');
@@ -458,29 +472,89 @@ void main() {
       // The toolbar's Highlight with nothing selected saves nothing.
       controller.highlighted = 'null';
       await page.browser!.browserAction('highlight');
-      expect(sent, hasLength(5), reason: 'nothing was selected');
+      expect(sent, hasLength(6), reason: 'nothing was selected');
 
-      // A page that moves to another of its addresses shows that one's; a
-      // new #fragment is the same address.
+      // A page that moves to another of its addresses shows that one's. A
+      // change still on its way fails there: it touches neither that
+      // address's highlights nor its page.
+      final added = jsonDecode(sent[1].split(' ').skip(2).join(' '))['id'];
+      final hold = Completer<http.Response>();
+      answer = () => hold.future;
+      say('menu:${jsonEncode({'rect': rect, 'id': added})}');
+      menu()!.onColor('yellow');
+      await pumpEventQueue();
+      expect(sent.last, 'PATCH /api/highlights/$added {"color":"yellow"}');
       controller.location = 'https://8.8.8.8/other';
       controller.delegate.urlChange(UrlChange(url: controller.location));
       await pumpEventQueue();
       expect(sent.last, 'GET /api/highlights https://8.8.8.8/other');
-      expect(sent, hasLength(6));
+      final given = controller.scripts.length;
+      hold.complete(http.Response('{"error":"Down."}', 500));
+      await pumpEventQueue();
+      answer = null;
+      expect(controller.scripts, hasLength(given));
+      say('menu:${jsonEncode({'rect': rect, 'id': added})}');
+      expect(menu(), isNull);
+
+      // A new #fragment is the same address.
       controller.location = 'https://8.8.8.8/other#part';
       controller.delegate.urlChange(UrlChange(url: controller.location));
       await pumpEventQueue();
-      expect(sent, hasLength(6));
+      expect(sent, hasLength(8));
+
+      // A highlight made while the address's list is on its way stays when
+      // the list arrives.
+      final list = Completer<http.Response>();
+      listing = () => list.future;
+      controller.location = 'https://8.8.8.8/third';
+      controller.delegate.urlChange(UrlChange(url: controller.location));
+      await pumpEventQueue();
+      expect(sent.last, 'GET /api/highlights https://8.8.8.8/third');
+      controller.highlighted = jsonEncode({
+        'added': {'text': 'made early', 'prefix': '', 'suffix': ''},
+      });
+      say('menu:${jsonEncode({'rect': rect})}');
+      menu()!.onColor('green');
+      await pumpEventQueue();
+      final early = jsonDecode(sent.last.split(' ').skip(2).join(' '))['id'];
+      list.complete(http.Response(jsonEncode([kept]), 200));
+      listing = null;
+      await pumpEventQueue();
+      expect(drawn(), allOf(contains('"id":"old"'), contains('"id":"$early"')));
+
+      // Two quick colour changes the server refuses go out in the order
+      // made, and end with one redraw in the colour the server keeps.
+      answer = () async => http.Response('{"error":"Down."}', 500);
+      final before = controller.scripts.length;
+      for (final color in ['purple', 'pink']) {
+        say('menu:${jsonEncode({'rect': rect, 'id': early})}');
+        menu()!.onColor(color);
+      }
+      await pumpEventQueue();
+      answer = null;
+      expect(sent.sublist(sent.length - 2), [
+        'PATCH /api/highlights/$early {"color":"purple"}',
+        'PATCH /api/highlights/$early {"color":"pink"}',
+      ]);
+      final redrawn = controller.scripts.sublist(before);
+      expect(
+        redrawn.where((script) => script.contains('__relayHighlights?.set(')),
+        hasLength(1),
+      );
+      expect(
+        redrawn.last,
+        contains('{"id":"$early","text":"made early","color":"green"'),
+      );
 
       // A load under way moves the tab's address through each redirect
       // step, here back through the page's own address and on to another
       // site, while the page stays on screen. That site's highlights are not
       // asked for or given to this page, and Highlight still saves here.
-      controller.document = 'https://8.8.8.8/other#part';
-      final given = controller.scripts.length;
+      controller.document = 'https://8.8.8.8/third';
+      final asked = sent.length, shown = controller.scripts.length;
       for (final step in [
         'https://8.8.8.8/redirect',
-        'https://8.8.8.8/other',
+        'https://8.8.8.8/third',
         'https://8.8.4.4/victim',
         'https://8.8.4.4/victim/',
       ]) {
@@ -488,8 +562,8 @@ void main() {
         controller.delegate.urlChange(UrlChange(url: step));
         await pumpEventQueue();
       }
-      expect(sent, hasLength(6));
-      expect(controller.scripts, hasLength(given));
+      expect(sent, hasLength(asked));
+      expect(controller.scripts, hasLength(shown));
       controller.highlighted = jsonEncode({
         'added': {'text': 'kept here', 'prefix': '', 'suffix': ''},
       });
@@ -498,7 +572,7 @@ void main() {
         sent.last,
         allOf(
           startsWith('POST /api/highlights '),
-          contains('"url":"https://8.8.8.8/other"'),
+          contains('"url":"https://8.8.8.8/third"'),
         ),
       );
     },

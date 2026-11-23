@@ -22,7 +22,6 @@ void main() {
                     color: color,
                     onColor: chosen.add,
                     onRemove: color == null ? null : () => removed++,
-                    onDismiss: () {},
                   ),
                 ],
               ),
@@ -33,7 +32,7 @@ void main() {
       final page = tester.getTopLeft(find.byType(Stack));
       final box = find.descendant(
         of: find.byType(HighlightMenu),
-        matching: find.byType(TapRegion),
+        matching: find.byType(Material),
       );
       return tester.getRect(box.first).shift(-page);
     }

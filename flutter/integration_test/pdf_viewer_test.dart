@@ -42,8 +42,7 @@ void main() {
       reason: "Run through npm run test:mac so the installed app's data stays untouched.",
     );
 
-    // The Relay server's highlight list and save; every other call is
-    // accepted.
+    // The Relay server's highlight routes; every other call is accepted.
     final kept = <String, List<Json>>{};
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
@@ -55,6 +54,17 @@ void main() {
       } else if (path == '/api/highlights') {
         final body = jsonDecode(await utf8.decodeStream(request)) as Json;
         kept.putIfAbsent(body.remove('url') as String, () => []).add(body);
+      } else if (path.startsWith('/api/highlights/')) {
+        final id = path.split('/').last;
+        final change = request.method == 'PATCH'
+            ? jsonDecode(await utf8.decodeStream(request)) as Json
+            : null;
+        for (final list in kept.values) {
+          if (change == null) list.removeWhere((item) => item['id'] == id);
+          for (final item in list) {
+            if (item['id'] == id) item.addAll(change ?? const {});
+          }
+        }
       }
       request.response.statusCode = reply == null ? 204 : 200;
       if (reply != null) request.response.write(jsonEncode(reply));
@@ -181,22 +191,45 @@ void main() {
     expect((await browser.read())['pdf'], isNotNull);
     await controller.runJavaScript('window.stop()');
 
-    // Opened again, the PDF has its highlight back: removing it changes
-    // what shows. A click on it opens its menu, which a test cannot do on a
-    // native view; the unit tests cover that menu.
+    // Opened again, the PDF has its highlight back. Its menu, opened here
+    // as the viewer opens it for a click, which a test cannot make on a
+    // native view, recolours and removes it in the viewer and on the server.
     await openPaper();
     await wait(1);
     final marked = await shown();
-    await channel.invokeMethod<void>('pdf', {
-      'view': viewId,
-      'do': 'remove',
-      'id': saved['id'],
-    });
+    await browserChannelCall(
+      MethodCall('pdfMenu', {
+        'view': viewId,
+        'menu': {
+          'id': saved['id'],
+          'rect': {'left': 100, 'top': 100, 'right': 300, 'bottom': 120},
+        },
+      }),
+    );
+    expect(menu()!.color, 'green');
+    menu()!.onColor('blue');
+    await until(
+      () => highlights(paper).single['color'] == 'blue',
+      'the colour was not kept',
+    );
+    final blue = await shown();
     expect(
-      await shown(),
+      blue,
       isNot(marked),
       reason: 'the kept highlight was not drawn again',
     );
+    await browserChannelCall(
+      MethodCall('pdfMenu', {
+        'view': viewId,
+        'menu': {
+          'id': saved['id'],
+          'rect': {'left': 100, 'top': 100, 'right': 300, 'bottom': 120},
+        },
+      }),
+    );
+    menu()!.onRemove!();
+    await until(() => highlights(paper).isEmpty, 'the removal was not kept');
+    expect(await shown(), isNot(blue), reason: 'the highlight still shows');
 
     // A web page: the highlight quotes the selected text, is painted without
     // changing the page, and follows the page when it draws itself again.
