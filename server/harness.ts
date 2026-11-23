@@ -195,6 +195,8 @@ Preserve source identities, revisions and URLs. A capped search is not proof of 
           package: transport.package,
           settings: {
             baseURL: this.fixture?.url ?? this.options.gateway!.url,
+            // The gateway relays HTTP POST only; OpenCode's OpenAI plugin would try WebSocket first.
+            transport: "http",
           },
           models: {
             [model]: {

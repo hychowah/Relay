@@ -18,6 +18,15 @@ export const liveProviders = {
     auth: { header: "x-api-key", prefix: "" },
     models: { headers: { "anthropic-version": "2023-06-01" }, paginated: true },
   },
+  openai: {
+    name: "OpenAI", defaultModel: "gpt-6.2-sol",
+    effortModels: [] as string[],
+    limit: { context: 200000, output: 8192 },
+    envPrefix: "OPENAI", package: "@opencode/ai/providers/openai",
+    baseURL: "https://api.openai.com/v1",
+    auth: { header: "authorization", prefix: "Bearer " },
+    models: { headers: undefined, paginated: false },
+  },
 };
 
 const providers = { fixture: { name: "Demo", defaultModel: "deepseek-flash" }, ...liveProviders };
@@ -28,8 +37,14 @@ export const defaultModels = Object.fromEntries(Object.entries(providers).map(([
 export const reasoningEfforts = ["default", "none", "low", "high", "max"] as const;
 export type ReasoningEffort = typeof reasoningEfforts[number];
 
+// A provider's list can include models that cannot chat (OpenAI lists embedding and
+// speech models), so an unlisted choice falls back to the default, never the first entry.
+export function pickListedModel(mode: ProviderMode, current: string, models: {id: string}[]): string {
+  return [current, defaultModels[mode]].find(id => models.some(model => model.id === id)) ?? "";
+}
+
 export function supportsImageInput(mode: ProviderMode): boolean {
-  return mode === "anthropic";
+  return mode === "anthropic" || mode === "openai";
 }
 
 export function supportsReasoningEffort(mode: ProviderMode, model: string): boolean {

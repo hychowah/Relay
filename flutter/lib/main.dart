@@ -1844,7 +1844,7 @@ class _RelayShellState extends State<RelayShell> {
                 ),
                 subtitle: w.provider['supportsImageInput'] == true
                     ? null
-                    : const Text('Choose Claude to send this image.'),
+                    : const Text('Choose Claude or OpenAI to send this image.'),
                 title: Text(
                   'Screenshot · ${attachment.appId}',
                   overflow: TextOverflow.ellipsis,

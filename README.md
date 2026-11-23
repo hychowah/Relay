@@ -52,10 +52,12 @@ app, copy `apps.example.json`, set the app's address, and start Relay with
 `RELAY_APPS_FILE` pointing at your copy. Later edits to that file apply
 without a restart; reload the page to see them.
 
-**Use a real model.** Open **Model connection** in the page and add a Claude or
-DeepSeek key, or set a key file as shown in `.env.example`. By default live
-requests are sent only while the host's NordVPN client is connected; set
-`RELAY_VPN_CHECK=off` to turn that check off.
+**Use a real model.** Open **Model connection** in the page and add a Claude,
+DeepSeek or OpenAI key, or set a key file as shown in `.env.example`. Without a
+saved key, Relay also uses `DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY` or
+`OPENAI_API_KEY` from its environment, so a key exported for other tools counts
+as configured. By default live requests are sent only while the host's NordVPN
+client is connected; set `RELAY_VPN_CHECK=off` to turn that check off.
 
 **Keep your data.** Records are stored in `RELAY_DATA_DIR` (default `runtime/`).
 To back up, stop Relay and copy that whole folder; restore it to the same path.

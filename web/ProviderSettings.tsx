@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ProviderModel, ProviderSettings as ProviderStatus } from "../shared/types.ts";
-import { defaultModels, providerNames, supportsReasoningEffort } from "../shared/provider.ts";
+import { defaultModels, pickListedModel, providerNames, supportsReasoningEffort } from "../shared/provider.ts";
 
 async function providerRequest<T = ProviderStatus>(path = "", body?: object, signal?: AbortSignal): Promise<T> {
   const response = await fetch("/api/settings/provider" + path, {
@@ -61,7 +61,7 @@ export default function ProviderSettings({running, onClose, onSaved}: {
       setModels(result.models);
       setSettings(previous => {
         if (!previous || previous.mode !== current.mode) return previous;
-        const model = result.models.some(item => item.id === previous.model) ? previous.model : result.models[0]?.id || "";
+        const model = pickListedModel(previous.mode, previous.model, result.models);
         return {...previous, model, ...(!supportsReasoningEffort(previous.mode, model) ? {reasoningEffort: "default" as const} : {})};
       });
     } catch (error) {
@@ -112,7 +112,7 @@ export default function ProviderSettings({running, onClose, onSaved}: {
         <div><span className="eyebrow">WORKSPACE SETTINGS</span><h2 id="provider-title">Model connection</h2></div>
         <button className="icon-button" aria-label="Close provider settings" onClick={close}>×</button>
       </div>
-      <p className="settings-description">Connect Claude or DeepSeek, or use the scripted demo.</p>
+      <p className="settings-description">Connect Claude, DeepSeek or OpenAI, or use the scripted demo.</p>
       {error && <p className="settings-error" role="alert">{error}</p>}
       {!settings ? <p className="muted" role="status">{error ? "Settings are unavailable. Close and try again." : "Loading settings…"}</p> : (
         <form onSubmit={event => { event.preventDefault(); void save(); }}>
@@ -141,7 +141,9 @@ export default function ProviderSettings({running, onClose, onSaved}: {
             <select aria-label="Model" value={settings.model} required disabled={saving || loading || loadingModels || !models?.length}
               onChange={event => setSettings({...settings, model: event.target.value,
                 ...(!supportsReasoningEffort(settings.mode, event.target.value) ? {reasoningEffort: "default"} : {})})}>
-              {!models?.length && <option value={settings.model}>{settings.model ? `${settings.model} · current model` : "Load models to choose"}</option>}
+              {!models?.some(model => model.id === settings.model) && <option value={settings.model}>
+                {models?.length ? "Choose a model" : settings.model ? `${settings.model} · current model` : "Load models to choose"}
+              </option>}
               {models?.map(model => <option key={model.id} value={model.id}>{model.name === model.id ? model.id : `${model.name} · ${model.id}`}</option>)}
             </select>
           </label>
