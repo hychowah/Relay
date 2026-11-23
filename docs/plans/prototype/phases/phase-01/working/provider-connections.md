@@ -131,8 +131,12 @@ shapes, and whether OpenAI's addresses route through `nordlynx`.
 ## Next
 
 Refresh Relay to use the model picker. A real Claude conversation is the
-remaining provider-readiness check. For OpenAI, after merge and deployment,
-save a key in Model connection, load models and send one short reply; this
-needs the user's key and approval of the small spend. Treat the documented
-precheck and OS egress guarantee separately; the observed disabled kill switch
-has not been enabled by this change.
+remaining provider-readiness check. OpenAI at `2d7d489` was deployed on
+2026-11-23 to both services: `relay` serves the web page from the main
+checkout, and `relay-app` (relay-live) is the Flutter backend. They keep
+separate provider settings, so a key saved through one does not reach the
+other. The Flutter client needs a new build to list OpenAI (see Limits). Next,
+save an OpenAI key in Model connection, load models and send one short reply;
+this needs the user's key and approval of the small spend.
+Treat the documented precheck and OS egress guarantee separately; the observed
+disabled kill switch has not been enabled by this change.
