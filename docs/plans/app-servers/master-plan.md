@@ -173,11 +173,11 @@ Under the live `relay-app` service the list showed all six with their real
 states (Backtest Web stopped, its switch not available), a log read returned
 lines, a request naming a foreign Host got 403 and a non-JSON POST got 415,
 and the list answered through the tailnet address. No unit was started,
-stopped, enabled or disabled through the live backend. Mac test build
-`app-servers` is published from the same commit, and the later test build
-`pre-0-0-18` also has the screen. The backend runs `ea0fa4d` since later that
-day; there the list still answered, and a foreign Host still got 403. Not yet
-verified: the Mac run.
+stopped, enabled or disabled through the live backend. The backend runs
+`ea0fa4d` since later that day; there the list still answered, and a foreign
+Host still got 403. Stable 0.0.18, published the same day, has the screen;
+the two test builds that carried it before are retired. Not yet verified: the
+Mac run.
 
 Limit: each systemctl or journalctl call has its own 15-second limit, so a
 start can outlast the client's 20 seconds; the client then shows a timeout
@@ -185,9 +185,8 @@ while systemd carries on, and the next list read shows the real state.
 
 ## Next
 
-1. Install test build `pre-0-0-18` on the Mac and make the one Mac check:
-   every Mac item of Phase 1 Done when, and also start Backtest Web from the
-   screen and check that its tailnet address answers. The screen reaches
-   Stable with the next release the user asks for.
+1. With Stable 0.0.18 on the Mac, make the one Mac check: every Mac item of
+   Phase 1 Done when, and also start Backtest Web from the screen and check
+   that its tailnet address answers.
 2. Phase 2 (S09): confirm with the user that it is still wanted before
    building it.
