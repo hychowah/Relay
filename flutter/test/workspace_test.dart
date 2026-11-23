@@ -164,6 +164,7 @@ class Fixture {
             return reply({});
           }
           if (path.endsWith('/messages')) {
+            if (failSend) return http.Response('Send failed', 500);
             sentTo = path;
             sent = jsonDecode(request.body) as Json;
             return reply({'id': 'run'});
@@ -211,6 +212,7 @@ class Fixture {
             'tools': [],
             'commands': commands,
           };
+          if (failSnapshot) return http.Response('Snapshot failed', 500);
           await holdSnapshot?.future;
           return reply(state);
         }),
@@ -239,6 +241,7 @@ class Fixture {
   Completer<void>? holdCurrent;
   List<Json> devices = [];
   bool offline = false, failRoomRestore = false, appDown = false;
+  bool failSnapshot = false, failSend = false;
   List<Json> configApps = [...apps];
   late Workspace w;
   final pages = <FakePage>[];
@@ -271,6 +274,46 @@ class Fixture {
 }
 
 void main() {
+  test('a poll that fails and then succeeds clears its own error', () async {
+    final f = Fixture()..current = 'c';
+    addTearDown(f.w.dispose);
+    await f.w.start();
+    f.failSnapshot = true;
+    await f.w.refresh();
+    expect(f.w.pollError, 'Snapshot failed');
+    expect(f.w.error, isNull);
+    f.failSnapshot = false;
+    await f.w.refresh();
+    expect(f.w.pollError, isNull);
+    // A new chat is not polled, so opening one clears the error itself.
+    f.failSnapshot = true;
+    await f.w.refresh();
+    expect(f.w.pollError, 'Snapshot failed');
+    await f.w.selectConversation(null);
+    expect(f.w.pollError, isNull);
+  });
+
+  test(
+    'an error from a user action outlasts a failing and a good poll',
+    () async {
+      final f = Fixture()..current = 'c';
+      addTearDown(f.w.dispose);
+      await f.w.start();
+      f.failSend = true;
+      await expectLater(f.w.send('Hello'), throwsA(anything));
+      final sendError = f.w.error;
+      expect(sendError, isNotNull);
+      f.failSnapshot = true;
+      await f.w.refresh();
+      expect(f.w.error, sendError);
+      expect(f.w.pollError, 'Snapshot failed');
+      f.failSnapshot = false;
+      await f.w.refresh();
+      expect(f.w.error, sendError);
+      expect(f.w.pollError, isNull);
+    },
+  );
+
   test('the conversation last opened on any device opens here', () async {
     final f = Fixture()..current = 'elsewhere';
     await f.w.start();

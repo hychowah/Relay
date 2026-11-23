@@ -56,6 +56,9 @@ class RelayApi {
         failure: error,
         elapsed: watch.elapsed,
       );
+      if (error is TimeoutException) {
+        throw RelayApiException(408, 'Relay did not answer in 20 seconds.');
+      }
       rethrow;
     }
     recorder?.exchange(

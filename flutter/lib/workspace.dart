@@ -103,16 +103,20 @@ class Workspace extends ChangeNotifier {
       snapshot?.runs.where((run) => run.status == 'running').firstOrNull;
   bool get busy => sending || running != null;
   String? _lastError, _lastTabError;
+  // The poll's own error, kept apart from [error] so that a successful poll
+  // never clears an error from something the user did.
+  String? pollError;
   void changed() {
     if (_disposed) return;
-    if (error != null && error != _lastError) {
-      recorder.add('error', {'message': error});
+    final shown = error ?? pollError;
+    if (shown != null && shown != _lastError) {
+      recorder.add('error', {'message': shown});
     }
     final tabError = active?.error;
     if (tabError != null && tabError != _lastTabError) {
       recorder.add('error', {'tab': active!.title, 'message': tabError});
     }
-    _lastError = error;
+    _lastError = shown;
     _lastTabError = tabError;
     unawaited(saveSession());
     notifyListeners();
@@ -151,6 +155,7 @@ class Workspace extends ChangeNotifier {
     Future<bool>? restoring;
     try {
       error = null;
+      pollError = null;
       await loadConfig();
       await openCurrentConversation();
       // The restore adds and selects the tabs before its first await, so the
@@ -669,6 +674,8 @@ class Workspace extends ChangeNotifier {
     snapshot = null;
     status = null;
     error = null;
+    // A new chat is not polled, so no later poll would clear this.
+    pollError = null;
     changed();
     await _keepConversation(id);
     await refresh();
@@ -748,6 +755,7 @@ class Workspace extends ChangeNotifier {
           : progress.isNotEmpty
           ? progress.last['message'] as String?
           : tool?.name ?? 'Thinking…';
+      pollError = null;
       changed();
       for (final command in next.commands) {
         if (command.status == 'pending' &&
@@ -764,8 +772,11 @@ class Workspace extends ChangeNotifier {
         snapshot = null;
         status = null;
         await saveConversation(null);
+        // Polling stops here, so nothing would clear a poll error.
+        error = e.toString();
+      } else {
+        pollError = e.toString();
       }
-      error = e.toString();
       changed();
     } finally {
       _polling = false;

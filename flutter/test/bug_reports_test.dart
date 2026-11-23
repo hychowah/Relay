@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +13,21 @@ const pixel =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
 void main() {
+  testWidgets('a request the backend never answers fails plainly', (
+    tester,
+  ) async {
+    final api = RelayApi(
+      Uri.parse('http://localhost:3250'),
+      client: MockClient((_) => Completer<http.Response>().future),
+    );
+    Object? failure;
+    unawaited(
+      api.snapshot('c').then<void>((_) {}, onError: (e) => failure = e),
+    );
+    await tester.pump(const Duration(seconds: 21));
+    expect(failure.toString(), 'Relay did not answer in 20 seconds.');
+  });
+
   testWidgets('lists saved bug reports and opens their event timeline', (
     tester,
   ) async {
