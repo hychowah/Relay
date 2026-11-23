@@ -6,14 +6,14 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { listProviderModels } from "../server/provider-models.ts";
-import { liveProviders } from "../shared/provider.ts";
+import { liveProviders, pickListedModel } from "../shared/provider.ts";
 import { ProviderNetworkError } from "../server/provider-network.ts";
 import { ProviderSettingsStore } from "../server/provider-settings.ts";
 import { Store } from "../server/store.ts";
 import { createWorkspace } from "../server/app.ts";
 
 test("model discovery uses provider authentication, labels and pagination with a VPN check per page", async () => {
-  for (const mode of ["deepseek", "anthropic"] as const) {
+  for (const mode of ["deepseek", "anthropic", "openai"] as const) {
     let checks = 0, requests = 0, connected = true;
     const original = liveProviders[mode].baseURL;
     const server = createServer((req, res) => {
@@ -117,4 +117,13 @@ test("model lookup accepts draft keys without saving or switching and enforces p
   } finally {
     await workspace.close(); store.close(); await rm(dir,{recursive:true,force:true});
   }
+});
+
+test("a loaded model list keeps the current model, then the default, and never picks a non-chat first entry", () => {
+  const openai = ["text-embedding-3-large", "tts-1", "whisper-1", "dall-e-3", "omni-moderation-latest", "gpt-6.1-terra", "gpt-6.2-sol"]
+    .map(id => ({id}));
+  assert.equal(pickListedModel("openai", "", openai), "gpt-6.2-sol", "First setup starts with no model and gets the default");
+  assert.equal(pickListedModel("openai", "gpt-6.1-terra", openai), "gpt-6.1-terra");
+  assert.equal(pickListedModel("openai", "", openai.filter(model => model.id !== "gpt-6.2-sol")), "",
+    "Without the default the user must choose");
 });

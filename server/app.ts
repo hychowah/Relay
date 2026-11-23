@@ -690,7 +690,7 @@ export function createWorkspace(
     let image: string | undefined;
     if (body.capture !== undefined) {
       if (!supportsImageInput(provider.mode))
-        throw new HTTPException(400, {message: "Choose Claude to send a screenshot."});
+        throw new HTTPException(400, {message: "Choose Claude or OpenAI to send a screenshot."});
       const capture = body.capture;
       if (!jsonObject(capture)) throw new HTTPException(400, {message: "Invalid screenshot."});
       allowedApp(id, textField(capture.appId, "Screenshot app"));
