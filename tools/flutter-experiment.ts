@@ -6,6 +6,7 @@ import {mkdirSync, existsSync, copyFileSync, chmodSync} from 'node:fs';
 import {appRegistry} from '../server/app-registry.ts';
 import {startWorkspace} from '../server/runtime.ts';
 import {createBrowser} from '../server/browser.ts';
+import {attachBrowserProxy} from '../server/browser-proxy.ts';
 import {ProviderSettingsStore} from '../server/provider-settings.ts';
 import {addAppServers} from '../server/app-servers.ts';
 
@@ -33,7 +34,8 @@ workspace.app.use('/flutter-host.html', async (c, next) => {c.header('Cache-Cont
 workspace.app.use('/*', serveStatic({root:'./public'}));
 const server = serve({fetch:workspace.app.fetch, hostname:'127.0.0.1', port:3250});
 browser.attach(server);
+const proxy = attachBrowserProxy(server);
 console.log(`Flutter experiment: ${relayOrigin}`);
-async function close() {server.close();browser.close();await workspace.close();}
+async function close() {server.close();browser.close();proxy.close();await workspace.close();}
 process.once('SIGTERM',()=>void close());
 process.once('SIGINT',()=>void close());
