@@ -41,8 +41,13 @@ model calls (`requireNordVPN`, which also honours `RELAY_VPN_CHECK=off`). The
 check takes about 20 ms, but 30 at once took 0.45 s, so tunnels that start
 while a check runs share it; no result is reused after it ends.
 
-**Address rule (V06).** The proxy looks up the name in WSL and refuses unless
-every address is public. It then connects to the address it checked, so a
+**Name lookups (V02).** WSL's own resolver hands names to Windows, which
+looks them up over the home network. The proxy asks public name servers
+(`1.1.1.1`, `8.8.8.8`) instead, which WSL reaches through NordVPN, for IPv4
+addresses only, since WSL has no IPv6 route.
+
+**Address rule (V06).** The proxy refuses unless every address of the name is
+public. It then connects to the address it checked, so a
 second lookup cannot swap in a local one. Without this rule a web page could
 reach WSL's local services through the tab.
 
@@ -121,16 +126,20 @@ Done when:
 
 Built in `server/browser-proxy.ts`, attached in `tools/flutter-experiment.ts`.
 The VPN check runs before the name lookup, so no lookup leaves WSL while
-NordVPN is down. IPv4-mapped IPv6 addresses are judged by the IPv4 rule.
+NordVPN is down. IPv4-mapped, IPv4-compatible, NAT64 and 6to4 addresses are
+judged by the IPv4 ranges they carry or refused.
 
 - `npm test` (122 pass) and `npm run build` pass. Proxy tests: the address
-  rule, 403 for local targets including an IPv4-mapped one, 503 when the
-  check fails, one check shared by tunnels opened together, no connection
-  opened, and the Browser socket still connects.
+  rule, 403 for local targets and for a name with one private address, 503
+  with no lookup when the check fails, one check shared by tunnels opened
+  together, and the Browser socket still connects.
 - Scratch backend on WSL with temporary data and the real NordVPN check:
-  through the proxy, an IP-check service returned the same address as a
-  direct WSL request; a plain `http://` site returned 200; a tunnel to
-  Relay's own port got 403. The output logged no destinations.
+  `curl -x` to an IP-check service returned the same address as a direct WSL
+  request; `curl -p -x` to a plain `http://` site (a real CONNECT) returned
+  200; a tunnel to Relay's own port got 403. The route to `1.1.1.1` is
+  `nordlynx`, and Akamai's resolver-echo name showed a Cloudflare resolver
+  for the proxy's lookups but the home provider's for WSL's own resolver.
+  The output logged no destinations.
 
 Unverified: the real check's 503 while NordVPN is down, the 502 when a
 target refuses the connection, and that shutdown closes open tunnels (added
@@ -149,6 +158,10 @@ after a bug review; checked in the code only).
   profile after the view exists but before its first load; that plain
   `http://` pages also tunnel; and that popups inherit the profile. If the
   first fails, set the proxy inside the patched creation option instead.
+- `RELAY_VPN_CHECK=off` turns the proxy into a plain relay over WSL's
+  network. The live service does not set it.
+- A tunnel tries only the first address of a name, so a dead first address
+  gives 502.
 - The Windows client ignores the saved flag, so a copy of Mac tabs opened
   there loads VPN tabs over Windows' network.
 
