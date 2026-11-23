@@ -38,7 +38,7 @@ void main() {
     tester,
   ) async {
     final chosen = <String>[];
-    var removed = 0;
+    var removed = 0, dismissed = 0;
     Future<Rect> show(Rect at, {String? color}) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -53,6 +53,7 @@ void main() {
                     color: color,
                     onColor: chosen.add,
                     onRemove: color == null ? null : () => removed++,
+                    onDismiss: () => dismissed++,
                   ),
                 ),
               ),
@@ -87,5 +88,12 @@ void main() {
     expect(removed, 0);
     await tester.tap(find.text('Remove'));
     expect(removed, 1);
+
+    // A click elsewhere in Relay hides it; the clicks on it did not.
+    expect(dismissed, 0);
+    await tester.tapAt(
+      tester.getTopLeft(find.byType(PageSlot)) + const Offset(500, 350),
+    );
+    expect(dismissed, 1);
   });
 }

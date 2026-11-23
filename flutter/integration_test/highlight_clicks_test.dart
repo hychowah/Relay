@@ -4,9 +4,11 @@
 // would. Run it from WSL with
 // `npm run test:mac -- highlight_clicks_test.dart` on a Mac that is awake,
 // unlocked and left alone for about half a minute: the app must come to
-// the front. It opens
-// one arXiv PDF, so the Mac needs the internet; the web page is the test's
-// own. Highlights go to a loopback stand-in for the Relay server.
+// the front. Queued events never hold the button down, so held presses and
+// a PDF release after a tracking loop are checked by hand (see the README's
+// Mac checks). It opens one arXiv PDF, so the Mac needs the internet; the
+// web page is the test's own. Highlights go to a loopback stand-in for the
+// Relay server.
 import 'dart:convert';
 import 'dart:io';
 

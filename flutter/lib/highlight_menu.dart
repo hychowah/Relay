@@ -16,12 +16,14 @@ const highlightColors = {
 /// button for each colour, or by a highlight the user clicked, with its
 /// colour marked and a Remove button. Drawn by Relay over the page, so a
 /// page's own scripts cannot press it. The page script and the PDF viewer
-/// hide it, as they know when the page is clicked or moves.
+/// hide it when the page is clicked or moves, as clicks there never reach
+/// Relay; a click elsewhere in Relay, such as in the chat, hides it here.
 class HighlightMenu extends StatelessWidget {
   const HighlightMenu({
     super.key,
     required this.at,
     required this.onColor,
+    required this.onDismiss,
     this.color,
     this.onRemove,
   });
@@ -33,58 +35,66 @@ class HighlightMenu extends StatelessWidget {
   final String? color;
   final ValueChanged<String> onColor;
   final VoidCallback? onRemove;
+  final VoidCallback onDismiss;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return CustomSingleChildLayout(
       delegate: _Beside(at),
-      child: Material(
-        elevation: 6,
-        color: colors.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(22),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final MapEntry(key: name, value: shade)
-                  in highlightColors.entries)
-                IconButton(
-                  tooltip: color == null
-                      ? 'Highlight in $name'
-                      : name == color
-                      ? 'Highlighted in $name'
-                      : 'Change to $name',
-                  onPressed: name == color ? null : () => onColor(name),
-                  icon: Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      color: shade,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: colors.outline, width: .5),
+      child: TapRegion(
+        onTapOutside: (_) => onDismiss(),
+        child: Material(
+          elevation: 6,
+          color: colors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(22),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final MapEntry(key: name, value: shade)
+                    in highlightColors.entries)
+                  IconButton(
+                    tooltip: color == null
+                        ? 'Highlight in $name'
+                        : name == color
+                        ? 'Highlighted in $name'
+                        : 'Change to $name',
+                    onPressed: name == color ? null : () => onColor(name),
+                    icon: Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: shade,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: colors.outline, width: .5),
+                      ),
+                      child: name == color
+                          ? const Icon(
+                              Icons.check,
+                              size: 14,
+                              color: Colors.black,
+                            )
+                          : null,
                     ),
-                    child: name == color
-                        ? const Icon(Icons.check, size: 14, color: Colors.black)
-                        : null,
                   ),
-                ),
-              if (onRemove != null) ...[
-                SizedBox(
-                  height: 24,
-                  child: VerticalDivider(
-                    width: 9,
-                    color: colors.outlineVariant,
+                if (onRemove != null) ...[
+                  SizedBox(
+                    height: 24,
+                    child: VerticalDivider(
+                      width: 9,
+                      color: colors.outlineVariant,
+                    ),
                   ),
-                ),
-                ConfirmDeleteButton(
-                  tooltip: 'Remove highlight',
-                  label: 'Remove',
-                  onConfirmed: onRemove,
-                ),
+                  ConfirmDeleteButton(
+                    tooltip: 'Remove highlight',
+                    label: 'Remove',
+                    onConfirmed: onRemove,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

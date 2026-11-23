@@ -368,6 +368,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
               (menu.id == null ? _highlight(color) : _recolor(menu.id!, color))
                   .ignore(),
           onRemove: menu.id == null ? null : () => _remove(menu.id!).ignore(),
+          onDismiss: () => _showMenu(null),
         ),
     ],
   );

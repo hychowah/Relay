@@ -234,16 +234,13 @@
       setTimeout(() => (selected() ? showSelection() : showHighlightAt(event.clientX, event.clientY)), 0);
     }, true);
     // Text selected with the keyboard, or selected text that went away.
-    // Selected text that cannot be highlighted, as in a text field, takes
-    // the place of the last.
     document.addEventListener("selectionchange", () => {
       const range = selected();
       if (range) lastRange = range.cloneRange();
-      else if (getSelection()?.isCollapsed === false) lastRange = null;
       if (pressed) return;
       clearTimeout(settle);
       // A selection that went with the page's focus, as on a press on
-      // Relay's menu, keeps the menu until the press ends.
+      // Relay's menu, keeps the menu; Relay hides it on a click elsewhere.
       settle = setTimeout(() => (selected() ? showSelection()
         : shown === "selection" && document.hasFocus() && hide()), 300);
     });
