@@ -485,7 +485,9 @@ class _RelayShellState extends State<RelayShell> {
         /* The report is still useful without a picture. */
       }
       if (!mounted) return;
-      final window = '${MediaQuery.sizeOf(context)}';
+      final size = MediaQuery.sizeOf(context);
+      // Release builds strip Size.toString, so write the numbers out.
+      final window = '${size.width.round()} × ${size.height.round()}';
       final answer = await askBugReport(context, w.recorder.events.length);
       if (answer == null) return;
       if (!answer.save) {
@@ -633,13 +635,14 @@ class _RelayShellState extends State<RelayShell> {
         child: Column(
           children: [
             if (!screen) _toolbar(),
-            if (w.error != null && !screen)
+            if ((w.error ?? w.pollError) != null && !screen)
               MaterialBanner(
-                content: Text(w.error!, maxLines: 3),
+                content: Text(w.error ?? w.pollError!, maxLines: 3),
                 actions: [
                   TextButton(
                     onPressed: () {
                       w.error = null;
+                      w.pollError = null;
                       w.changed();
                     },
                     child: const Text('Dismiss'),
