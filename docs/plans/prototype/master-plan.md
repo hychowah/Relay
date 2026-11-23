@@ -333,8 +333,6 @@ The [coding sessions plan](../coding-sessions/master-plan.md) covers handing req
 
 Phase 1 of the [app servers plan](../app-servers/master-plan.md) (R17) is deployed and in Mac test build `app-servers`; its Mac check is next.
 
-Phase 1 of the [Browser VPN plan](../browser-vpn/master-plan.md) is next.
-
 1. Verify a sourced two-app question on the user's saved records from the Mac.
    Both stock adapters have run as local services, registered with the live
    Flutter backend, since 2026-11-19; search through Relay returns saved

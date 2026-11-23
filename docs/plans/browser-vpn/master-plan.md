@@ -28,7 +28,10 @@ client, Android, and routing through any VPN other than WSL's NordVPN.
 ## Approach and boundaries
 
 **Route in the backend.** The Relay backend answers proxy tunnel requests
-(HTTP CONNECT) on its existing port. The Mac already reaches that port over
+(HTTP CONNECT) on its existing port, through a `connect` handler on its Node
+server, attached in `tools/flutter-experiment.ts` beside the Browser socket's
+`upgrade` handler. CONNECT requests never reach the Hono routes or the
+`/api/*` checks. The Mac already reaches that port over
 the tailnet (raw TCP forward), so no new port, forward or service is needed.
 The proxy has the same access boundary as Relay itself, tailnet only, so it
 has no password of its own.
@@ -80,7 +83,8 @@ Done when:
 
 - `npm test` and `npm run build` pass. Tests cover the public-address rule on
   a few ranges, a refused local target, and a refused tunnel when the VPN
-  check fails, with no connection opened. Tunnelling itself is checked live.
+  check fails, with no connection opened. They run on a server that also has
+  the Browser socket attached, which still connects. Tunnelling itself is checked live.
 - On WSL, with a scratch backend on a free port and a temporary data folder:
   `curl -x` through it to an IP-check service returns the same address as a
   direct WSL request, and a tunnel to `127.0.0.1` is refused.
@@ -115,6 +119,9 @@ Done when:
 
 ## Limits
 
+- No proxy password: any tailnet device, and any local process that can reach
+  the port, can send traffic out through WSL's NordVPN. This is Relay's own
+  boundary (it has no sign-in either).
 - NordVPN's Kill Switch is off in WSL. The check runs before each tunnel, so a
   VPN drop during an open connection can send traffic out over the normal
   network. Turning the Kill
