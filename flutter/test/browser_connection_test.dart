@@ -35,7 +35,7 @@ void main() {
     final connection = BrowserConnection(
       Uri.parse('http://127.0.0.1:${server.port}'),
       'session',
-      (tabId) => tabId == 'tab'
+      (tabId) async => tabId == 'tab'
           ? FakeBrowser()
           : throw StateError('The requested browser tab is closed.'),
       (_) {},

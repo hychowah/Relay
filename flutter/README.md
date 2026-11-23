@@ -94,7 +94,10 @@ Light or Dark, saved per device. System follows the device's appearance as it
 changes. Pages from apps and websites keep their own look, and the Mac title bar
 follows macOS. **Newest tab first**, in the same menu, off by default and saved per device,
 slides each tab you click or open, or the agent opens, to the left end of the strip.
-Browser and app tabs retain their views until closed. Every start, including an
+App tabs retain their views until closed. On desktop, a Browser tab off screen
+for 30 minutes unloads to free its memory, unless its page plays sound; it keeps
+its address and title, and loads again, without a new history visit, when shown
+or when the agent reads it. Every start, including an
 update restart, reopens the previous tabs and their views, the conversation, the
 draft and the chat panel as it was left; the Mac window keeps its size and position.
 The last active tab shows first, and the other tabs load together in the background.
@@ -219,6 +222,8 @@ Trash cleanup deletes it with the conversation.
 `npm run test:mac -- <name>_test.dart`, from the repository root on WSL, runs
 one self-contained integration test on the Mac against real WKWebViews:
 `popup_windows_test.dart` (with its own loopback fixture),
+`tab_memory_test.dart`, which checks each tab's memory figure, reports what a
+reading costs and plays silent audio to check the playing-sound rule,
 `video_fullscreen_test.dart`, which puts the test window into macOS fullscreen
 for a few seconds, `pdf_viewer_test.dart`, which opens one arXiv paper as
 a PDF and as a web page and so needs the internet on the Mac, or
@@ -260,6 +265,13 @@ during a day of use to see growth. It only reads the process list and memory
 figures. Memory is the physical footprint that Activity Monitor shows. WebKit
 processes count for the app whose launchd domain started them, so other apps'
 pages are excluded; WebKit's shared GPU and networking processes count in full.
+
+On macOS, **Show tab memory** in the Workspace menu puts each tab's memory on its
+chip while it is on, the same physical footprint; the tooltip adds all pages and
+Relay itself. Every two seconds one native call reads all tabs; nothing is read
+while it is off or the window is hidden, and the strip redraws only when a shown
+figure changes. A tab's process comes from WebKit's private
+`_webProcessIdentifier`, so a WebKit update can make the figures disappear.
 
 ## Mac updates
 

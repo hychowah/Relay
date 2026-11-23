@@ -78,6 +78,10 @@ const pdfZoomActions = ['zoomOut', 'zoomIn', 'zoomFit'];
 
 mixin BrowserSurface {
   Future<Json> read();
+
+  /// Whether the page's own audio or video plays sound now, which keeps a
+  /// hidden tab loaded. Media inside another site's frame is not seen.
+  Future<bool> playing() async => false;
   Future<Json> loadTranscript();
 
   /// The video's play time in seconds, or null when no video content plays.

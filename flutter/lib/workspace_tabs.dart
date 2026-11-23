@@ -6,6 +6,7 @@ import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'split_layout.dart';
+import 'tab_memory.dart';
 import 'workspace.dart';
 import 'workspace_style.dart';
 
@@ -18,6 +19,7 @@ class WorkspaceTabs extends StatefulWidget {
     required this.onClose,
     this.split,
     this.draggable = false,
+    this.memory,
   });
   final List<WorkspaceTab> tabs;
   final WorkspaceTab? selected;
@@ -28,6 +30,9 @@ class WorkspaceTabs extends StatefulWidget {
 
   /// Desktop only: chips can be dragged onto the page to split it.
   final bool draggable;
+
+  /// Desktop only: while tab memory is shown, each page's figure.
+  final MemoryReading? memory;
 
   @override
   State<WorkspaceTabs> createState() => _WorkspaceTabsState();
@@ -382,6 +387,15 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
                                 ),
                               ),
                             ),
+                            if (widget.memory case final reading?
+                                when reading.pages.containsKey(tab.page))
+                              Padding(
+                                padding: const EdgeInsets.only(left: 4),
+                                child: TabMemoryLabel(
+                                  reading: reading,
+                                  page: tab.page!,
+                                ),
+                              ),
                             if (inSplit)
                               Padding(
                                 padding: const EdgeInsets.only(left: 4),

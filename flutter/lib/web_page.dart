@@ -14,6 +14,7 @@ import 'browser_transcript.dart';
 import 'highlight_menu.dart';
 import 'page_surface.dart';
 import 'relay_api.dart';
+import 'tab_memory.dart';
 import 'workspace_style.dart';
 
 // WebView2 (Windows) shows Relay's own HTML at a data: address where other
@@ -150,6 +151,32 @@ Future<Object?> browserChannelCall(MethodCall call) async {
     return null;
   }
   throw MissingPluginException(call.method);
+}
+
+/// Desktop only (macOS). Reads Relay's memory and each page's in one native
+/// call; a page whose web process has not started yet is left out.
+Future<MemoryReading> readMemory(Iterable<PageSurface> pages) async {
+  final views = <int, PageSurface>{
+    for (final page in pages)
+      if (page is _WebPage && !page._disposed)
+        (page.controller.platform as WebKitWebViewController).webViewIdentifier:
+            page,
+  };
+  final reading = await _browserChannel.invokeMapMethod<String, Object?>(
+    'memory',
+    views.keys.toList(),
+  );
+  return (
+    app: reading?['app'] as int? ?? 0,
+    pages: {
+      for (final MapEntry(:key, :value)
+          in (reading?['views'] as Map? ?? const {}).entries)
+        ?views[key]: (
+          process: (value as List)[0] as int,
+          bytes: value[1] as int,
+        ),
+    },
+  );
 }
 
 /// Browser tabs keep the pages they show in the server's browsing history,
@@ -986,6 +1013,16 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     );
     final seconds = double.tryParse('$result');
     return seconds == null || seconds < 0 ? null : seconds;
+  }
+
+  @override
+  Future<bool> playing() async {
+    if (_disposed) return false;
+    final count = await controller.runJavaScriptReturningResult(
+      "[...document.querySelectorAll('video,audio')]"
+      '.filter(m => !m.paused && !m.muted && m.volume > 0).length',
+    );
+    return (double.tryParse('$count') ?? 0) > 0;
   }
 
   @override

@@ -153,6 +153,26 @@ class MainFlutterWindow: NSWindow {
         }
         return
       }
+      if call.method == "memory" {
+        // One call reads Relay and every listed tab, so a reading costs one
+        // lookup and one system call per tab.
+        guard let registry = flutterViewController else {
+          result(nil)
+          return
+        }
+        var views: [NSNumber: [NSNumber]] = [:]
+        for identifier in call.arguments as? [NSNumber] ?? [] {
+          guard let view = FWFWebViewFlutterWKWebViewExternalAPI.webView(
+                  forIdentifier: identifier.int64Value, withPluginRegistry: registry
+                ) else { continue }
+          let process = MainFlutterWindow.webProcess(of: view)
+          if process > 0, let bytes = MainFlutterWindow.footprint(of: process) {
+            views[identifier] = [NSNumber(value: process), NSNumber(value: bytes)]
+          }
+        }
+        result(["app": NSNumber(value: MainFlutterWindow.footprint(of: getpid()) ?? 0), "views": views])
+        return
+      }
       guard call.method == "safariVersion" else {
         result(FlutterMethodNotImplemented)
         return
@@ -194,6 +214,25 @@ class MainFlutterWindow: NSWindow {
         if full { toggleFullScreen(nil) }
       }
     }
+  }
+
+  /// The web view's WebContent process, from WebKit's private
+  /// `_webProcessIdentifier`; 0 before the page's process starts.
+  private static func webProcess(of view: WKWebView) -> pid_t {
+    let key = "_webProcessIdentifier"
+    guard view.responds(to: NSSelectorFromString(key)) else { return 0 }
+    return (view.value(forKey: key) as? NSNumber)?.int32Value ?? 0
+  }
+
+  /// A process's physical footprint in bytes: Activity Monitor's Memory.
+  private static func footprint(of process: pid_t) -> UInt64? {
+    var usage = rusage_info_v2()
+    let status = withUnsafeMutablePointer(to: &usage) {
+      $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {
+        proc_pid_rusage(process, RUSAGE_INFO_V2, $0)
+      }
+    }
+    return status == 0 ? usage.ri_phys_footprint : nil
   }
 
   // Browser popups never outlive the window whose tabs opened them.

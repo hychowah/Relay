@@ -28,6 +28,7 @@ import 'page_surface.dart';
 import 'region_capture.dart';
 import 'split_layout.dart';
 import 'stored_data.dart';
+import 'tab_memory.dart';
 import 'window_capture.dart';
 import 'bug_reports.dart';
 import 'capture_flight.dart';
@@ -88,6 +89,10 @@ Future<void> main() async {
     saveNewestTabFirst: (value) async {
       await prefs.setBool('newestTabFirst', value);
     },
+    // Desktop only.
+    unloadAfter: Platform.isMacOS || Platform.isWindows
+        ? const Duration(minutes: 30)
+        : null,
   );
   final connection = BrowserConnection(
     api.origin,
@@ -290,6 +295,11 @@ class _RelayShellState extends State<RelayShell> {
   BrowserSurface? onScreen;
   // The conversation last opened on another device opens here too.
   late final AppLifecycleListener _lifecycle;
+  // Desktop only (macOS).
+  late final tabMemory = TabMemory(
+    readMemory,
+    () => [for (final tab in w.tabs) ?tab.page],
+  );
 
   @override
   void initState() {
@@ -328,6 +338,7 @@ class _RelayShellState extends State<RelayShell> {
   @override
   void dispose() {
     _lifecycle.dispose();
+    tabMemory.dispose();
     saveTimer?.cancel();
     unawaited(widget.saveDraft(draft.text));
     draft.dispose();
@@ -1404,17 +1415,21 @@ class _RelayShellState extends State<RelayShell> {
               final split = MediaQuery.sizeOf(context).width >= 900
                   ? w.shownSplit
                   : null;
-              return WorkspaceTabs(
-                tabs: List.of(w.tabs),
-                selected: chatOnly ? null : split ?? w.active,
-                split: split?.layout.tabs,
-                draggable: MediaQuery.sizeOf(context).width >= 900,
-                onSelect: (tab) {
-                  w.recorder.action('select tab', {'tab': tab.title});
-                  setState(() => chatOnly = false);
-                  w.select(tab, alone: true, opened: true);
-                },
-                onClose: w.closeTab,
+              return ValueListenableBuilder(
+                valueListenable: tabMemory,
+                builder: (context, memory, _) => WorkspaceTabs(
+                  tabs: List.of(w.tabs),
+                  selected: chatOnly ? null : split ?? w.active,
+                  split: split?.layout.tabs,
+                  draggable: MediaQuery.sizeOf(context).width >= 900,
+                  memory: memory,
+                  onSelect: (tab) {
+                    w.recorder.action('select tab', {'tab': tab.title});
+                    setState(() => chatOnly = false);
+                    w.select(tab, alone: true, opened: true);
+                  },
+                  onClose: w.closeTab,
+                ),
               );
             },
           ),
@@ -1518,6 +1533,12 @@ class _RelayShellState extends State<RelayShell> {
             ),
             const MenuLabel('DEVELOPMENT'),
             _menuItem('reports', 'Bug reports', Icons.bug_report_outlined),
+            if (Platform.isMacOS)
+              CheckboxMenuButton(
+                value: tabMemory.on,
+                onChanged: (value) => setState(() => tabMemory.show(value!)),
+                child: const Text('Show tab memory'),
+              ),
           ],
         ),
       ],

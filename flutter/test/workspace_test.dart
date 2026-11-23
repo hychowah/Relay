@@ -81,6 +81,9 @@ class FakePage extends PageSurface with BrowserSurface {
   Future<Uint8List> snapshot() async => frame!;
   @override
   Future<Json> read() async => {'text': 'Desk: 150 by 80 cm', 'url': url};
+  bool sound = false;
+  @override
+  Future<bool> playing() async => sound;
   @override
   Future<Json> loadTranscript() async {
     transcriptLoads++;
@@ -134,7 +137,7 @@ class FakePage extends PageSurface with BrowserSurface {
 }
 
 class Fixture {
-  Fixture({Json? session, bool newestTabFirst = false}) {
+  Fixture({Json? session, bool newestTabFirst = false, Duration? unloadAfter}) {
     w = Workspace(
       api: RelayApi(
         Uri.parse('http://localhost:3250'),
@@ -232,6 +235,7 @@ class Fixture {
       saveConversation: (_) async {},
       newestTabFirst: newestTabFirst,
       saveNewestTabFirst: (value) async => savedNewestFirst.add(value),
+      unloadAfter: unloadAfter,
     );
   }
   final savedNewestFirst = <bool>[];
@@ -888,6 +892,49 @@ void main() {
     expect((f.w.active!.page as FakePage).navigated, [
       'restore https://example.com/desk',
     ]);
+  });
+  testWidgets('a Browser tab off screen for 30 minutes unloads until shown', (
+    tester,
+  ) async {
+    final f = Fixture(unloadAfter: const Duration(minutes: 30));
+    addTearDown(f.w.dispose);
+    await f.w.loadConfig();
+    final reading = await f.w.openApp(f.w.apps[0]);
+    final listening = await f.w.openApp(f.w.apps[0]);
+    (listening.page as FakePage).sound = true;
+    final room = await f.w.openApp(f.w.apps[1]);
+    final first = reading.page as FakePage;
+
+    await tester.pump(const Duration(minutes: 29));
+    expect(reading.page, same(first));
+    await tester.pump(const Duration(minutes: 2));
+    expect((reading.page, first.disposed), (null, true));
+    expect(reading.unloaded, (
+      url: 'https://example.com/desk',
+      title: 'Browser',
+    ));
+    expect(reading.title, 'Browser');
+    expect(listening.page, isNotNull, reason: 'It plays sound.');
+    expect(room.page, isNotNull, reason: 'App tabs stay loaded.');
+    expect(f.w.session()['tabs'][0]['url'], 'https://example.com/desk');
+
+    // The agent reads it off screen; it unloads again, and a click loads it.
+    await f.w.browserTab(reading.id);
+    expect(f.w.active, same(room));
+    expect((reading.page as FakePage).navigated, [
+      'restore https://example.com/desk',
+    ]);
+    await tester.pump(const Duration(minutes: 31));
+    expect(reading.page, isNull);
+    f.w.select(reading);
+    await tester.pump();
+    expect((reading.page as FakePage).navigated, [
+      'restore https://example.com/desk',
+    ]);
+    // Shown, it stays loaded.
+    await tester.pump(const Duration(minutes: 40));
+    expect(reading.page, isNotNull);
+    expect(room.page, isNotNull);
   });
   test('a split is its own tab whose panes nest, move and leave', () async {
     final f = Fixture();

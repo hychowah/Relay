@@ -12,7 +12,7 @@ class BrowserConnection {
   BrowserConnection(this.origin, this.sessionId, this.browser, this.changed);
   final Uri origin;
   final String sessionId;
-  final BrowserSurface Function(String tabId) browser;
+  final Future<BrowserSurface> Function(String tabId) browser;
   final void Function(bool) changed;
   WebSocket? _socket;
   Timer? _retry;
@@ -43,7 +43,7 @@ class BrowserConnection {
                 request['tabId'] is! String) {
               return;
             }
-            final tab = browser(request['tabId'] as String);
+            final tab = await browser(request['tabId'] as String);
             final data = request['type'] == 'read'
                 ? await tab.read()
                 : transcriptPage(

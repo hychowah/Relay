@@ -104,8 +104,8 @@ and 3 wait for that.
    Windows.
 2. Ask the user how old device cards go away: a device that reinstalls gets a
    new id, and its old tabs stay on the server, outside Stored data.
-3. User trial on Windows: chat, each app, a page confirm dialog and the
-   unverified items above. Form sign-ins that post fail while the adapter sets
+3. User trial on Windows: chat, each app, a page confirm dialog, a Browser
+   tab unloading after 30 minutes off screen and the unverified items above. Form sign-ins that post fail while the adapter sets
    the package's check. Without it the package does not restart loads, so posts
    should work, and only the second check would guard addresses; then a refused
    page would load and might show until it is replaced. Neither is measured.

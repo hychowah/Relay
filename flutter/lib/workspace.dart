@@ -25,7 +25,14 @@ class WorkspaceTab {
   Json? report;
   String? error;
   final bool isBrowser;
-  String get title => page?.title ?? name;
+
+  /// Desktop only. A Browser tab unloaded to free its memory keeps its page's
+  /// address and title here; its [page] is null until it shows again.
+  ({String url, String title})? unloaded;
+
+  /// How long the tab has been off screen, as the unload check counts it.
+  Duration hidden = Duration.zero;
+  String get title => page?.title ?? unloaded?.title ?? name;
 }
 
 class Workspace extends ChangeNotifier {
@@ -39,9 +46,25 @@ class Workspace extends ChangeNotifier {
     required this.saveConversation,
     this.newestTabFirst = false,
     this.saveNewestTabFirst,
+    this.unloadAfter,
   }) {
     api.recorder = recorder;
+    if (unloadAfter case final after?) {
+      final step = after < const Duration(minutes: 1)
+          ? after
+          : const Duration(minutes: 1);
+      _unloadTimer = Timer.periodic(
+        step,
+        (_) => unawaited(_unloadHidden(step)),
+      );
+    }
   }
+
+  /// Desktop only: a Browser tab off screen this long unloads to free its
+  /// memory and loads again when shown. Null keeps every tab loaded.
+  final Duration? unloadAfter;
+  Timer? _unloadTimer;
+  bool _unloading = false;
   final recorder = BugRecorder();
   Json? pendingSession;
   final Future<void> Function(Json)? storeSession;
@@ -257,6 +280,68 @@ class Workspace extends ChangeNotifier {
     final token = active?.token ?? tab.token;
     active = tab;
     tab.token = manual ? _uuid.v4() : token;
+    for (final shown in _shown) {
+      shown.hidden = Duration.zero;
+      if (shown.unloaded != null) unawaited(_reload(shown));
+    }
+    changed();
+  }
+
+  List<WorkspaceTab> get _shown => shownSplit?.layout.tabs ?? [?active];
+
+  /// Whether [tab] should unload to free memory: a loaded Browser tab off
+  /// screen for [unloadAfter]. The rule is kept here alone so that a
+  /// different one can replace it.
+  bool _shouldUnload(WorkspaceTab tab) =>
+      tab.isBrowser &&
+      tab.page != null &&
+      !_shown.contains(tab) &&
+      tab.hidden >= unloadAfter!;
+
+  /// Adds [step] to each off-screen tab's hidden time and unloads the tabs
+  /// [_shouldUnload] picks, except one playing sound. Time the computer
+  /// sleeps does not count.
+  Future<void> _unloadHidden(Duration step) async {
+    if (_unloading || _disposed) return;
+    _unloading = true;
+    try {
+      final shown = _shown;
+      for (final tab in tabs) {
+        tab.hidden = shown.contains(tab) ? Duration.zero : tab.hidden + step;
+      }
+      for (final tab in tabs.where(_shouldUnload).toList()) {
+        final page = tab.page!;
+        final playing = await page.browser!
+            .playing()
+            .timeout(const Duration(seconds: 2))
+            .catchError((_) => false);
+        // The user may have shown or closed the tab meanwhile.
+        if (playing || tab.page != page || !_shouldUnload(tab)) continue;
+        recorder.action('unload tab', {'tab': tab.title});
+        tab.unloaded = (url: page.url, title: page.title);
+        tab.page = null;
+        page.dispose();
+        changed();
+      }
+    } finally {
+      _unloading = false;
+    }
+  }
+
+  /// Loads an unloaded tab's page again at its address. Like a restore, the
+  /// page is not counted as a new visit.
+  Future<void> _reload(WorkspaceTab tab) async {
+    final unloaded = tab.unloaded!;
+    tab.unloaded = null;
+    tab.hidden = Duration.zero;
+    try {
+      if (!await _loadPage(tab)) return;
+      if (unloaded.url != 'about:blank') {
+        await tab.page!.browser!.navigate(unloaded.url, restoring: true);
+      }
+    } catch (e) {
+      tab.error = e.toString();
+    }
     changed();
   }
 
@@ -544,12 +629,11 @@ class Workspace extends ChangeNotifier {
     changed();
   }
 
-  BrowserSurface browserTab(String tabId) {
-    final browser = tabs
-        .where((tab) => tab.id == tabId)
-        .firstOrNull
-        ?.page
-        ?.browser;
+  /// An unloaded tab loads again to answer, off screen.
+  Future<BrowserSurface> browserTab(String tabId) async {
+    final tab = tabs.where((tab) => tab.id == tabId).firstOrNull;
+    if (tab?.unloaded != null) await _reload(tab!);
+    final browser = tab?.page?.browser;
     if (browser == null) {
       throw StateError('The requested browser tab is closed.');
     }
@@ -916,7 +1000,7 @@ class Workspace extends ChangeNotifier {
         else
           {
             'appId': tab.appId,
-            'url': tab.page?.url,
+            'url': tab.page?.url ?? tab.unloaded?.url,
             'source': tab.report?['source'],
             'context': _viewIntent(tab.page?.context),
           },
@@ -1109,6 +1193,7 @@ class Workspace extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _poll?.cancel();
+    _unloadTimer?.cancel();
     for (final tab in tabs) {
       tab.page?.dispose();
     }

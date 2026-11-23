@@ -230,11 +230,11 @@ real WKWebViews.
    conversation on the UI thread. In `Workspace._refresh`, skip the decode and
    `changed()` when the snapshot body is unchanged, and decode large bodies off
    the UI isolate. Check with `npm run perf:ui` and `npm run perf:stress`.
-17. One page of the installed app reached 1.5 GB and went away after a restart.
-   If a page grows like that again, find it by closing tabs one at a time while
-   running `npm run perf:mem`. If it is an app page, the fix belongs in that
-   app's repository. If it is an outside site, whether Relay unloads hidden tabs
-   under memory pressure is a product decision for the user.
+17. A hidden Figma tab held 1.1 GB on 2026-11-23, mostly drawing memory;
+   hiding frees little. The user chose to unload Browser tabs after 30 minutes
+   off screen, and may later let the model choose by recent browsing. Check on
+   the Mac: a hidden page unloads and reloads at its address, and **Show tab
+   memory** figures change as tabs close.
 18. On the Mac, try YouTube fullscreen alone, in a split pane and embedded in
    another site, then leave macOS fullscreen by hand: the tab strip and chat
    must return. A video in a sign-in popup must fill only the popup; a popup
