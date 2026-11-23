@@ -101,9 +101,12 @@ Flutter backend to that file's path:
 
 `id` uses lowercase letters, digits, `-` and `_`; `name` is shown on the
 screen; `unit` is the user unit Relay controls. A request names only a server
-id, so the screen can act only on units the file lists. Do not
-list Relay's own units (its backend or web page): Relay controls only what the
-file names. A unit without an `[Install]` section cannot start with the
+id, so the screen can act only on units the file lists. These requests must
+name the backend's own address (`127.0.0.1:3250`, `localhost:3250` or
+`FLUTTER_RELAY_ORIGIN`), so a page that points its name at Relay (DNS
+rebinding) is refused. Do not list Relay's own backend or web page units:
+Stop would end the backend mid-request, and the client could not start it
+again. A unit without an `[Install]` section cannot start with the
 computer, and its switch shows as not available.
 
 The file is read on every request, so edits apply at once. Without

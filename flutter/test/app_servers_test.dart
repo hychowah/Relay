@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -9,15 +10,20 @@ import 'package:relay_flutter/relay_api.dart';
 
 /// A Relay service with two servers: a stopped one whose start can be made
 /// to fail, and a running one that cannot start with the computer. [calls]
-/// lists the changes and log reads, [listReads] counts list reads, and
-/// [fileError] makes the list fail.
+/// lists the changes and log reads, [listReads] counts list reads,
+/// [fileError] makes the list fail, [noRoute] answers it as an older backend
+/// does, and [holdList] holds list replies until it completes.
 ({
   RelayApi api,
   List<String> calls,
   int Function() listReads,
   void Function(String?) failStart,
 })
-fakeServers({String? fileError}) {
+fakeServers({
+  String? fileError,
+  bool noRoute = false,
+  Completer<void>? holdList,
+}) {
   final servers = <String, Json>{
     'ticker': {
       'id': 'ticker',
@@ -43,7 +49,13 @@ fakeServers({String? fileError}) {
       if (request.method != 'GET' || path.last == 'logs') {
         calls.add('${request.method} ${request.url.path}');
       }
-      if (path.length == 2) listReads++;
+      if (path.length == 2) {
+        listReads++;
+        await holdList?.future;
+      }
+      if (path.length == 2 && noRoute) {
+        return http.Response('404 Not Found', 404);
+      }
       if (path.length == 2 && fileError != null) {
         return http.Response(jsonEncode({'error': fileError}), 500);
       }
@@ -165,6 +177,37 @@ void main() {
       find.text('The servers file is not valid: server "x" needs a name.'),
       findsOneWidget,
     );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a backend without app servers says so and stops asking', (
+    tester,
+  ) async {
+    final fake = fakeServers(noRoute: true);
+    await tester.pumpWidget(MaterialApp(home: AppServersDialog(api: fake.api)));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('This Relay backend does not offer app servers yet.'),
+      findsOneWidget,
+    );
+    await tester.pump(appServersRefresh * 2);
+    expect(fake.listReads(), 1);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a refresh waits for the list read still running', (
+    tester,
+  ) async {
+    final hold = Completer<void>();
+    final fake = fakeServers(holdList: hold);
+    await tester.pumpWidget(MaterialApp(home: AppServersDialog(api: fake.api)));
+    await tester.pump(appServersRefresh * 2);
+    expect(fake.listReads(), 1);
+    hold.complete();
+    await tester.pump();
+    await tester.pump(appServersRefresh);
+    expect(fake.listReads(), 2);
+    expect(find.text('Ticker'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 }

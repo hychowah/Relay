@@ -33,12 +33,16 @@ class _AppServersDialogState extends State<AppServersDialog> {
   Json? logsFor;
   String? logs;
   Timer? timer, logsTimer;
+  // A timer tick is skipped while any read of its kind is running.
+  int listing = 0, readingLogs = 0;
 
   @override
   void initState() {
     super.initState();
     unawaited(load());
-    timer = Timer.periodic(appServersRefresh, (_) => unawaited(load()));
+    timer = Timer.periodic(appServersRefresh, (_) {
+      if (listing == 0) unawaited(load());
+    });
   }
 
   @override
@@ -49,6 +53,7 @@ class _AppServersDialogState extends State<AppServersDialog> {
   }
 
   Future<void> load() async {
+    listing++;
     try {
       final loaded = await widget.api.appServers();
       if (!mounted) return;
@@ -56,8 +61,20 @@ class _AppServersDialogState extends State<AppServersDialog> {
         servers = loaded;
         readError = null;
       });
+    } on RelayApiException catch (e) {
+      // An older backend has no such route; asking again will not help.
+      if (e.status == 404) timer?.cancel();
+      if (mounted) {
+        setState(
+          () => readError = e.status == 404
+              ? 'This Relay backend does not offer app servers yet.'
+              : e.toString(),
+        );
+      }
     } catch (e) {
       if (mounted) setState(() => readError = e.toString());
+    } finally {
+      listing--;
     }
   }
 
@@ -80,6 +97,7 @@ class _AppServersDialogState extends State<AppServersDialog> {
   Future<void> loadLogs() async {
     final shown = logsFor;
     if (shown == null) return;
+    readingLogs++;
     try {
       final text = await widget.api.appServerLogs(shown['id'] as String);
       if (mounted && shown == logsFor) {
@@ -90,6 +108,8 @@ class _AppServersDialogState extends State<AppServersDialog> {
       }
     } catch (e) {
       if (mounted && shown == logsFor) setState(() => logsError = e.toString());
+    } finally {
+      readingLogs--;
     }
   }
 
@@ -102,10 +122,9 @@ class _AppServersDialogState extends State<AppServersDialog> {
     });
     if (server == null) return;
     unawaited(loadLogs());
-    logsTimer = Timer.periodic(
-      appServerLogsRefresh,
-      (_) => unawaited(loadLogs()),
-    );
+    logsTimer = Timer.periodic(appServerLogsRefresh, (_) {
+      if (readingLogs == 0) unawaited(loadLogs());
+    });
   }
 
   Widget _stateIcon(String? state) => switch (state) {

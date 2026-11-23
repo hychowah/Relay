@@ -35,7 +35,7 @@ Typical uses:
 | S07 | An app that already has its own service is named in that file and controlled as it is. Relay does not rewrite that service. |
 | S08 | When an app's tab cannot load, it offers a button that opens the App servers screen. |
 | S09 | The agent can see whether a managed app is running. To start one it puts a Start button in chat; nothing starts until the user presses it. The agent cannot stop or restart apps. |
-| S10 | Apps on other machines and apps not named in the settings file show no controls. Relay never controls its own backend or web page services; the adapters and coding app are managed apps. |
+| S10 | Relay controls only units the settings file lists; apps on other machines and unlisted apps show no controls. The file must not list Relay's own backend or web page units: Stop would end the backend mid-request, and the client could not start it again. The adapters and coding app are managed apps. |
 
 User decisions of 2026-11-22: start commands are set in the private file only
 (S06), the agent may start an app only with the user's press (S09), and all
@@ -137,6 +137,8 @@ The servers file format and the screen are in the
 - Routes under `/api/app-servers`: list; `:id/start|stop|restart`;
   `PUT :id/auto-start`; `:id/logs`. Requests carry only a server id.
   systemctl and journalctl run without a shell behind one runner seam.
+- Every route refuses a request whose Host is not one of Relay's own
+  addresses, against DNS rebinding; changes must be sent as JSON (415).
 - A start first clears that unit's failed state and counts only if the
   server is still up a second later; otherwise the reply is a failure with
   the reason.
@@ -151,8 +153,9 @@ Checked on the reworked code:
   `flutter analyze`, `flutter test` and `python3 tools/check_records.py`.
   The app server tests cover entry and unit-name checks, reading on every
   request, empty and broken files, state mapping, real-failure reporting,
-  static auto-start, logs, the screen's refreshes and the App servers button
-  in a tab that cannot load.
+  static auto-start, logs, the Host check and the 415 rule, bare template
+  units, an older backend's 404, refreshes skipped while a read runs, and the
+  App servers button in a tab that cannot load.
 - Manual real-systemd check on WSL, with a scratch backend on a free port, a
   temporary data dir and two hand-made temporary units: no file gave an empty
   list; an invalid file gave its reason (500); start, logs, restart and stop
@@ -164,6 +167,10 @@ Checked on the reworked code:
 Enable and disable against a real unit were checked only in the first build,
 before this rework, and here with the fake runner. Not yet verified: the Mac
 run and the backend under the live `relay-app` service.
+
+Limit: each systemctl or journalctl call has its own 15-second limit, so a
+start can outlast the client's 20 seconds; the client then shows a timeout
+while systemd carries on, and the next list read shows the real state.
 
 ## Next
 

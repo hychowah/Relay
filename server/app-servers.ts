@@ -15,8 +15,11 @@ export interface RunResult { ok: boolean; stdout: string; stderr: string; timedO
 /** The one way this module reaches the host, so tests use a fake. */
 export type Run = (command: "systemctl" | "journalctl", args: string[]) => Promise<RunResult>;
 
-// Below the Flutter client's 20-second request limit. A job that outlasts it
+// Each systemctl or journalctl call has its own limit. A job that outlasts it
 // continues in the service manager and the reply reports its current state.
+// A start makes several calls and waits a second, so it can outlast the
+// client's 20-second limit: the client then shows a timeout while systemd
+// carries on, and the next list read shows the real state.
 const runTimeout = 15_000;
 const runCommand: Run = (command, args) => new Promise((resolve) =>
   execFile(command, args, { encoding: "utf8", timeout: runTimeout, maxBuffer: 8 << 20 }, (error, stdout, stderr) =>
@@ -38,6 +41,8 @@ export function parseServers(text: string): AppServer[] {
     const { id, name, unit } = entry as Record<string, string>;
     if (typeof name !== "string" || !name.trim()) throw new Error(`server "${id}" needs a name`);
     if (typeof unit !== "string" || !unitPattern.test(unit)) throw new Error(`server "${id}" needs a unit ending in .service`);
+    // A bare template makes systemctl refuse the whole list.
+    if (unit.endsWith("@.service")) throw new Error(`server "${id}": a template unit needs an instance, such as name@instance.service`);
     if (ids.has(id)) throw new Error(`server id "${id}" is used more than once`);
     if (units.has(unit)) throw new Error(`unit ${unit} is named more than once`);
     ids.add(id);
@@ -107,6 +112,8 @@ export function serverStatus(server: AppServer, unit: Properties): ServerStatus 
 }
 
 export interface AppServerOptions {
+  /** Relay's own addresses as host:port; requests naming another Host are refused. */
+  hosts: string[];
   run?: Run;
   /** How long a started server must keep running before the start counts. */
   settleMs?: number;
@@ -116,8 +123,18 @@ export interface AppServerOptions {
  * Adds the App servers routes. The servers file is read on every request.
  * Log lines go only to the client that asked; Relay does not log them.
  */
-export function addAppServers(app: Hono, file: string | undefined, { run = runCommand, settleMs = 1000 }: AppServerOptions = {}) {
+export function addAppServers(app: Hono, file: string | undefined, { hosts, run = runCommand, settleMs = 1000 }: AppServerOptions) {
   const systemctl = (...args: string[]) => run("systemctl", ["--user", ...args]);
+  // A page whose name is rebound to Relay's address would be same-origin and
+  // could control servers (DNS rebinding); its requests carry its own Host.
+  const allowed = new Set(hosts.map((host) => host.toLowerCase()));
+  for (const path of ["/api/app-servers", "/api/app-servers/*"]) {
+    app.use(path, async (c, next) => {
+      if (!allowed.has(c.req.header("host")?.toLowerCase() ?? ""))
+        throw new HTTPException(403, { message: "This address may not control app servers." });
+      await next();
+    });
+  }
 
   function find(id: string) {
     const server = readServers(file).find((server) => server.id === id);
