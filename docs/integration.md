@@ -4,8 +4,10 @@ Relay connects independently hosted apps through a configured HTTP origin.
 Flutter displays the app in an iframe inside a system WebView. The React
 browser fallback displays the app in an iframe. Apps own data, routes, semantic
 targets and animation. Relay owns chat, execution records, device-scoped
-presentation and cancellation. It does not manage app processes or install
-executable app code into the agent harness.
+presentation and cancellation. It does not install executable app code into the
+agent harness. App processes are not part of the protocol; the host's service
+manager can run them, controlled from the optional
+[servers file](../README.md#manage-app-servers).
 
 ## Registration
 

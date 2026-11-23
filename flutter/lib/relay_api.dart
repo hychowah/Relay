@@ -219,6 +219,35 @@ class RelayApi {
     return response.bodyBytes;
   }
 
+  /// The servers named in the host's servers file, each with its state.
+  Future<List<Json>> appServers() async =>
+      (await _request<List>('/api/app-servers')).cast<Json>();
+
+  /// Starts, stops or restarts a server and returns its state afterwards. A
+  /// server that fails, or does not stay running, throws with the reason.
+  Future<Json> controlAppServer(String id, String action) async =>
+      (await _request<Json>(
+            '/api/app-servers/${Uri.encodeComponent(id)}/$action',
+            {},
+          ))['server']
+          as Json;
+  Future<Json> setAppServerAutoStart(String id, bool on) => _request(
+    '/api/app-servers/${Uri.encodeComponent(id)}/auto-start',
+    {'on': on},
+    'PUT',
+  );
+
+  /// A server's recent log lines. They are the app's own, so they stay out
+  /// of bug recordings.
+  Future<String> appServerLogs(String id) async =>
+      (await _request<Json>(
+            '/api/app-servers/${Uri.encodeComponent(id)}/logs',
+            null,
+            null,
+            true,
+          ))['text']
+          as String;
+
   // Per-keystroke history calls would flood bug recordings; recordings leave
   // them out. Recording never holds up or breaks browsing, so failures are
   // ignored.

@@ -7,6 +7,7 @@ import {appRegistry} from '../server/app-registry.ts';
 import {startWorkspace} from '../server/runtime.ts';
 import {createBrowser} from '../server/browser.ts';
 import {ProviderSettingsStore} from '../server/provider-settings.ts';
+import {addAppServers} from '../server/app-servers.ts';
 
 const relayOrigin = process.env.FLUTTER_RELAY_ORIGIN || 'http://127.0.0.1:3250';
 const browser = createBrowser();
@@ -25,6 +26,7 @@ if (process.env.RELAY_PROVIDER_DIR && !existsSync(`${dataDir}/provider.json`)) {
 }
 const workspace = await startWorkspace(dataDir, apps);
 workspace.app.route('/', flutterReleases(`${dataDir}/releases`));
+addAppServers(workspace.app, process.env.RELAY_SERVERS_FILE);
 workspace.app.use('/flutter-host.html', async (c, next) => {c.header('Cache-Control', 'no-store'); await next();});
 workspace.app.use('/*', serveStatic({root:'./public'}));
 const server = serve({fetch:workspace.app.fetch, hostname:'127.0.0.1', port:3250});

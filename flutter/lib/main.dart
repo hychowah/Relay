@@ -19,6 +19,7 @@ import 'conversation_history.dart';
 import 'provider_settings.dart';
 import 'workspace_dialogs.dart';
 import 'app_library.dart';
+import 'app_servers.dart';
 import 'app_updates.dart';
 import 'conversation_view.dart';
 import 'workspace_style.dart';
@@ -513,6 +514,11 @@ class _RelayShellState extends State<RelayShell> {
           await showDialog<void>(
             context: context,
             builder: (_) => BugReportsDialog(api: w.api),
+          );
+        case 'servers':
+          await showDialog<void>(
+            context: context,
+            builder: (_) => AppServersDialog(api: w.api),
           );
         case 'stored':
           await showDialog<void>(
@@ -1149,15 +1155,37 @@ class _RelayShellState extends State<RelayShell> {
             pane(
               tab,
               key: ValueKey('report-${tab.id}'),
-              SavedReport(report: tab.report!, error: tab.error),
+              SavedReport(
+                report: tab.report!,
+                error: tab.error,
+                onServers: tab.isBrowser ? null : () => _menu('servers'),
+              ),
             ),
           if (tab.error != null && tab.report == null)
             pane(
               tab,
               key: ValueKey('error-${tab.id}'),
-              Center(child: Text(tab.error!)),
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: 16,
+                  children: [
+                    Text(tab.error!),
+                    // The app's server may be stopped.
+                    if (!tab.isBrowser)
+                      OutlinedButton.icon(
+                        onPressed: () => _menu('servers'),
+                        icon: const Icon(Icons.dns_outlined),
+                        label: const Text('App servers'),
+                      ),
+                  ],
+                ),
+              ),
             ),
-          if (tab.appId != null && tab.page == null && tab.report == null)
+          if (tab.appId != null &&
+              tab.page == null &&
+              tab.report == null &&
+              tab.error == null)
             pane(
               tab,
               key: ValueKey('loading-${tab.id}'),
@@ -1429,6 +1457,7 @@ class _RelayShellState extends State<RelayShell> {
             _menuItem('library', 'App library', Icons.grid_view_rounded),
             _menuItem('bots', 'Bots', Icons.smart_toy_outlined),
             _menuItem('memory', 'Memory', Icons.bookmarks_outlined),
+            _menuItem('servers', 'App servers', Icons.dns_outlined),
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 5),
               child: Divider(),

@@ -144,7 +144,13 @@ class Fixture {
             return reply({'apps': configApps});
           }
           if (path == '/api/bots') return reply([]);
-          if (path.endsWith('/report')) return reply({'source': deskReport});
+          if (path.endsWith('/report')) {
+            return reply({'source': deskReport, 'sections': []});
+          }
+          if (path == '/api/app-servers') return reply([]);
+          if (path.contains('/view') && appDown) {
+            return http.Response(jsonEncode({'error': 'App is down.'}), 502);
+          }
           if (path.contains('/view')) {
             return reply({
               'url': 'http://localhost:3252/_relay/view?token=x',
@@ -231,7 +237,7 @@ class Fixture {
   String? current, sentTo;
   Completer<void>? holdCurrent;
   List<Json> devices = [];
-  bool offline = false, failRoomRestore = false;
+  bool offline = false, failRoomRestore = false, appDown = false;
   List<Json> configApps = [...apps];
   late Workspace w;
   final pages = <FakePage>[];
@@ -2149,6 +2155,46 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('an app tab that cannot load opens the App servers screen', (
+    tester,
+  ) async {
+    final f = Fixture()..appDown = true;
+    await f.w.start();
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    // The pane for a tab without a page keeps its progress spinner turning,
+    // so these steps pump a fixed time instead of settling.
+    Future<void> settle() async {
+      for (var frame = 0; frame < 5; frame++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+    }
+
+    Future<void> opensServers() async {
+      await tester.tap(find.widgetWithText(OutlinedButton, 'App servers'));
+      await settle();
+      expect(find.textContaining('No app servers are set up'), findsOneWidget);
+      await tester.tap(find.byTooltip('Close app servers'));
+      await settle();
+    }
+
+    await expectLater(f.w.openApp(f.w.apps[1]), throwsA(anything));
+    await settle();
+    expect(find.text('App is down.'), findsOneWidget);
+    await opensServers();
+
+    // A tab opened from a cited source shows the saved evidence instead.
+    await f.w.openSource(deskReport);
+    await settle();
+    expect(find.textContaining('Its app view could not open'), findsOneWidget);
+    await opensServers();
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('desktop and phone picker, retained tabs and chat draft', (
     tester,
