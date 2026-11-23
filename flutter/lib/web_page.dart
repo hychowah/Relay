@@ -1018,6 +1018,13 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   @override
   Future<bool> playing() async {
     if (_disposed) return false;
+    if (Platform.isMacOS) {
+      final playing = await _browserChannel.invokeMethod<bool>(
+        'playing',
+        _webViewId,
+      );
+      if (playing != null) return playing;
+    }
     final count = await controller.runJavaScriptReturningResult(
       "[...document.querySelectorAll('video,audio')]"
       '.filter(m => !m.paused && !m.muted && m.volume > 0).length',

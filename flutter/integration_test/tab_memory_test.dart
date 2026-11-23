@@ -109,6 +109,7 @@ void main() {
     expect(micros, lessThan(5000), reason: 'A reading must stay cheap.');
 
     // Silent looping audio counts as playing sound, so its tab stays loaded.
+    // It is never added to the page, which only WebKit's own flag can see.
     expect(await light.browser!.playing(), isFalse);
     await controller(light).runJavaScript('''
       const wav = new Uint8Array(44 + 8000);
@@ -121,7 +122,6 @@ void main() {
       text(36, 'data'); view.setUint32(40, 8000, true); wav.fill(128, 44);
       const audio = new Audio(URL.createObjectURL(new Blob([wav], {type: 'audio/wav'})));
       audio.loop = true;
-      document.body.append(audio);
       audio.play();
     ''');
     await until(

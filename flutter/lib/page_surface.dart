@@ -79,8 +79,9 @@ const pdfZoomActions = ['zoomOut', 'zoomIn', 'zoomFit'];
 mixin BrowserSurface {
   Future<Json> read();
 
-  /// Whether the page's own audio or video plays sound now, which keeps a
-  /// hidden tab loaded. Media inside another site's frame is not seen.
+  /// Whether the page plays sound now, which keeps a hidden tab loaded. On
+  /// the Mac WebKit answers for the whole page; elsewhere only the audio and
+  /// video elements in the page's own document are seen.
   Future<bool> playing() async => false;
   Future<Json> loadTranscript();
 

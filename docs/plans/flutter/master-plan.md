@@ -230,11 +230,11 @@ real WKWebViews.
    conversation on the UI thread. In `Workspace._refresh`, skip the decode and
    `changed()` when the snapshot body is unchanged, and decode large bodies off
    the UI isolate. Check with `npm run perf:ui` and `npm run perf:stress`.
-17. A hidden Figma tab held 1.1 GB on 2026-11-23, mostly drawing memory;
-   hiding frees little. The user chose to unload Browser tabs after 30 minutes
-   off screen, and may later let the model choose by recent browsing. Check on
-   the Mac: a hidden page unloads and reloads at its address, and **Show tab
-   memory** figures change as tabs close.
+17. A hidden Figma tab held 1.1 GB on 2026-11-23; hiding frees little. The
+   user chose to unload Browser tabs after 30 minutes off screen (a model may
+   choose later), and on 2026-11-23 accepted that this loses unsent typed text
+   and closes the tab's popups. Check on the Mac: a hidden page unloads, its
+   process exits (`npm run perf:mem`), and it reloads at its address.
 18. On the Mac, try YouTube fullscreen alone, in a split pane and embedded in
    another site, then leave macOS fullscreen by hand: the tab strip and chat
    must return. A video in a sign-in popup must fill only the popup; a popup

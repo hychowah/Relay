@@ -27,12 +27,15 @@ class WorkspaceTab {
   final bool isBrowser;
 
   /// Desktop only. A Browser tab unloaded to free its memory keeps its page's
-  /// address and title here; its [page] is null until it shows again.
+  /// address and title here until a reload has loaded the page again.
   ({String url, String title})? unloaded;
+
+  /// The reload of an unloaded tab under way.
+  Future<void>? reloading;
 
   /// How long the tab has been off screen, as the unload check counts it.
   Duration hidden = Duration.zero;
-  String get title => page?.title ?? unloaded?.title ?? name;
+  String get title => unloaded?.title ?? page?.title ?? name;
 }
 
 class Workspace extends ChangeNotifier {
@@ -315,8 +318,15 @@ class Workspace extends ChangeNotifier {
             .playing()
             .timeout(const Duration(seconds: 2))
             .catchError((_) => false);
+        if (playing) {
+          // Its time off screen counts again from when it falls silent.
+          tab.hidden = Duration.zero;
+          continue;
+        }
         // The user may have shown or closed the tab meanwhile.
-        if (playing || tab.page != page || !_shouldUnload(tab)) continue;
+        if (tab.page != page || !tabs.contains(tab) || !_shouldUnload(tab)) {
+          continue;
+        }
         recorder.action('unload tab', {'tab': tab.title});
         tab.unloaded = (url: page.url, title: page.title);
         tab.page = null;
@@ -328,19 +338,30 @@ class Workspace extends ChangeNotifier {
     }
   }
 
-  /// Loads an unloaded tab's page again at its address. Like a restore, the
-  /// page is not counted as a new visit.
-  Future<void> _reload(WorkspaceTab tab) async {
+  /// Loads an unloaded tab's page again at its address; every caller waits
+  /// for the same reload.
+  Future<void> _reload(WorkspaceTab tab) =>
+      tab.reloading ??= _reloadPage(tab)
+          .whenComplete(() => tab.reloading = null);
+
+  /// The tab keeps its address until the page has loaded it. After a failure,
+  /// such as no network just after waking, it stays unloaded with the error,
+  /// so showing it again retries. Like a restore, the page is not counted as
+  /// a new visit.
+  Future<void> _reloadPage(WorkspaceTab tab) async {
     final unloaded = tab.unloaded!;
-    tab.unloaded = null;
     tab.hidden = Duration.zero;
+    tab.error = null;
     try {
-      if (!await _loadPage(tab)) return;
-      if (unloaded.url != 'about:blank') {
+      if (await _loadPage(tab) && unloaded.url != 'about:blank') {
         await tab.page!.browser!.navigate(unloaded.url, restoring: true);
       }
+      tab.unloaded = null;
     } catch (e) {
-      tab.error = e.toString();
+      tab.page?.dispose();
+      tab.page = null;
+      tab.error =
+          'Could not load ${unloaded.url} again: $e\nClick the tab to try again.';
     }
     changed();
   }
@@ -629,13 +650,13 @@ class Workspace extends ChangeNotifier {
     changed();
   }
 
-  /// An unloaded tab loads again to answer, off screen.
+  /// An unloaded tab loads again, off screen, to answer.
   Future<BrowserSurface> browserTab(String tabId) async {
     final tab = tabs.where((tab) => tab.id == tabId).firstOrNull;
     if (tab?.unloaded != null) await _reload(tab!);
     final browser = tab?.page?.browser;
     if (browser == null) {
-      throw StateError('The requested browser tab is closed.');
+      throw StateError(tab?.error ?? 'The requested browser tab is closed.');
     }
     return browser;
   }
@@ -658,6 +679,8 @@ class Workspace extends ChangeNotifier {
     changed();
     try {
       final tab = active;
+      // A tab loading again answers once its own page is back.
+      await tab?.reloading;
       final viewToken = tab?.token;
       final revision = _manualRevision;
       final browser = tab?.page?.browser;
@@ -1000,7 +1023,7 @@ class Workspace extends ChangeNotifier {
         else
           {
             'appId': tab.appId,
-            'url': tab.page?.url ?? tab.unloaded?.url,
+            'url': tab.unloaded?.url ?? tab.page?.url,
             'source': tab.report?['source'],
             'context': _viewIntent(tab.page?.context),
           },

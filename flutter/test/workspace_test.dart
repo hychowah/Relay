@@ -97,8 +97,10 @@ class FakePage extends PageSurface with BrowserSurface {
     return time;
   }
 
+  Object? navigateError;
   @override
   Future<void> navigate(String text, {bool restoring = false}) async {
+    if (navigateError case final error?) throw error;
     navigated.add(restoring ? 'restore $text' : text);
     changed(true);
   }
@@ -229,6 +231,7 @@ class Fixture {
           page.result = {'status': 'failed', 'error': 'Unavailable'};
         }
         page.loading = holdPages;
+        page.navigateError = navigateError;
         pages.add(page);
         return page;
       },
@@ -253,6 +256,7 @@ class Fixture {
   final stored = <Json>[];
   List<Json> commands = [], messages = [], runs = [];
   Completer<void>? holdSnapshot, holdPages;
+  Object? navigateError;
   Json? sent, bugReport;
   // The server's browsing history: its calls, and pages already ranked;
   // null pages stand for an older backend without history.
@@ -918,6 +922,11 @@ void main() {
     expect(room.page, isNotNull, reason: 'App tabs stay loaded.');
     expect(f.w.session()['tabs'][0]['url'], 'https://example.com/desk');
 
+    // Its time off screen counts again from when it falls silent.
+    (listening.page as FakePage).sound = false;
+    await tester.pump(const Duration(minutes: 2));
+    expect(listening.page, isNotNull);
+
     // The agent reads it off screen; it unloads again, and a click loads it.
     await f.w.browserTab(reading.id);
     expect(f.w.active, same(room));
@@ -935,6 +944,50 @@ void main() {
     await tester.pump(const Duration(minutes: 40));
     expect(reading.page, isNotNull);
     expect(room.page, isNotNull);
+    expect(listening.page, isNull);
+  });
+  testWidgets('an unloaded tab keeps its address until it loads again', (
+    tester,
+  ) async {
+    final f = Fixture(unloadAfter: const Duration(minutes: 30));
+    addTearDown(f.w.dispose);
+    await f.w.loadConfig();
+    final reading = await f.w.openApp(f.w.apps[0]);
+    await f.w.openApp(f.w.apps[1]);
+    await tester.pump(const Duration(minutes: 31));
+    expect(reading.page, isNull);
+
+    // Offline just after waking: the tab stays unloaded with the error.
+    f.navigateError = StateError('No network');
+    f.w.select(reading);
+    await tester.pump();
+    expect(reading.page, isNull);
+    expect(reading.error, contains('No network'));
+    expect((reading.unloaded?.url, reading.title), (
+      'https://example.com/desk',
+      'Browser',
+    ));
+    expect(f.w.session()['tabs'][0]['url'], 'https://example.com/desk');
+    await expectLater(
+      f.w.browserTab(reading.id),
+      throwsA(predicate((e) => '$e'.contains('No network'))),
+    );
+
+    // Clicking it again retries; meanwhile the address is still saved, and a
+    // read waits for the page rather than answering from the start page.
+    f.navigateError = null;
+    final hold = f.holdPages = Completer<void>();
+    f.w.select(reading);
+    await tester.pump();
+    expect(reading.error, isNull);
+    expect(f.w.session()['tabs'][0]['url'], 'https://example.com/desk');
+    final read = f.w.browserTab(reading.id);
+    hold.complete();
+    await read;
+    expect(reading.unloaded, isNull);
+    expect((reading.page as FakePage).navigated, [
+      'restore https://example.com/desk',
+    ]);
   });
   test('a split is its own tab whose panes nest, move and leave', () async {
     final f = Fixture();

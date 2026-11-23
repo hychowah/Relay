@@ -153,6 +153,20 @@ class MainFlutterWindow: NSWindow {
         }
         return
       }
+      if call.method == "playing" {
+        // WebKit's private flag behind Safari's sound icon: audible media or
+        // Web Audio in any frame of the page. Nil when WebKit lacks it.
+        let key = "_isPlayingAudio"
+        guard let registry = flutterViewController, let identifier = call.arguments as? NSNumber,
+              let view = FWFWebViewFlutterWKWebViewExternalAPI.webView(
+                forIdentifier: identifier.int64Value, withPluginRegistry: registry
+              ), view.responds(to: NSSelectorFromString(key)) else {
+          result(nil)
+          return
+        }
+        result((view.value(forKey: key) as? NSNumber)?.boolValue)
+        return
+      }
       if call.method == "memory" {
         // One call reads Relay and every listed tab, so a reading costs one
         // lookup and one system call per tab.
