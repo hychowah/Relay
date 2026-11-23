@@ -60,8 +60,10 @@ String? safariUserAgent(String? webKitAgent, String? safariVersion) {
 }
 
 // Main-frame navigation guard only. webview_flutter has no subresource
-// interception, so this is not network isolation.
-Future<Uri> browserUrl(String text) async {
+// interception, so this is not network isolation. A [vpn] tab's names are
+// looked up in WSL, where the Relay backend's proxy applies the same rule;
+// its address literals and localhost, which need no lookup, are checked here.
+Future<Uri> browserUrl(String text, {bool vpn = false}) async {
   final value = text.trim();
   final uri = Uri.parse(
     value.contains('://')
@@ -77,6 +79,22 @@ Future<Uri> browserUrl(String text) async {
       uri.host.isEmpty ||
       uri.userInfo.isNotEmpty) {
     throw Exception('Use a public HTTP or HTTPS website.');
+  }
+  // Browsers read a host that ends in a number as an IPv4 address, also in
+  // spellings such as 127.1, 2130706433 or 0x7f000001; only plain dotted
+  // decimal is accepted, so the rule below sees the address the browser uses.
+  final host = uri.host.endsWith('.')
+      ? uri.host.substring(0, uri.host.length - 1)
+      : uri.host;
+  if (RegExp(
+        r'(^|\.)(\d+|0x[0-9a-f]*)$',
+        caseSensitive: false,
+      ).hasMatch(host) &&
+      !RegExp(r'^(0|[1-9]\d{0,2})(\.(0|[1-9]\d{0,2})){3}$').hasMatch(host)) {
+    throw Exception('Use a public HTTP or HTTPS website.');
+  }
+  if (vpn && InternetAddress.tryParse(host) == null && host != 'localhost') {
+    return uri;
   }
   final addresses = await InternetAddress.lookup(uri.host);
   bool privateAddress(InternetAddress address) {
@@ -106,11 +124,11 @@ Future<Uri> browserUrl(String text) async {
 }
 
 /// Whether a Browser tab or popup may load [url] in its main frame.
-Future<bool> publicPageAllowed(String url) async {
+Future<bool> publicPageAllowed(String url, {bool vpn = false}) async {
   if (url == 'about:blank') return true;
   if (!['https', 'http'].contains(Uri.tryParse(url)?.scheme)) return false;
   try {
-    await browserUrl(url);
+    await browserUrl(url, vpn: vpn);
     return true;
   } catch (_) {
     return false;
@@ -142,7 +160,8 @@ Future<Object?> browserChannelCall(MethodCall call) async {
     return null;
   }
   if (call.method == 'allowPopupPage') {
-    return publicPageAllowed(call.arguments as String);
+    final popup = call.arguments as Map;
+    return publicPageAllowed(popup['url'] as String, vpn: popup['vpn'] == true);
   }
   if (call.method == 'leftScreen') {
     final page = _onScreen;
@@ -323,6 +342,10 @@ abstract class _WebPage extends PageSurface {
   }
 }
 
+/// The WebKit profile (website data store) that all VPN tabs share, apart
+/// from the default one that normal tabs use.
+const _vpnProfile = '836fe52c-c91b-4d73-8100-c001c828f21e';
+
 class _BrowserPage extends _WebPage with BrowserSurface {
   // On macOS WebKit lets scripts open windows without a user action unless
   // told otherwise; Relay keeps WebKit's popup blocker on.
@@ -334,12 +357,17 @@ class _BrowserPage extends _WebPage with BrowserSurface {
             ? WebViewController.fromPlatformCreationParams(
                 WebKitWebViewControllerCreationParams(
                   javaScriptCanOpenWindowsAutomatically: false,
+                  websiteDataStoreIdentifier: spec.vpn ? _vpnProfile : null,
                 ),
               )
             : null,
       ) {
     _initialize();
   }
+  // Desktop (macOS) only; other platforms ignore the flag.
+  bool get _vpn => spec.vpn && Platform.isMacOS;
+  // A VPN tab loads nothing until its route and WebRTC setting are in place.
+  bool _routed = false;
   Completer<void>? _navigation;
   String _title = '', _url = 'about:blank';
   final RelayApi? _records;
@@ -429,6 +457,17 @@ class _BrowserPage extends _WebPage with BrowserSurface {
 
   @override
   Future<void> _load() async {
+    if (_vpn) {
+      // Every load of the VPN profile, popups' too, tunnels through the
+      // tab's Relay backend, which sends it out of WSL through NordVPN.
+      // It also turns WebRTC off (see MainFlutterWindow.swift).
+      await _browserChannel.invokeMethod<void>('vpnProxy', {
+        'view': _webViewId,
+        'host': spec.relayOrigin.host,
+        'port': spec.relayOrigin.port,
+      });
+      _routed = true;
+    }
     if (Platform.isMacOS) {
       final version = await _browserChannel.invokeMethod<String>(
         'safariVersion',
@@ -453,10 +492,12 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     await controller.setNavigationDelegate(
       NavigationDelegate(
         onNavigationRequest: (request) async =>
-            !request.isMainFrame || await publicPageAllowed(request.url)
+            !request.isMainFrame ||
+                await publicPageAllowed(request.url, vpn: _vpn)
             ? NavigationDecision.navigate
             : NavigationDecision.prevent,
         onPageStarted: (url) {
+          if (_disposed) return;
           _nativeSelection = null;
           _menu = null;
           _url = url;
@@ -894,6 +935,22 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     });
   }
 
+  // A VPN tab never falls back to the Mac's own network; a load that fails
+  // or gets no answer says so.
+  static Exception _vpnFailed(String detail) => Exception(
+    'The page did not load through the VPN: $detail '
+    'If no page loads, check NordVPN in WSL.',
+  );
+
+  @override
+  void _resourceError(WebResourceError error) {
+    if (_vpn && error.isForMainFrame == true && error.errorCode != -999) {
+      _fail(_vpnFailed(error.description));
+    } else {
+      super._resourceError(error);
+    }
+  }
+
   @override
   void _fail(Object error) {
     super._fail(error);
@@ -943,6 +1000,14 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   @override
   void dispose() {
     super.dispose();
+    // A load the user has moved past, such as a tab switched to the other
+    // network, ends quietly.
+    if (_navigation?.isCompleted == false) _navigation!.complete();
+    // The closed web view stops its page, with its scripts and connections,
+    // instead of running on until it is freed; its callbacks return early.
+    unawaited(
+      controller.loadRequest(Uri.parse('about:blank')).catchError((_) {}),
+    );
     _pdfPages.removeWhere((_, page) => page == this);
     // Closing the tab closes its popup windows and ends its PDF's fetch.
     if (Platform.isMacOS) {
@@ -1044,15 +1109,20 @@ class _BrowserPage extends _WebPage with BrowserSurface {
 
   @override
   Future<void> navigate(String text, {bool restoring = false}) async {
-    final target = await browserUrl(text);
+    if (_vpn && !_routed) throw _vpnFailed('the tab could not be set up.');
+    final target = await browserUrl(text, vpn: _vpn);
     _restoring = restoring;
     _navigation = Completer<void>();
     await controller.loadRequest(target);
-    await _navigation!.future.timeout(const Duration(seconds: 30));
+    await _navigation!.future.timeout(
+      const Duration(seconds: 30),
+      onTimeout: _vpn ? () => throw _vpnFailed('no answer in 30 s.') : null,
+    );
   }
 
   @override
   Future<void> browserAction(String action) async {
+    if (_vpn && !_routed) throw _vpnFailed('the tab could not be set up.');
     if (action == 'back' && await controller.canGoBack()) {
       await controller.goBack();
     }

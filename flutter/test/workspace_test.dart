@@ -97,10 +97,10 @@ class FakePage extends PageSurface with BrowserSurface {
     return time;
   }
 
-  Object? navigateError;
+  static Object? navigateError;
   @override
   Future<void> navigate(String text, {bool restoring = false}) async {
-    if (navigateError case final error?) throw error;
+    if (navigateError != null) throw navigateError!;
     navigated.add(restoring ? 'restore $text' : text);
     changed(true);
   }
@@ -231,7 +231,6 @@ class Fixture {
           page.result = {'status': 'failed', 'error': 'Unavailable'};
         }
         page.loading = holdPages;
-        page.navigateError = navigateError;
         pages.add(page);
         return page;
       },
@@ -256,7 +255,6 @@ class Fixture {
   final stored = <Json>[];
   List<Json> commands = [], messages = [], runs = [];
   Completer<void>? holdSnapshot, holdPages;
-  Object? navigateError;
   Json? sent, bugReport;
   // The server's browsing history: its calls, and pages already ranked;
   // null pages stand for an older backend without history.
@@ -571,6 +569,46 @@ void main() {
     expect(next.w.tabs.map((tab) => tab.appId), ['room-layout', 'browser']);
     expect(next.w.active!.appId, 'room-layout');
     expect(next.w.pendingSession, isNull);
+  });
+  test('the VPN switch reopens a Browser tab and is saved with it', () async {
+    final first = Fixture();
+    addTearDown(first.w.dispose);
+    await first.w.start();
+    final tab = await first.w.openApp(first.w.apps[0]);
+    final before = tab.page as FakePage;
+    await first.w.toggleVpn();
+    final after = tab.page as FakePage;
+    expect(before.disposed, isTrue);
+    expect(after.spec.vpn, isTrue);
+    expect(after.navigated, ['https://example.com/desk']);
+    expect(first.stored.last['tabs'][0]['vpn'], isTrue);
+    final next = Fixture(
+      session: jsonDecode(jsonEncode(first.stored.last)) as Json,
+    );
+    addTearDown(next.w.dispose);
+    await next.w.start();
+    expect((next.w.active!.page as FakePage).spec.vpn, isTrue);
+    await next.w.toggleVpn();
+    expect(next.stored.last['tabs'][0], isNot(contains('vpn')));
+  });
+  test('a VPN tab that cannot be restored stays, with its error', () async {
+    final first = Fixture();
+    addTearDown(first.w.dispose);
+    await first.w.start();
+    await first.w.openApp(first.w.apps[0]);
+    await first.w.toggleVpn();
+    first.w.newTab();
+    await first.w.openApp(first.w.apps[0]);
+    FakePage.navigateError = StateError('The VPN route failed.');
+    addTearDown(() => FakePage.navigateError = null);
+    final next = Fixture(
+      session: jsonDecode(jsonEncode(first.stored.last)) as Json,
+    );
+    addTearDown(next.w.dispose);
+    await next.w.start();
+    // The normal tab closes as before.
+    expect(next.w.tabs.map((tab) => tab.vpn), [true]);
+    expect(next.w.error, contains('The VPN route failed.'));
   });
   test(
     'newest tab first moves opened tabs left and restores saved order',
@@ -958,7 +996,8 @@ void main() {
     expect(reading.page, isNull);
 
     // Offline just after waking: the tab stays unloaded with the error.
-    f.navigateError = StateError('No network');
+    FakePage.navigateError = StateError('No network');
+    addTearDown(() => FakePage.navigateError = null);
     f.w.select(reading);
     await tester.pump();
     expect(reading.page, isNull);
@@ -975,7 +1014,7 @@ void main() {
 
     // Clicking it again retries; meanwhile the address is still saved, and a
     // read waits for the page rather than answering from the start page.
-    f.navigateError = null;
+    FakePage.navigateError = null;
     final hold = f.holdPages = Completer<void>();
     f.w.select(reading);
     await tester.pump();

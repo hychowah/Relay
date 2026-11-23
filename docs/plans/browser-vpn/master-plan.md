@@ -54,7 +54,7 @@ reach WSL's local services through the tab.
 **Privacy.** The proxy does not log destinations; browsing addresses stay out
 of Relay's logs.
 
-**Separate profile per tab (Mac).** The web view package
+**Separate profile for VPN tabs (Mac).** The web view package
 `webview_flutter_wkwebview` 3.27.2, the latest release, gives every web view
 the one shared default profile, and WebKit fixes a view's profile when the
 view is created. Relay therefore keeps a patched copy of the package in
@@ -66,8 +66,9 @@ package gains the option.
 
 **Mac name lookups.** The Browser's address rule (`browserUrl` in
 `web_page.dart`) looks up each page's host on the Mac before loading it. In a
-VPN tab and its popups that lookup is skipped, keeping the scheme and
-no-credentials checks; the backend's address rule guards those tabs instead.
+VPN tab and its popups that lookup is skipped, keeping the scheme,
+no-credentials, address-literal and `localhost` checks; only names are left
+to the backend's address rule.
 
 **Proxy setting (Mac).** Relay's Swift code sets the VPN profile's
 `proxyConfigurations` to an HTTP CONNECT proxy at the tab's Relay host and
@@ -102,23 +103,25 @@ Prerequisite: Phase 1 deployed.
 
 Deliver the patched package, the profile and proxy setting, the switch in
 the Browser address bar (macOS only), the saved flag (`vpn` in the tab's
-session entry), the proxy for PDF downloads, the skipped Mac lookup, and the
-V03 load-failure message. Document the switch beside the other Browser
-behaviour in `flutter/README.md`, with the patched package and the macOS 14
-minimum.
+session entry), the proxy for PDF downloads, the skipped Mac lookup, WebRTC
+turned off in VPN tabs (the tunnel carries only TCP, so WebRTC's UDP would
+show the Mac's address), and the V03 load-failure message. Document the
+switch beside the other Browser behaviour in `flutter/README.md`, with the
+patched package and the macOS 14 minimum.
 
 Done when:
 
 - `flutter analyze` and `flutter test` pass; a test shows a saved session
   keeps a tab's VPN flag.
-- One Mac run of about 10 minutes, a second only if the first is
-  inconclusive: an IP-check page shows the home address in a normal tab and
-  WSL's address in a VPN tab; a popup from the VPN tab shows WSL's address; a
-  PDF opens in a VPN tab; switching a tab both ways changes its address on
-  the IP-check page; after an app restart the tab is still VPN and still
-  signed in; a WebRTC leak-test page in a VPN tab shows no home address.
-- If WebRTC shows the home address, turn WebRTC off in VPN tabs with a
-  document-start script and recheck it.
+- One run of `npm run test:mac -- browser_vpn_test.dart` on the MacBook
+  (about 2 minutes, a second only if inconclusive): a VPN tab's IP-check
+  address, over https and plain http, differs from a normal tab's; WebRTC
+  is gone from the VPN tab, even in a fresh frame, but not from a normal
+  one; a closed page's web view stops at once; and a VPN tab whose setup
+  failed loads nothing.
+- By hand in the published test build: switching a tab both ways, a popup,
+  a PDF and a plain `http://` page from a VPN tab, and a VPN tab still signed
+  in after a restart. Until then they are unverified.
 - The VPN-down message (V03) is checked by briefly disconnecting NordVPN in
   WSL, with the user's OK at the time; otherwise it stays unverified.
 
@@ -141,9 +144,52 @@ judged by the IPv4 ranges they carry or refused.
   for the proxy's lookups but the home provider's for WSL's own resolver.
   The output logged no destinations.
 
+Deployed 2026-11-23: `relay-app` runs `main` `78b5b35`, with the user's
+word. On the live service with the real check: loopback, the tailnet address
+and a home-network address got 403, a malformed target 400, a public site
+200; through the proxy an IP-check service showed WSL's VPN address, not
+Windows' home one; a tunnel from Windows through the tailnet worked; the
+journal shows no destinations.
+
 Unverified: the real check's 503 while NordVPN is down, the 502 when a
 target refuses the connection, and that shutdown closes open tunnels (added
 after a bug review; checked in the code only).
+
+## Phase 2 evidence (2026-11-23)
+
+Built on branch `worktree-agent-a37299c0db1d05c50`. WebRTC is off through
+WebKit's private `_setPeerConnectionEnabled:`; a script that deleted
+`RTCPeerConnection` was dropped because a fresh frame or popup gets it back.
+
+- `flutter analyze` clean, `flutter test` 95 pass (VPN switch and saved
+  flag, a VPN tab kept after a failed restore, the VPN address rule).
+- Second Mac: the client built and `popup_windows_test.dart` passed before
+  the WebRTC change; a Swift script there showed the private setting, set
+  on an existing view before its first load, removes WebRTC from the page
+  and a fresh frame.
+- MacBook, one run of `browser_vpn_test.dart` against the deployed backend
+  (this build included the last Swift change): passed. A VPN tab's address
+  differed from a normal tab's; WebRTC was gone from the VPN tab, fresh
+  frame included, and present in a normal tab. Nothing was left on the Mac.
+- Test build `browser-vpn` published from `f5634ba`.
+
+An orchestrator review of that build found three gaps, since fixed: a VPN
+tab whose native setup failed could still load (now every load, Reload,
+Back and Forward refuses until the route is set, and Swift checks the WebRTC
+setting before setting anything); other spellings of an IPv4 address, such
+as `127.1` or `2130706433`, passed the Mac check (now only plain dotted
+decimal is accepted); and a switched or closed page's web view ran on until
+freed (now it loads `about:blank` at once). The failure message no longer
+blames NordVPN for every error.
+
+After the fixes, one MacBook run of `browser_vpn_test.dart` passed: the VPN
+tab's address differed from a normal tab's over https and plain http,
+WebRTC was gone from it, a closed page was blank at once, and a VPN tab
+whose setup was made to fail loaded nothing. Two earlier runs that day are
+not evidence: one lost its output, and one showed that swapping in an empty
+navigation delegate before loading an empty page left the page running.
+Nothing was left on the Mac.
+Test build `browser-vpn` was republished from `9227f06`, with the fixes.
 
 ## Limits
 
@@ -152,20 +198,35 @@ after a bug review; checked in the code only).
   boundary (it has no sign-in either).
 - NordVPN's Kill Switch is off in WSL. The check runs before each tunnel, so a
   VPN drop during an open connection can send traffic out over the normal
-  network. Turning the Kill
-  Switch on would close this; that is the user's choice and outside this plan.
-- Unverified until the Mac run: that WebKit applies a proxy set on the
-  profile after the view exists but before its first load; that plain
-  `http://` pages also tunnel; and that popups inherit the profile. If the
-  first fails, set the proxy inside the patched creation option instead.
+  network. Turning the Kill Switch on would close this; that is the user's
+  choice and outside this plan.
+- WebRTC is off in VPN tabs, so video calls do not work there.
 - `RELAY_VPN_CHECK=off` turns the proxy into a plain relay over WSL's
   network. The live service does not set it.
 - A tunnel tries only the first address of a name, so a dead first address
   gives 502.
+- Cloudflare and Google, the proxy's name servers, see the names VPN tabs
+  visit, from the VPN's address. If NordVPN drops between the check and a
+  lookup, that lookup leaves over the home network (the Kill Switch limit).
+- A switch in the first seconds, while a restored or new tab's first page
+  is still getting ready, can leave the restore or opening to time out after
+  20 s.
+- After a VPN tab's first page, a failing link, Reload or redirect shows no
+  message, as in normal tabs.
+- A VPN tab that fails to load at start stays open but may come back
+  blank; its address then has to be typed again.
+- The macOS minimum is now 14 and the update feed does not check it; the
+  user's Macs run 15 and later.
 - The Windows client ignores the saved flag, so a copy of Mac tabs opened
   there loads VPN tabs over Windows' network.
 
 ## Next
 
-1. Merge Phase 1 and deploy `relay-app`; the restart stops in-flight replies.
-2. Phase 2 (VPN tabs on the Mac) follows; its one Mac run needs step 1.
+Both phases are in `main` (`80cdd68`); the proxy is live.
+
+1. The user tries test build `browser-vpn` for the hand checks in Phase 2
+   (switching both ways, a popup, a PDF, sign-in kept after a restart), and
+   the VPN-down message while NordVPN in WSL is off.
+2. The switch reaches Stable with the next release the user asks for. Then
+   close out this plan and retire the Phase 2 worktree, which retires the
+   test build.

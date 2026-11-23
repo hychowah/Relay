@@ -16,6 +16,7 @@ class WorkspaceTab {
     this.appId,
     this.name = 'New tab',
     this.isBrowser = false,
+    this.vpn = false,
   }) : id = id ?? _uuid.v4();
   final String id;
   final String? appId;
@@ -25,6 +26,8 @@ class WorkspaceTab {
   Json? report;
   String? error;
   final bool isBrowser;
+  // Desktop (macOS) only: see [PageSpec.vpn].
+  bool vpn;
 
   /// Desktop only. A Browser tab unloaded to free its memory keeps its page's
   /// address and title here until a reload has loaded the page again.
@@ -619,6 +622,7 @@ class Workspace extends ChangeNotifier {
         relayOrigin: api.origin,
         appView: view,
         report: report,
+        vpn: tab.vpn,
       ),
       (manualChange) => _pageChanged(tab, manualChange),
     );
@@ -650,9 +654,42 @@ class Workspace extends ChangeNotifier {
     changed();
   }
 
-  /// An unloaded tab loads again, off screen, to answer.
+  /// Desktop (macOS) only. Reopens the active Browser tab's address in a new
+  /// web view on the other network, VPN or the Mac's own; its back history
+  /// is not kept. An unloaded tab keeps its address until the switch loads it.
+  Future<void> toggleVpn() async {
+    final tab = active;
+    // A second click while the new page loads would lose the tab's address.
+    if (tab == null || !tab.isBrowser || _switchingVpn) return;
+    _switchingVpn = true;
+    recorder.action('browser vpn', {'on': !tab.vpn});
+    _manual();
+    await tab.reloading;
+    final url = tab.unloaded?.url ?? tab.page?.url;
+    tab.page?.dispose();
+    tab.page = null;
+    tab.vpn = !tab.vpn;
+    try {
+      if (await _loadPage(tab) && url != null && url != 'about:blank') {
+        await tab.page!.browser!.navigate(url);
+      }
+      tab.unloaded = null;
+      tab.error = null;
+      error = null;
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      _switchingVpn = false;
+    }
+    changed();
+  }
+
+  bool _switchingVpn = false;
+
+  /// An unloaded tab loads again, off screen, to answer; a read counts as use.
   Future<BrowserSurface> browserTab(String tabId) async {
     final tab = tabs.where((tab) => tab.id == tabId).firstOrNull;
+    tab?.hidden = Duration.zero;
     if (tab?.unloaded != null) await _reload(tab!);
     final browser = tab?.page?.browser;
     if (browser == null) {
@@ -1023,6 +1060,7 @@ class Workspace extends ChangeNotifier {
         else
           {
             'appId': tab.appId,
+            if (tab.vpn) 'vpn': true,
             'url': tab.unloaded?.url ?? tab.page?.url,
             'source': tab.report?['source'],
             'context': _viewIntent(tab.page?.context),
@@ -1090,6 +1128,7 @@ class Workspace extends ChangeNotifier {
         appId: appId,
         name: source?['title'] as String? ?? app.name,
         isBrowser: app.isBrowser,
+        vpn: item['vpn'] == true,
       );
       tabs.add(restored[index] = tab);
       loads.add((index, item, tab));
@@ -1164,6 +1203,13 @@ class Workspace extends ChangeNotifier {
     } catch (e) {
       // A tab the user closed while it loaded stays closed.
       if (!tabs.contains(tab)) return true;
+      // A VPN tab stays, with its error, for example while NordVPN in WSL is
+      // down at start; Reload tries it again.
+      if (tab.vpn && tab.page != null) {
+        error = 'Could not restore a tab: $e';
+        changed();
+        return true;
+      }
       restored.remove(index);
       error = 'Could not restore a tab: $e';
       closeTab(tab);

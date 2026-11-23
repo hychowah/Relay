@@ -44,8 +44,8 @@ user decides otherwise.
 ## Off on Windows
 
 Everything behind `Platform.isMacOS`: the PDF viewer and its highlights,
-popup windows, page fullscreen, native selection, page capture, the Safari
-user agent and in-app updates. Browser history and web page highlights are on
+popup windows, page fullscreen, VPN tabs, native selection, page capture, the
+Safari user agent and in-app updates. Browser history and web page highlights are on
 for Windows, from the same server records as the Mac; neither is checked on
 Windows yet. WebView2 offers most of these
 (`takeScreenshot`, document-start scripts, popup and fullscreen events); each

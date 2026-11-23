@@ -694,6 +694,16 @@ class _RelayShellState extends State<RelayShell> {
                                 onPressed: () => w.browserAction('reload'),
                                 icon: const Icon(Icons.refresh),
                               ),
+                              if (Platform.isMacOS)
+                                IconButton(
+                                  tooltip: w.active!.vpn
+                                      ? 'VPN on: through NordVPN in WSL'
+                                      : "VPN off: the Mac's own network",
+                                  isSelected: w.active!.vpn,
+                                  onPressed: w.toggleVpn,
+                                  icon: const Icon(Icons.vpn_lock_outlined),
+                                  selectedIcon: const Icon(Icons.vpn_lock),
+                                ),
                               Expanded(child: _addressField()),
                               IconButton(
                                 tooltip: 'Go',

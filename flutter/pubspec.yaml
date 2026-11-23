@@ -28,6 +28,11 @@ dependencies:
   package_info_plus: ^10.2.2
   markdown: ^7.3.1
 
+# Adds a named website data store for Browser VPN tabs; see README.md.
+dependency_overrides:
+  webview_flutter_wkwebview:
+    path: packages/webview_flutter_wkwebview
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

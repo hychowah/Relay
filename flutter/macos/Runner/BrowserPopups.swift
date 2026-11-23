@@ -162,7 +162,9 @@ private final class Popup: NSObject, WKNavigationDelegate, NSWindowDelegate {
       done(true)
       return
     }
-    channel.invokeMethod("allowPopupPage", arguments: url) { [weak self] result in
+    // A VPN tab's popups share its profile, the only one with an identifier.
+    let vpn = webView.configuration.websiteDataStore.identifier != nil
+    channel.invokeMethod("allowPopupPage", arguments: ["url": url, "vpn": vpn]) { [weak self] result in
       let allowed = result as? Bool == true
       done(allowed)
       if !allowed, self?.committed == false { self?.window.close() }
