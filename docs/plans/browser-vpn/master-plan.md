@@ -115,8 +115,10 @@ Done when:
   keeps a tab's VPN flag.
 - One run of `npm run test:mac -- browser_vpn_test.dart` on the MacBook
   (about 2 minutes, a second only if inconclusive): a VPN tab's IP-check
-  address differs from a normal tab's, and WebRTC is gone from the VPN tab,
-  even in a fresh frame, but not from a normal one.
+  address, over https and plain http, differs from a normal tab's; WebRTC
+  is gone from the VPN tab, even in a fresh frame, but not from a normal
+  one; a closed page's web view stops at once; and a VPN tab whose setup
+  failed loads nothing.
 - By hand in the published test build: switching a tab both ways, a popup,
   a PDF and a plain `http://` page from a VPN tab, and a VPN tab still signed
   in after a restart. Until then they are unverified.
@@ -171,6 +173,23 @@ WebKit's private `_setPeerConnectionEnabled:`; a script that deleted
   frame included, and present in a normal tab. Nothing was left on the Mac.
 - Test build `browser-vpn` published from `f5634ba`.
 
+An orchestrator review of that build found three gaps, since fixed: a VPN
+tab whose native setup failed could still load (now every load, Reload,
+Back and Forward refuses until the route is set, and Swift checks the WebRTC
+setting before setting anything); other spellings of an IPv4 address, such
+as `127.1` or `2130706433`, passed the Mac check (now only plain dotted
+decimal is accepted); and a switched or closed page's web view ran on until
+freed (now it loads `about:blank` at once). The failure message no longer
+blames NordVPN for every error.
+
+After the fixes, one MacBook run of `browser_vpn_test.dart` passed: the VPN
+tab's address differed from a normal tab's over https and plain http,
+WebRTC was gone from it, a closed page was blank at once, and a VPN tab
+whose setup was made to fail loaded nothing. Two earlier runs that day are
+not evidence: one lost its output, and one showed that swapping in an empty
+navigation delegate before loading an empty page left the page running.
+Nothing was left on the Mac.
+
 ## Limits
 
 - No proxy password: any tailnet device, and any local process that can reach
@@ -188,6 +207,15 @@ WebKit's private `_setPeerConnectionEnabled:`; a script that deleted
 - Cloudflare and Google, the proxy's name servers, see the names VPN tabs
   visit, from the VPN's address. If NordVPN drops between the check and a
   lookup, that lookup leaves over the home network (the Kill Switch limit).
+- A switch in the first seconds, while a restored or new tab's first page
+  is still getting ready, can leave the restore or opening to time out after
+  20 s.
+- After a VPN tab's first page, a failing link, Reload or redirect shows no
+  message, as in normal tabs.
+- A VPN tab that fails to load at start stays open but may come back
+  blank; its address then has to be typed again.
+- The macOS minimum is now 14 and the update feed does not check it; the
+  user's Macs run 15 and later.
 - The Windows client ignores the saved flag, so a copy of Mac tabs opened
   there loads VPN tabs over Windows' network.
 

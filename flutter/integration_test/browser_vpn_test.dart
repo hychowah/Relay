@@ -6,6 +6,7 @@
 // Addresses are compared, never printed.
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -44,7 +45,11 @@ void main() {
     );
 
     final pages = <PageSurface>[];
-    Future<PageSurface> open(String id, {required bool vpn}) async {
+    Future<PageSurface> open(
+      String id, {
+      required bool vpn,
+      bool ready = true,
+    }) async {
       final page = createWebPage(
         PageSpec(
           id: id,
@@ -57,6 +62,8 @@ void main() {
         (_) {},
       );
       pages.add(page);
+      // A page meant to fail is checked later; its error is expected.
+      if (!ready) page.ready.ignore();
       addTearDown(page.dispose);
       await tester.pumpWidget(
         MaterialApp(
@@ -69,12 +76,12 @@ void main() {
           ),
         ),
       );
-      await page.ready.timeout(const Duration(seconds: 20));
+      if (ready) await page.ready.timeout(const Duration(seconds: 20));
       return page;
     }
 
-    Future<String> address(PageSurface page) async {
-      await page.browser!.navigate(ipCheck);
+    Future<String> address(PageSurface page, [String check = ipCheck]) async {
+      await page.browser!.navigate(check);
       final text = ((await page.browser!.read())['text'] as String).trim();
       expect(
         InternetAddress.tryParse(text),
@@ -93,16 +100,54 @@ void main() {
       isTrue,
       reason: "The VPN tab showed the Mac's own address.",
     );
+    expect(
+      await address(vpn, 'http://api.ipify.org') == wsl,
+      isTrue,
+      reason: 'A plain http page in the VPN tab left outside the tunnel.',
+    );
 
     // The tunnel carries only TCP, so WebRTC, whose UDP would show the Mac's
     // address, is off in VPN tabs and on in normal ones.
     Future<bool> webrtc(PageSurface page) async {
       final controller = (page as dynamic).controller as WebViewController;
-      final result = await controller.runJavaScriptReturningResult(webrtcScript);
+      final result = await controller.runJavaScriptReturningResult(
+        webrtcScript,
+      );
       return ['true', '1'].contains('$result');
     }
 
     expect(await webrtc(normal), isTrue, reason: 'A normal tab lost WebRTC.');
     expect(await webrtc(vpn), isFalse, reason: 'The VPN tab still has WebRTC.');
+
+    // A closed page's web view stops at once, so a tab switched to the VPN
+    // leaves nothing running on the Mac's own network.
+    final closed = (normal as dynamic).controller as WebViewController;
+    normal.dispose();
+    String? left;
+    for (var i = 0; i < 20 && left != 'about:blank'; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      left = await closed.currentUrl();
+    }
+    expect(left, 'about:blank', reason: 'A closed page kept running.');
+
+    // A VPN tab whose route could not be set up loads nothing.
+    const channel = MethodChannel('app.relay/browser');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'vpnProxy') throw PlatformException(code: 'vpnProxy');
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final broken = await open('broken', vpn: true, ready: false);
+    await expectLater(broken.ready, throwsA(anything));
+    await expectLater(broken.browser!.navigate(ipCheck), throwsA(anything));
+    await expectLater(
+      broken.browser!.browserAction('reload'),
+      throwsA(anything),
+    );
+    expect(
+      await ((broken as dynamic).controller as WebViewController).currentUrl(),
+      isNot(contains('ipify')),
+    );
   });
 }

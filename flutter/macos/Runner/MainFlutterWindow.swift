@@ -62,16 +62,16 @@ class MainFlutterWindow: NSWindow {
           result(FlutterError(code: "vpnProxy", message: "The page has no web view.", details: nil))
           return
         }
-        var proxy = ProxyConfiguration(httpCONNECTProxy: .hostPort(
-          host: NWEndpoint.Host(host), port: NWEndpoint.Port(integerLiteral: UInt16(port))))
-        proxy.allowFailover = false
-        view.configuration.websiteDataStore.proxyConfigurations = [proxy]
         let preferences = view.configuration.preferences
         guard preferences.responds(to: Selector(("_setPeerConnectionEnabled:"))) else {
           result(FlutterError(code: "vpnProxy", message: "WebRTC cannot be turned off on this macOS.", details: nil))
           return
         }
         preferences.setValue(false, forKey: "peerConnectionEnabled")
+        var proxy = ProxyConfiguration(httpCONNECTProxy: .hostPort(
+          host: NWEndpoint.Host(host), port: NWEndpoint.Port(integerLiteral: UInt16(port))))
+        proxy.allowFailover = false
+        view.configuration.websiteDataStore.proxyConfigurations = [proxy]
         result(nil)
         return
       }

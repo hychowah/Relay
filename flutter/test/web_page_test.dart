@@ -135,6 +135,19 @@ void main() {
     // the Mac cannot resolve passes, but address literals are still checked.
     expect(await ask('https://vpn-only.invalid/', vpn: true), isTrue);
     expect(await ask('http://10.1.2.3/', vpn: true), isFalse);
+    expect(await ask('https://example.com./', vpn: true), isTrue);
+    // Other spellings of an IPv4 address are refused; browsers read them as
+    // addresses, which only plain dotted decimal shows to the rule.
+    for (final host in [
+      '127.1',
+      '2130706433',
+      '0x7f000001',
+      '0',
+      '010.0.0.1',
+      '127.0.0.1.',
+    ]) {
+      expect(await ask('http://$host/', vpn: true), isFalse, reason: host);
+    }
     expect(await ask('http://localhost/', vpn: true), isFalse);
     expect(await ask('https://user@8.8.8.8/', vpn: true), isFalse);
     expect(await ask('file:///etc/hosts', vpn: true), isFalse);

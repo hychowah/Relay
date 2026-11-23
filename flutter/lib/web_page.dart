@@ -79,9 +79,20 @@ Future<Uri> browserUrl(String text, {bool vpn = false}) async {
       uri.userInfo.isNotEmpty) {
     throw Exception('Use a public HTTP or HTTPS website.');
   }
-  if (vpn &&
-      InternetAddress.tryParse(uri.host) == null &&
-      uri.host != 'localhost') {
+  // Browsers read a host that ends in a number as an IPv4 address, also in
+  // spellings such as 127.1, 2130706433 or 0x7f000001; only plain dotted
+  // decimal is accepted, so the rule below sees the address the browser uses.
+  final host = uri.host.endsWith('.')
+      ? uri.host.substring(0, uri.host.length - 1)
+      : uri.host;
+  if (RegExp(
+        r'(^|\.)(\d+|0x[0-9a-f]*)$',
+        caseSensitive: false,
+      ).hasMatch(host) &&
+      !RegExp(r'^(0|[1-9]\d{0,2})(\.(0|[1-9]\d{0,2})){3}$').hasMatch(host)) {
+    throw Exception('Use a public HTTP or HTTPS website.');
+  }
+  if (vpn && InternetAddress.tryParse(host) == null && host != 'localhost') {
     return uri;
   }
   final addresses = await InternetAddress.lookup(uri.host);
@@ -318,6 +329,8 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   }
   // Desktop (macOS) only; other platforms ignore the flag.
   bool get _vpn => spec.vpn && Platform.isMacOS;
+  // A VPN tab loads nothing until its route and WebRTC setting are in place.
+  bool _routed = false;
   Completer<void>? _navigation;
   String _title = '', _url = 'about:blank';
   final RelayApi? _records;
@@ -416,6 +429,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
         'host': spec.relayOrigin.host,
         'port': spec.relayOrigin.port,
       });
+      _routed = true;
     }
     if (Platform.isMacOS) {
       final version = await _browserChannel.invokeMethod<String>(
@@ -446,6 +460,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
             ? NavigationDecision.navigate
             : NavigationDecision.prevent,
         onPageStarted: (url) {
+          if (_disposed) return;
           _nativeSelection = null;
           _menu = null;
           _url = url;
@@ -885,8 +900,10 @@ class _BrowserPage extends _WebPage with BrowserSurface {
 
   // A VPN tab never falls back to the Mac's own network; a load that fails
   // or gets no answer says so.
-  static Exception _vpnFailed(String detail) =>
-      Exception('The VPN route failed: $detail Check NordVPN in WSL.');
+  static Exception _vpnFailed(String detail) => Exception(
+    'The page did not load through the VPN: $detail '
+    'If no page loads, check NordVPN in WSL.',
+  );
 
   @override
   void _resourceError(WebResourceError error) {
@@ -949,6 +966,11 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     // A load the user has moved past, such as a tab switched to the other
     // network, ends quietly.
     if (_navigation?.isCompleted == false) _navigation!.complete();
+    // The closed web view stops its page, with its scripts and connections,
+    // instead of running on until it is freed; its callbacks return early.
+    unawaited(
+      controller.loadRequest(Uri.parse('about:blank')).catchError((_) {}),
+    );
     _pdfPages.removeWhere((_, page) => page == this);
     // Closing the tab closes its popup windows and ends its PDF's fetch.
     if (Platform.isMacOS) {
@@ -1033,6 +1055,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
 
   @override
   Future<void> navigate(String text, {bool restoring = false}) async {
+    if (_vpn && !_routed) throw _vpnFailed('the tab could not be set up.');
     final target = await browserUrl(text, vpn: _vpn);
     _restoring = restoring;
     _navigation = Completer<void>();
@@ -1045,6 +1068,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
 
   @override
   Future<void> browserAction(String action) async {
+    if (_vpn && !_routed) throw _vpnFailed('the tab could not be set up.');
     if (action == 'back' && await controller.canGoBack()) {
       await controller.goBack();
     }

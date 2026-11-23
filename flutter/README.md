@@ -111,7 +111,7 @@ update restart, reopens the previous tabs and their views, the conversation, the
 draft and the chat panel as it was left; the Mac window keeps its size and position.
 The last active tab shows first, and the other tabs load together in the background.
 A tab that cannot be restored is reported; **Reconnect** retries it during that run.
-A VPN tab stays open with the error instead, and Reload retries it.
+A VPN tab stays open with the error instead, though possibly without its address.
 All pages except VPN tabs share WebKit's persistent website data, which keeps cookies between starts.
 On desktop only, drag a tab onto a page to split it. A new split tab opens in
 the tab strip. The page's edge nearest the pointer (left, right, top or bottom)
@@ -139,17 +139,19 @@ dialog raised inside a popup window is not shown.
 
 On macOS only, **VPN** beside Reload sends a Browser tab's pages, its popups
 and the PDFs it shows through the Relay backend, which tunnels them (HTTP
-CONNECT on its own port) out of WSL through NordVPN. New tabs start with it
-off; the setting is saved with the tab. Switching reopens the tab's address in
-a new web view, without its back history. Nothing falls back to the Mac's
-network: if the route fails, for example while NordVPN in WSL is off, the page
-does not load and says so. VPN tabs share one WebKit profile of their own, so
-their sign-ins persist and stay apart from normal tabs. The backend applies
-the Browser's address rule to them, looking names up through NordVPN. WebRTC is off in
-VPN tabs, through a private WebKit setting that also covers frames and popups,
-so video calls do not work there: the tunnel carries only TCP, and WebRTC's
-UDP would show the Mac's own address. A macOS without that setting does not
-load VPN tabs. The Windows client ignores the setting.
+CONNECT on the backend's existing port) out of WSL through NordVPN. New tabs
+start with it off; the setting is saved with the tab. Switching reopens the
+tab's address in a new web view, without its back history. Nothing falls back
+to the Mac's network: if the route fails, for example while NordVPN in WSL is
+off, the page does not load and says so, and a VPN tab that could not be set
+up loads nothing. VPN tabs share one WebKit profile of their own, so their
+sign-ins persist and stay apart from normal tabs. The backend applies the
+Browser's address rule to them, looking names up through NordVPN. WebRTC is
+off in VPN tabs, through a private WebKit setting that also covers frames
+(popups take the opener's settings), so video calls do not work there: the
+tunnel carries only TCP, and WebRTC's UDP would show the Mac's own address. A
+macOS without that setting does not load VPN tabs. The Windows client ignores
+the setting.
 
 A click that focuses the Browser address bar selects the whole address, as in
 other browsers; a further click places the caret.
@@ -262,10 +264,12 @@ smoothness suite below, it builds a temporary copy under its own bundle id,
 `app.relay.flutterTest`, and removes the copy and the test app's data
 afterwards. It refuses `workflow_test.dart`,
 which uses the Flutter deployment's records.
-`browser_vpn_test.dart` checks that a VPN tab's address differs from a normal
-tab's and that WebRTC is gone from it, even in a fresh frame, but not from a
-normal tab. It needs the Mac on the tailnet, the deployed backend and NordVPN
-in WSL; the tool passes `relay.appUrl` to it as `RELAY_URL`.
+`browser_vpn_test.dart` checks that a VPN tab's address, over https and plain
+http, differs from a normal tab's; that WebRTC is gone from it, even in a
+fresh frame, but not from a normal tab; that a closed page stops at once; and
+that a VPN tab whose setup failed loads nothing. It needs the Mac on the
+tailnet, the deployed backend and NordVPN in WSL; the tool passes
+`relay.appUrl` to it as `RELAY_URL`.
 
 ### Measure performance
 
