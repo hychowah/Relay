@@ -540,7 +540,7 @@ Future<({bool save, String description})?> askBugReport(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '$events recorded events, a screenshot of the current page and '
+            '$events recorded events, a screenshot of the window and '
             'the server record of this conversation will be saved.',
           ),
           const SizedBox(height: 12),

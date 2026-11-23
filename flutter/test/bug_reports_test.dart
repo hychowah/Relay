@@ -7,11 +7,19 @@ import 'package:material_ui/material_ui.dart';
 import 'package:relay_flutter/bug_reports.dart';
 import 'package:relay_flutter/relay_api.dart';
 
+// A one-pixel PNG.
+const pixel =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
 void main() {
   testWidgets('lists saved bug reports and opens their event timeline', (
     tester,
   ) async {
     const id = '2026-11-19T01-00-00-000Z-1a2b3c4d';
+    // Room for the screenshot above the events.
+    tester.view.physicalSize = const Size(800, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final api = RelayApi(
       Uri.parse('http://localhost:3250'),
       client: MockClient((request) async {
@@ -22,7 +30,7 @@ void main() {
               'savedAt': '2026-11-19T01:00:00.000Z',
               'description': 'Stop did nothing',
               'events': 3,
-              'screenshot': false,
+              'screenshot': true,
             },
           ],
           '/api/bug-reports/$id' => {
@@ -56,6 +64,9 @@ void main() {
           },
           _ => null,
         };
+        if (request.url.path == '/api/bug-reports/$id/screenshot') {
+          return http.Response.bytes(base64Decode(pixel), 200);
+        }
         return reply == null
             ? http.Response('Not found', 404)
             : http.Response(jsonEncode(reply), 200);
@@ -79,6 +90,18 @@ void main() {
     await tester.tap(find.text('Run already finished'));
     await tester.pumpAndSettle();
     expect(find.textContaining('"type": "error"'), findsOneWidget);
+
+    // The picture has a size once the engine has decoded it.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pump();
+    await tester.tap(find.byTooltip('Open the screenshot full size'));
+    await tester.pumpAndSettle();
+    expect(find.byType(InteractiveViewer), findsOneWidget);
+    await tester.tap(find.byTooltip('Close').last);
+    await tester.pumpAndSettle();
+    expect(find.byType(InteractiveViewer), findsNothing);
 
     await tester.tap(find.byTooltip('All bug reports'));
     await tester.pumpAndSettle();

@@ -132,6 +132,32 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
   static String _pretty(Object? value) =>
       const JsonEncoder.withIndent('  ').convert(value);
 
+  // The window picture is too small to read inside the report.
+  void _showScreenshot(Uint8List picture) => showDialog<void>(
+    context: context,
+    builder: (context) => Dialog.fullscreen(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: InteractiveViewer(
+              maxScale: 4,
+              child: Center(child: Image.memory(picture)),
+            ),
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: IconButton.filledTonal(
+              tooltip: 'Close',
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
   Widget _details(String title, Object? value) => ExpansionTile(
     title: Text(title),
     tilePadding: EdgeInsets.zero,
@@ -198,9 +224,18 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
       if (screenshot != null)
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 12),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 360),
-            child: Image.memory(screenshot!, alignment: Alignment.centerLeft),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Tooltip(
+              message: 'Open the screenshot full size',
+              child: InkWell(
+                onTap: () => _showScreenshot(screenshot!),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 360),
+                  child: Image.memory(screenshot!),
+                ),
+              ),
+            ),
           ),
         ),
       _details('Workspace when saved', report['workspace']),

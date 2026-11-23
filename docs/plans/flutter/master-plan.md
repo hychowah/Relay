@@ -57,8 +57,8 @@ The implemented workflows include the following.
   device. When on, a tab the user clicks or opens, or the agent opens, slides
   to the left end of the strip. Restoring, closing and split changes keep the
   order; reduced motion skips the slide.
-- Development bug recording: actions, server exchanges, errors, tabs and a page
-  screenshot are saved on the service as a report and read in the Bug reports
+- Development bug recording: actions, server exchanges, errors, tabs and a
+  whole-window screenshot are saved on the service as a report and read in the Bug reports
   viewer, where each report is marked open or solved, or deleted (see the root
   README).
 
@@ -189,8 +189,11 @@ real WKWebViews.
    folder on WSL. Remove it at publish time if that folder grows.
 3. Review Stable 0.0.17 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`. The suite's longest waits, on tab switches, are candidates for a smoothness fix. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
 4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable since 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified. The capture animation is in Stable 0.0.17: on the Mac, check that the flash and the flight to the composer run smoothly over a real page, and that the thumbnail takes over without a jump.
-5. Try the toolbar record button and **Bug reports**, both in Stable since 0.0.9, on the Mac. Source tests cover recording,
-   saving, viewing, marking solved and deleting; native screenshots and the live service's report folder are unverified. Marking solved and deleting are in Stable 0.0.13 and served by the live backend; try them on the Mac.
+5. On the Mac, try the record button and **Bug reports** against the live
+   backend: save, view, mark solved and delete. The screenshot now covers the
+   whole window (not yet in Stable): check that it shows the chat, the tabs, a
+   split and a Browser comment over a page, note its size, and that pages
+   still click and scroll. Fake-page widget tests cover it.
 6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 7. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
 8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.
