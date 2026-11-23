@@ -118,8 +118,10 @@ Limits:
   before rolling back.
 - Screenshots are allowed for every OpenAI model; a model without image input
   fails at OpenAI.
-- Flutter builds up to Stable 0.0.18 do not list OpenAI. After OpenAI is chosen
-  from the web page, their provider settings may show an empty choice.
+- Flutter builds up to Stable 0.0.18 do not list OpenAI and cannot choose it;
+  a choice made on the web page applies only to the web page service. After a
+  newer client chooses OpenAI for the Flutter backend, an older client's
+  provider settings may show an empty choice.
 - Like the Claude test, the OpenAI round trip depends on polling time and fails
   if `RELAY_VPN_CHECK=off` is set while tests run.
 
@@ -131,8 +133,16 @@ shapes, and whether OpenAI's addresses route through `nordlynx`.
 ## Next
 
 Refresh Relay to use the model picker. A real Claude conversation is the
-remaining provider-readiness check. For OpenAI, after merge and deployment,
-save a key in Model connection, load models and send one short reply; this
-needs the user's key and approval of the small spend. Treat the documented
-precheck and OS egress guarantee separately; the observed disabled kill switch
-has not been enabled by this change.
+remaining provider-readiness check. OpenAI at `2d7d489` was deployed on
+2026-11-23 to both services: `relay` serves the web page from the main
+checkout, and `relay-app` (relay-live) is the Flutter backend. They keep
+separate provider settings, so a key saved through one does not reach the
+other. After the restarts both services' config routes still reported the
+Anthropic mode, and the web page's served script lists OpenAI; no key was
+entered and nothing was sent to OpenAI. The Flutter client needs a new build
+to list OpenAI (see Limits). Next, save an OpenAI key in the web page's Model
+connection, load models and send one short reply; this needs the user's key
+and approval of the small spend. The Flutter backend's OpenAI path stays
+unverified until a client build lists OpenAI.
+Treat the documented precheck and OS egress guarantee separately; the observed
+disabled kill switch has not been enabled by this change.

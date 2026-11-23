@@ -169,7 +169,7 @@ devices, and the Browser on Relay's own port. 0.0.18 adds App servers, the
 highlight menu, the whole-window bug screenshot, the theme sent to apps and a
 poll error that clears itself. Analysis, 93 Flutter tests and 122 backend tests
 passed on its commit. The backend was last deployed on 2026-11-23 at
-`ea0fa4d`; the Browser socket opened through the tailnet address from
+`2d7d489`; the Browser socket opened through the tailnet address from
 Windows. The user asked for both releases; which checks below they made is
 not recorded, and the native Mac workflow was not rerun.
 

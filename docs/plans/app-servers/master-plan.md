@@ -174,7 +174,7 @@ states (Backtest Web stopped, its switch not available), a log read returned
 lines, a request naming a foreign Host got 403 and a non-JSON POST got 415,
 and the list answered through the tailnet address. No unit was started,
 stopped, enabled or disabled through the live backend. The backend runs
-`ea0fa4d` since later that day; there the list still answered, and a foreign
+`2d7d489` since later that day; there the list still answered, and a foreign
 Host still got 403. Stable 0.0.18, published the same day, has the screen;
 the two test builds that carried it before are retired. Not yet verified: the
 Mac run.
