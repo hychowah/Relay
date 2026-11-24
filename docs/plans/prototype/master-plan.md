@@ -48,6 +48,7 @@ storage and export.
 | R19 | Provide normal chat and reusable bots with individual objectives, scope, allowed apps and memory. Share personal preferences; keep bot knowledge separate. Forward a chosen conversation with a handoff and recoverable source messages. |
 | R20 | Show meaningful app actions while the agent works: search/results, selected evidence and the final focused view with field highlights. Progress reflects actual operations. Keep chat expandable and Stop available; preserve direct manual app use. |
 | R21 | Each Mac Browser tab can route through WSL's NordVPN. See the [Browser VPN plan](../browser-vpn/master-plan.md). |
+| R22 | Read and search user-shared folders, read-only. Fill web forms in a shown Browser tab; the user presses Submit; sites see filled values earlier. See [integration](../../integration.md). |
 
 A project is proposed to group conversations, memory, outputs, and links to
 relevant app resources. One project may use several apps; one app may serve
@@ -288,9 +289,6 @@ External references inspected during planning:
 - [Docker security](https://docs.docker.com/engine/security/)
 - [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve)
 
-Recheck reference versions; some OpenCode server/SDK links redirect to V1
-documentation, and DeepSeek Harness was in preview when inspected.
-
 ## Implementation readiness and handoff
 
 The [README](../../../README.md) holds operating instructions and current
@@ -327,19 +325,19 @@ Tailscale checks for Relay and Research Web remain open prototype exits.
 
 Defer read/write effects to the first write, access scopes and versioned migrations to projects, and network policy injection to the Docker executor. Revisit server acknowledgement checks if bridge ownership changes, and new tool statuses or a run-oriented harness when existing lifecycles fall short.
 
-The [Flutter handoff](../flutter/master-plan.md#next) covers installing and reviewing Stable 0.0.19 on the Mac, with its checks for tab restore, the transcript pane and the app list refresh, and the split view. It also lists the Mac checks for the capture animation, the Browser's PDF viewer, highlights and Stored data, which are in Stable since 0.0.17, published on 2026-11-23. The backend, last deployed at `7a1df86` on 2026-11-24, connects the Browser on the Relay port, not 3251: builds older than 0.0.17, and a Windows app built before `acad2d8`, cannot read pages or transcripts. The Windows checks wait until the user returns to Windows. On the next preview teardown, use the [worktree removal command](../../development.md#publish-a-worktree-test-build).
+The [Flutter handoff](../flutter/master-plan.md#next) covers installing and reviewing Stable 0.0.19 on the Mac, with its checks for tab restore, the transcript pane and the app list refresh, and the split view. It also lists the Mac checks for the capture animation, the Browser's PDF viewer, highlights and Stored data, which are in Stable since 0.0.17, published on 2026-11-23. The backend, last deployed at `7a1df86` on 2026-11-24, connects the Browser on the Relay port, not 3251: builds older than 0.0.17, and a Windows app built before `acad2d8`, cannot read pages or transcripts. The Windows checks wait until the user returns to Windows.
 
 The [coding sessions plan](../coding-sessions/master-plan.md) covers handing requests to Claude Code or Codex sessions through a coding app in its own project. Its Next section holds the current step.
 
 Phase 1 of the [app servers plan](../app-servers/master-plan.md) (R17) is deployed and in Stable 0.0.18; its Mac check is next.
 
 1. Verify a sourced two-app question on the user's saved records from the Mac.
-   Both stock adapters have run as local services, registered with the live
-   Flutter backend, since 2026-11-19; search through Relay returns saved
-   records and the user opened both apps on the Mac. See the
+   Both stock adapters have served the live Flutter backend since 2026-11-19,
+   opened by the user on the Mac; see the
    [Phase 02 evidence](phases/phase-02/README.md).
 2. Evaluate sourced Research Web answers, memory correction and forgetting, and retrieval of old details after compaction with the configured real provider.
-3. Establish the Compose executor boundary before enabling any file or terminal tool.
+3. Establish the Compose executor boundary before enabling any terminal or code tool.
 4. Serve the web page from the app backend so both clients share one set of records.
 5. Defer the Android device trial and phone work until separately requested.
 6. Have Analysis Web and Backtest Web serve the Relay protocol from their own projects, then retire the adapter project.
+7. After deploy, check R22 on Mac: a real-provider PDF search and Flutter item 22.
