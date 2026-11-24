@@ -13,7 +13,7 @@ release with two additions (pubspec.yaml overrides the package with it):
 `websiteDataStoreIdentifier` on `WebKitWebViewControllerCreationParams`, a
 named, persistent WebKit profile, which VPN tabs use; and, on macOS, a file
 chooser for `<input type="file">` in `UIDelegateProxyAPIDelegate.swift`,
-without which WebKit ignores the click. The package's bridge
+without which WebKit ignores the click (shown only on a visible web view). The package's bridge
 files are generated: change `pigeons/web_kit.dart`, then in that folder run
 `flutter pub get` and `dart run pigeon --input pigeons/web_kit.dart` (pigeon
 is pinned so the output matches the committed files), and format the output
@@ -151,7 +151,7 @@ that pages open without a user action stay blocked. Any other new window, such
 as a link that opens a new tab, loads in the same tab as before, so a sign-in
 that opens an unsized window loses its opener.
 App views keep sending a new window's address to the default browser. A page
-dialog raised inside a popup window is not shown.
+dialog or file chooser raised inside a popup window is not shown.
 
 On macOS only, **VPN** beside Reload sends a Browser tab's pages, its popups
 and the PDFs it shows through the Relay backend, which tunnels them (HTTP

@@ -250,7 +250,9 @@ class UIDelegateImpl: NSObject, WKUIDelegate {
   #endif
 
   // Relay addition: on macOS, WebKit ignores a click on <input type="file"> unless the app
-  // shows the file chooser itself. iOS shows its own.
+  // shows the file chooser itself. iOS shows its own. Relay's own scripts count as a user
+  // gesture, so a page could ask without a click: show the chooser only on a visible web view,
+  // as a sheet on its window, and name the asking site.
   #if os(macOS)
     #if compiler(>=6.0)
       func webView(
@@ -258,7 +260,7 @@ class UIDelegateImpl: NSObject, WKUIDelegate {
         initiatedByFrame frame: WKFrameInfo,
         completionHandler: @escaping @MainActor ([URL]?) -> Void
       ) {
-        showOpenPanel(webView, parameters) { urls in
+        showOpenPanel(webView, parameters, frame) { urls in
           DispatchQueue.main.async { completionHandler(urls) }
         }
       }
@@ -267,25 +269,26 @@ class UIDelegateImpl: NSObject, WKUIDelegate {
         _ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
         initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void
       ) {
-        showOpenPanel(webView, parameters, completionHandler)
+        showOpenPanel(webView, parameters, frame, completionHandler)
       }
     #endif
 
     private func showOpenPanel(
-      _ webView: WKWebView, _ parameters: WKOpenPanelParameters,
+      _ webView: WKWebView, _ parameters: WKOpenPanelParameters, _ frame: WKFrameInfo,
       _ done: @escaping ([URL]?) -> Void
     ) {
+      guard let window = webView.window, !webView.isHiddenOrHasHiddenAncestor else {
+        done(nil)
+        return
+      }
+      let origin = frame.securityOrigin
       let panel = NSOpenPanel()
+      panel.message = "\(origin.host.isEmpty ? origin.protocol : origin.host) asks for a file."
       panel.canChooseFiles = true
       panel.canChooseDirectories = parameters.allowsDirectories
       panel.allowsMultipleSelection = parameters.allowsMultipleSelection
-      let finish = { (response: NSApplication.ModalResponse) in
+      panel.beginSheetModal(for: window) { response in
         done(response == .OK ? panel.urls : nil)
-      }
-      if let window = webView.window {
-        panel.beginSheetModal(for: window, completionHandler: finish)
-      } else {
-        panel.begin(completionHandler: finish)
       }
     }
   #endif
