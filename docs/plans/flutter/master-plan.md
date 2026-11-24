@@ -205,9 +205,9 @@ real WKWebViews.
    tab, and closing it, and that the split tab's outline and pane map read
    clearly in light and dark. Check that the selected page clicks and scrolls:
    nothing may be drawn over it (the 0.0.12 bug; its outline has been a
-   2-pixel frame since 0.0.13). Each Browser pane has its own address bar
-   (2026-11-24 report, in no Mac build yet): check that selecting a pane
-   resizes no page and narrow bars fit. Widget tests cover splits.
+   2-pixel frame since 0.0.13). Per-pane address bars (2026-11-24, no Mac
+   build yet): check that selecting a pane resizes no page and narrow bars
+   fit.
 12. Check night mode on the Mac in Dark and Light, with macOS both light and
    dark: tabs, chat, Markdown replies, dialogs, menus and the empty Browser
    page. Also check that System follows a live macOS switch. Only widget tests
