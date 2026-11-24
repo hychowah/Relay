@@ -190,10 +190,10 @@ real WKWebViews.
 4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable since 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified. The capture animation is in Stable 0.0.17: on the Mac, check that the flash and the flight to the composer run smoothly over a real page, and that the thumbnail takes over without a jump.
 5. Bug reports on the Mac: view, mark solved and delete one; check that the
    whole-window screenshot shows the chat, a split and a Browser comment over a
-   page, and that pages still click and scroll. The 2026-11-24 report (ChatGPT
-   hover jumping, mouse nearly still) held no page events; Browser pages are
-   now traced (unverified in WKWebView). Record it again: hover lost and
-   regained at poll times means the poll's redraw; scroll notes, the trackpad.
+   page, and that pages still click and scroll. A page trace (2026-11-24)
+   showed each Relay redraw moving WebKit's hover down by the page's offset in
+   the window. Unchanged polls no longer redraw (unverified on the Mac); other
+   redraws still move it.
 6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 7. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
 8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.
@@ -226,10 +226,10 @@ real WKWebViews.
 15. In Stable 0.0.14, sign in to figma.com with **Continue with
    Google**: the popup shows its host, closes itself and leaves Figma signed in.
    Close a tab, and the main window, with a popup open. New-tab links stay in the tab.
-16. Next smoothness work: the one-second poll decodes and rebuilds the whole
-   conversation on the UI thread. In `Workspace._refresh`, skip the decode and
-   `changed()` when the snapshot body is unchanged, and decode large bodies off
-   the UI isolate. Check with `npm run perf:ui` and `npm run perf:stress`.
+16. Next smoothness work: an unchanged poll is no longer decoded or redrawn,
+   but a changed one still decodes the whole conversation on the UI thread.
+   Decode large bodies off the UI isolate. Check with `npm run perf:ui` and
+   `npm run perf:stress`.
 17. On 2026-11-23 a hidden Figma tab held 1.1 GB. The user chose to unload
    Browser tabs after 30 silent minutes off screen (a model may choose later)
    and accepted that this loses unsent typed text and closes the tab's popups.

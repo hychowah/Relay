@@ -125,6 +125,8 @@ class Workspace extends ChangeNotifier {
   int presentations = 0;
   bool includeContext = true;
   int _conversationRevision = 0;
+  // The text of the last conversation reply drawn.
+  String? _snapshotText;
   Timer? _poll;
   final _processed = <String>{};
   final _contextlessRequests = <String, int>{};
@@ -839,6 +841,7 @@ class Workspace extends ChangeNotifier {
     conversationId = id;
     draftEffort = null;
     snapshot = null;
+    _snapshotText = null;
     status = null;
     error = null;
     // A new chat is not polled, so no later poll would clear this.
@@ -909,9 +912,15 @@ class Workspace extends ChangeNotifier {
     final id = conversationId!;
     final revision = _conversationRevision;
     try {
-      final next = await api.snapshot(id);
+      final text = await api.conversationText(id);
       if (_disposed || revision != _conversationRevision) return;
-      snapshot = next;
+      // An unchanged conversation is not decoded or drawn again: on the Mac
+      // each redraw tells a Browser page that the mouse is lower than it is.
+      if (text == _snapshotText && pollError == null) return;
+      _snapshotText = text;
+      final next = snapshot = ConversationSnapshot.fromJson(
+        jsonDecode(text) as Json,
+      );
       selectedBotId = next.conversation?.botId;
       final tool = next.tools
           .where((tool) => tool.status == 'running')
@@ -937,6 +946,7 @@ class Workspace extends ChangeNotifier {
       if (e is RelayApiException && e.status == 404) {
         conversationId = null;
         snapshot = null;
+        _snapshotText = null;
         status = null;
         await saveConversation(null);
         // Polling stops here, so nothing would clear a poll error.

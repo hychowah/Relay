@@ -31,6 +31,17 @@ class RelayApi {
     String? method,
     bool private = false,
   ]) async {
+    final text = await _text(path, body, method, private);
+    return (text == null ? null : jsonDecode(text)) as T;
+  }
+
+  /// The reply's text, or null for a reply with no content.
+  Future<String?> _text(
+    String path, [
+    Json? body,
+    String? method,
+    bool private = false,
+  ]) async {
     final recorder = private ? null : this.recorder;
     final url = origin.resolve(path);
     final request = http.Request(
@@ -79,7 +90,7 @@ class RelayApi {
       }
       throw RelayApiException(response.statusCode, message);
     }
-    return (response.statusCode == 204 ? null : jsonDecode(response.body)) as T;
+    return response.statusCode == 204 ? null : response.body;
   }
 
   Future<({List<WorkspaceApp> apps, Json provider})> config() async {
@@ -154,8 +165,10 @@ class RelayApi {
     return _request('/api/apps/${source['appId']}/report?${params.query}');
   }
 
-  Future<ConversationSnapshot> snapshot(String id) async =>
-      ConversationSnapshot.fromJson(await _request('/api/conversations/$id'));
+  /// The conversation's record as the reply's text, which stays the same
+  /// while the conversation does (see [ConversationSnapshot.fromJson]).
+  Future<String> conversationText(String id) async =>
+      (await _text('/api/conversations/$id'))!;
 
   Future<List<Conversation>> conversations({
     required String query,

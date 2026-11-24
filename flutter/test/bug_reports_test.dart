@@ -22,7 +22,7 @@ void main() {
     );
     Object? failure;
     unawaited(
-      api.snapshot('c').then<void>((_) {}, onError: (e) => failure = e),
+      api.conversationText('c').then<void>((_) {}, onError: (e) => failure = e),
     );
     await tester.pump(const Duration(seconds: 21));
     expect(failure.toString(), 'Relay did not answer in 20 seconds.');

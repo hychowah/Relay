@@ -559,6 +559,39 @@ void main() {
       expect(f.w.recorder.events.length, events.length);
     },
   );
+  test(
+    'a conversation poll redraws only when the conversation changed',
+    () async {
+      final f = Fixture();
+      addTearDown(f.w.dispose);
+      f.current = 'conversation';
+      await f.w.start();
+      var redraws = 0;
+      f.w.addListener(() => redraws++);
+      await f.w.refresh();
+      expect(redraws, 0);
+
+      f.messages = [
+        {'id': 'm', 'role': 'user', 'text': 'Hello', 'createdAt': 'now'},
+      ];
+      await f.w.refresh();
+      expect(redraws, 1);
+      expect(f.w.messages.single.text, 'Hello');
+
+      // A failed poll shows its error; the next, unchanged, clears it.
+      f.failSnapshot = true;
+      await f.w.refresh();
+      f.failSnapshot = false;
+      await f.w.refresh();
+      expect(f.w.pollError, isNull);
+      expect(redraws, 3);
+
+      // Opened again, the same conversation is drawn again.
+      await f.w.selectConversation('conversation');
+      await f.w.refresh();
+      expect(f.w.messages.single.text, 'Hello');
+    },
+  );
   test('tabs are saved as they change and reopen on the next start', () async {
     final first = Fixture();
     addTearDown(first.w.dispose);
