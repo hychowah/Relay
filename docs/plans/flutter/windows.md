@@ -95,7 +95,7 @@ page's own `history.back()` across documents adds a history entry.
 On 2026-11-23 the user said they are not testing Windows for now; items 1
 and 3 wait for that.
 
-1. With Stable 0.0.18 on the Mac and a Windows app built from `main` at or
+1. With Stable 0.0.19 on the Mac and a Windows app built from `main` at or
    after `acad2d8` (older ones cannot read pages), check on the Mac and
    Windows: the
    chat opened last on one device opens on the other when it comes to the

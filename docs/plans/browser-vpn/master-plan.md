@@ -119,7 +119,7 @@ Done when:
   is gone from the VPN tab, even in a fresh frame, but not from a normal
   one; a closed page's web view stops at once; and a VPN tab whose setup
   failed loads nothing.
-- By hand in the published test build: switching a tab both ways, a popup,
+- By hand in the app: switching a tab both ways, a popup,
   a PDF and a plain `http://` page from a VPN tab, and a VPN tab still signed
   in after a restart. Until then they are unverified.
 - The VPN-down message (V03) is checked by briefly disconnecting NordVPN in
@@ -226,13 +226,13 @@ Both phases are in `main` (`80cdd68`); the proxy is live. On 2026-11-23 the
 user tried test build `pre-0-0-19` and reported that VPN works but that the
 mode was hard to tell; which hand checks they made is not recorded. The
 switch now becomes a filled "VPN" button while on, and a VPN tab's chip shows
-a lock in place of the globe, on the Mac only.
+a lock in place of the globe, on the Mac only. On 2026-11-24 the user said
+of test build `pre-0-0-19` that all works well and asked for a release:
+Stable 0.0.19 has both phases and the new marks, and both test builds are
+retired.
 
-1. The user judges the new marks in a test build, and makes the remaining
-   hand checks in Phase 2 (switching both ways, a popup, a PDF, sign-in kept
-   after a restart), and the VPN-down message while NordVPN in WSL is off.
-   Test build `pre-0-0-19` carries everything in `main`; `browser-vpn` is
-   older.
-2. The switch reaches Stable with the next release the user asks for. Then
-   close out this plan and retire the Phase 2 worktree, which retires the
-   test build.
+1. Not recorded as done: the hand checks in Phase 2 (switching both ways, a
+   popup, a PDF, sign-in kept after a restart), and the VPN-down message
+   while NordVPN in WSL is off. Ask the user which they made.
+2. Then close out this plan. The Phase 2 worktree has no test build left and
+   can be retired.

@@ -118,7 +118,7 @@ Limits:
   before rolling back.
 - Screenshots are allowed for every OpenAI model; a model without image input
   fails at OpenAI.
-- Flutter builds up to Stable 0.0.18 do not list OpenAI and cannot choose it;
+- Flutter builds before Stable 0.0.19 do not list OpenAI and cannot choose it;
   a choice made on the web page applies only to the web page service. After a
   newer client chooses OpenAI for the Flutter backend, as is now the case on
   the live one, an older client's provider settings may show an empty choice
