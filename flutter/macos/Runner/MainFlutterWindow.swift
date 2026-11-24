@@ -260,8 +260,11 @@ class MainFlutterWindow: NSWindow {
   /// place: as far below and to the right of the mouse as the page is inside
   /// the window, until the mouse moves (bug reports of 2026-11-24). Flutter's
   /// two container classes skip adding a view to the parent it already has;
-  /// the views end in the same order. If a Flutter update renames them or
-  /// adds its own `addSubview:`, nothing is changed.
+  /// the views end in the same order (the move back on top does not go
+  /// through `addSubview:`). If a Flutter update renames them or gives them
+  /// their own `addSubview:`, nothing is changed; a new parent class with its
+  /// own would be bypassed, as this calls NSView's directly. So run
+  /// hover_redraw_test.dart after each Flutter upgrade.
   private static func keepWebViewsAttached() {
     let selector = #selector(NSView.addSubview(_:))
     guard let method = class_getInstanceMethod(NSView.self, selector) else { return }
