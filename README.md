@@ -2,7 +2,8 @@
 
 Relay is a personal agent workspace. You chat with an AI agent beside your own
 apps. The agent can read from a connected app, answer with sources, and show
-the result inside that app's own screen.
+the result inside that app's own screen. In the built-in Browser it can also
+fill in a web form for you to check and submit yourself.
 
 ## Vision
 

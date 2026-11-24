@@ -265,6 +265,12 @@ figure changes. A tab's process comes from WebKit's private
 - Highlights are painted without changing the page's own elements.
 - The agent reads a YouTube transcript with `browser.transcript` and a PDF's
   text with `browser.read`.
+- The agent fills forms (desktop only) with `browser.form`, which lists the
+  fields and marks each with a `data-relay-field` id, and `browser.fill`.
+  `flutter/assets/page_forms.js` sets values through each element's own value
+  setter with `input` and `change` events, so React-style inputs notice, and
+  clicks only check boxes and radio buttons. It never submits.
+  `tests/page-forms.test.ts` checks it in Chromium.
 - Address-bar suggestions and highlights are not yet checked on Windows.
 
 ## Publish the Flutter app

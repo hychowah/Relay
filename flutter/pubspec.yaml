@@ -46,6 +46,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/replace.sh
+    - assets/page_forms.js
     - assets/page_fullscreen.js
     - assets/page_highlights.js
     - assets/page_trace.js

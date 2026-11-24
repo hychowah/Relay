@@ -97,6 +97,16 @@ mixin BrowserSurface {
   /// The video's play time in seconds, or null when no video content plays.
   Future<double?> playbackTime();
 
+  /// Desktop only. The page's form fields that the agent may fill, each with
+  /// Relay's id (assets/page_forms.js).
+  Future<Json> readForm() async =>
+      throw StateError('This Browser cannot fill forms.');
+
+  /// Desktop only. Fills [fields], each `{id, value}`, and outlines them for
+  /// the user to check. It never submits the form.
+  Future<Json> fillForm(List<Object?> fields) async =>
+      throw StateError('This Browser cannot fill forms.');
+
   /// A [restoring] load reopens a saved tab; its page is not a new visit.
   Future<void> navigate(String text, {bool restoring = false});
   bool get canGoBack => false;

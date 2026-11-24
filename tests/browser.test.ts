@@ -6,7 +6,7 @@ import { serve } from "@hono/node-server";
 import { WebSocket } from "ws";
 import { createBrowser } from "../server/browser.ts";
 
-test("the built-in Browser relays page reads and transcripts to the connected client and refuses web-page sockets", async () => {
+test("the built-in Browser relays page reads, transcripts and form fills to the connected client and refuses web-page sockets", async () => {
   const browser = createBrowser();
   const server = serve({ fetch: () => new Response(null, { status: 404 }), hostname: "127.0.0.1", port: 0 });
   browser.attach(server);
@@ -29,6 +29,10 @@ test("the built-in Browser relays page reads and transcripts to the connected cl
       const request = JSON.parse(raw.toString());
       if (request.type === "read")
         client.send(JSON.stringify({ id: request.id, data: { tabId: request.tabId, text: "Page text" } }));
+      else if (request.type === "form")
+        client.send(JSON.stringify({ id: request.id, data: { fields: [{ id: "f1", type: "email", label: "Email" }] } }));
+      else if (request.type === "fill")
+        client.send(JSON.stringify({ id: request.id, data: { asked: request.fields, submitted: false } }));
       else if (request.offset === 0)
         client.send(JSON.stringify({ id: request.id, data: { text: "[0:01] Hello", nextOffset: 13 } }));
       else client.send(JSON.stringify({ id: request.id, error: "This video has no captions, so it has no transcript." }));
@@ -37,6 +41,12 @@ test("the built-in Browser relays page reads and transcripts to the connected cl
     assert.deepEqual((await call("browser.transcript", { sessionId: session, tabId: "tab" })).data,
       { text: "[0:01] Hello", nextOffset: 13 });
     assert.match(await failure("browser.transcript", { sessionId: session, tabId: "tab", offset: 13 }), /no captions/);
+    assert.deepEqual((await call("browser.form", { sessionId: session, tabId: "tab" })).data,
+      { fields: [{ id: "f1", type: "email", label: "Email" }] });
+    assert.deepEqual((await call("browser.fill", { sessionId: session, tabId: "tab",
+      fields: [{ id: "f1", value: "ada@example.com" }, { id: "f2", value: true }, { id: 3, value: 4 }] })).data,
+    { asked: [{ id: "f1", value: "ada@example.com" }, { id: "f2", value: true }, { id: "3", value: "4" }], submitted: false });
+    assert.match(await failure("browser.fill", { sessionId: session, tabId: "tab", fields: [] }), /browser\.form/);
     assert.deepEqual((await call("browser.open", { url: "https://example.com/a" })).data,
       { presentation: { viewId: "browser", state: { url: "https://example.com/a" } } });
     client.close();
