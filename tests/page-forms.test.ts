@@ -90,6 +90,15 @@ test("a form read lists shown fields with Relay ids, and no password value", asy
 
   const again = await run(page, "read");
   assert.deepEqual(again.fields.map((field: any) => field.id), read.fields.map((field: any) => field.id), "ids stay with their fields");
+
+  // A long list keeps every option; only a read too large for the socket is cut short.
+  await page.evaluate(() => document.body.insertAdjacentHTML("beforeend",
+    `<select name="year">${Array.from({ length: 250 }, (_, i) => `<option>${1900 + i}</option>`).join("")}</select>`
+    + Array.from({ length: 250 }, (_, i) => `<textarea name="note${i}">${"x".repeat(900)}</textarea>`).join("")));
+  const long = await run(page, "read");
+  assert.equal(long.fields.find((field: any) => field.name === "year").options.length, 250);
+  assert.equal(long.truncated, true);
+  assert.ok(JSON.stringify(long).length < 200000);
 });
 
 test("a fill sets fields as typing would, outlines them and never submits", async (t) => {

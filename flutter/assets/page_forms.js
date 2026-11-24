@@ -108,9 +108,7 @@
             ...(refusal(radio, type) ? { fillable: false } : {}) }));
         } else if (type === "select") {
           field.value = clip(el.value, 100);
-          const options = [...el.options];
-          field.options = options.slice(0, 60).map((option) => ({ value: clip(option.value, 100), label: clip(option.text, 100) }));
-          if (options.length > 60) field.moreOptions = options.length - 60;
+          field.options = [...el.options].map((option) => ({ value: clip(option.value, 100), label: clip(option.text, 100) }));
         } else if (!leftToUser.has(type)) field.value = el.value.slice(0, 1000);
         for (const key of ["label", "name", "placeholder", "form"]) if (!field[key]) delete field[key];
         // The client's socket takes 256 KB; leave room for the rest.

@@ -1022,6 +1022,37 @@ void main() {
     expect(room.page, isNotNull);
     expect(listening.page, isNull);
   });
+  testWidgets('only a Browser tab on screen has its form read or filled', (
+    tester,
+  ) async {
+    final f = Fixture(unloadAfter: const Duration(minutes: 30));
+    addTearDown(f.w.dispose);
+    await f.w.loadConfig();
+    final hidden = await f.w.openApp(f.w.apps[0]);
+    final shown = await f.w.openApp(f.w.apps[0]);
+    final room = await f.w.openApp(f.w.apps[1]);
+    f.w.select(shown);
+    await tester.pump(const Duration(minutes: 31));
+    Future<String> refusal(WorkspaceTab tab) => f.w
+        .shownBrowserTab(tab.id)
+        .then((_) => 'none', onError: (Object e) => '$e');
+
+    expect(await f.w.shownBrowserTab(shown.id), same(shown.page));
+    // A tab off screen is refused and stays unloaded; an app tab is no form.
+    expect(await refusal(hidden), contains('Open that tab to fill its form.'));
+    expect(hidden.page, isNull);
+    expect(await refusal(room), contains('Open that tab'));
+
+    // Both panes of a split show, but a narrow window shows only one.
+    f.w.dropInSplit(hidden, shown, SplitSide.right);
+    await tester.pump();
+    expect(await f.w.shownBrowserTab(hidden.id), same(hidden.page));
+    expect(await f.w.shownBrowserTab(shown.id), same(shown.page));
+    f.w.splitShown = false;
+    final other = f.w.active == hidden ? shown : hidden;
+    expect(await refusal(other), contains('Open that tab'));
+    expect(await refusal(f.w.active!), 'none');
+  });
   testWidgets('Reload, Go and an agent view load an unloaded tab first', (
     tester,
   ) async {

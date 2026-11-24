@@ -46,9 +46,12 @@ void main() {
     final connection = BrowserConnection(
       Uri.parse('http://127.0.0.1:${server.port}'),
       'session',
-      (tabId) async => tabId == 'tab'
+      (tabId) async => ['tab', 'hidden'].contains(tabId)
           ? FakeBrowser()
           : throw StateError('The requested browser tab is closed.'),
+      (tabId) async => tabId == 'tab'
+          ? FakeBrowser()
+          : throw StateError('Open that tab to fill its form.'),
       (_) {},
     );
     addTearDown(connection.close);
@@ -97,6 +100,17 @@ void main() {
       }))['data'],
       {'filled': 1, 'submitted': false},
     );
+    // A tab off screen is read, but its form is neither read nor filled.
+    expect(
+      (await ask({'type': 'read', 'id': '6', 'tabId': 'hidden'}))['data'],
+      {'text': 'Page text'},
+    );
+    for (final type in ['form', 'fill']) {
+      expect(await ask({'type': type, 'id': type, 'tabId': 'hidden'}), {
+        'id': type,
+        'error': 'Open that tab to fill its form.',
+      });
+    }
     expect(await ask({'type': 'transcript', 'id': '3', 'tabId': 'gone'}), {
       'id': '3',
       'error': 'The requested browser tab is closed.',
