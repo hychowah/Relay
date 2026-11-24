@@ -143,6 +143,15 @@ Request. The user said the file picker is working (2026-11-24; with which
 build is not recorded). Nothing in this build has run through the native Mac
 workflow, and the web page service was not redeployed.
 
+Test build `pre-0-0-20-files` (`c6d01fd`, 2026-11-24), published from a clean
+copy, holds everything in `pre-0-0-20` plus shared folders (the Files app) and
+form filling. Analysis, 109 Flutter tests and 138 backend tests passed on its
+commit. The backend was deployed at that commit after `npm ci` for the new
+`unpdf` package: it answered about 4 s after start, listed Files with no view
+and no shared folders, and refused the folder settings for a foreign Host. The
+web page service was not touched. The user asked for both ("deploy and build").
+Nothing in this build has run on the Mac.
+
 Browser popups (desktop only): webview_flutter_wkwebview 3.27.2 loaded a
 page's new window into its opener, which broke sign-in popups. A forwarding UI
 delegate in the Mac runner now opens sized new windows as child popups; others
@@ -240,13 +249,14 @@ real WKWebViews.
    edits); in Stable 0.0.18, make the development guide's by-hand highlight checks and
    check drag smoothness, then mark the 2026-11-23 report solved.
 21. Check **Updates** build times on Mac.
-22. Form filling (`browser.form`, `browser.fill`; desktop only) has passed
-   only Chromium and WSL tests. On the Mac, after a backend deploy, ask the
-   real agent to fill a test form in WKWebView: the outlines show, the page
-   scrolls to the first field, a React form takes the values and Relay does
-   not submit. A fill aimed at a hidden tab, or made while the conversation
-   is expanded, must be refused, and hidden fields must not be listed. Also
-   share a test folder holding a PDF in **Shared folders** and have the real
-   provider search and read it ([decision 0003](../prototype/phases/phase-01/decisions/0003-shared-folders-and-form-filling.md)).
+22. Form filling (`browser.form`, `browser.fill`; desktop only) has passed only
+   Chromium and WSL tests. On the Mac, in test build `pre-0-0-20-files`, ask
+   the real agent to fill a test form in WKWebView: the outlines show, the page
+   scrolls to the first field, a React form takes the values and Relay does not
+   submit. A fill aimed at a hidden tab, or made while the conversation is
+   expanded, must be refused, and hidden fields must not be listed. Also share
+   a test folder holding a PDF in **Shared folders** and have the real provider
+   search and read it
+   ([decision 0003](../prototype/phases/phase-01/decisions/0003-shared-folders-and-form-filling.md)).
 
 Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).
