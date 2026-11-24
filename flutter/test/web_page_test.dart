@@ -599,6 +599,79 @@ void main() {
     },
   );
 
+  test('a recorded bug gets the page trace in time order', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final platform = TestWebPlatform();
+    WebViewPlatform.instance = platform;
+    final api = RelayApi(
+      Uri.parse('http://relay.test'),
+      client: MockClient((_) async => http.Response('[]', 200)),
+    );
+    final recorder = api.recorder = BugRecorder();
+    final page = createWebPage(
+      PageSpec(
+        id: 'tab',
+        appId: 'browser',
+        name: 'Browser',
+        sessionId: 'session',
+        relayOrigin: api.origin,
+      ),
+      (_) {},
+      records: api,
+    );
+    addTearDown(page.dispose);
+    final controller = platform.controller;
+    await pumpEventQueue();
+    controller.delegate.finished(controller.location);
+    await page.ready;
+    await pumpEventQueue();
+    bool traced() => controller.scripts.any(
+      (script) => script.contains('window.__relayTrace ='),
+    );
+    void send(List<Json> notes) => controller.channel.onMessageReceived(
+      JavaScriptMessage(message: 'trace:${jsonEncode(notes)}'),
+    );
+    final start = DateTime.now().millisecondsSinceEpoch;
+    send([
+      {'at': start, 'kind': 'hover'},
+    ]);
+    expect(traced(), isFalse, reason: 'no trace without a recording');
+
+    recorder.start();
+    await pumpEventQueue();
+    expect(traced(), isTrue);
+    recorder.action('later');
+    // A batch arrives after the moment it describes; a note cannot pose as
+    // another kind of event.
+    send([
+      {
+        'at': start + 1,
+        'type': 'error',
+        'kind': 'hover',
+        'target': 'a "Provide URL"',
+      },
+    ]);
+    expect(recorder.events.map((event) => event['type']), ['page', 'action']);
+    expect(recorder.events.first, {
+      'at': DateTime.fromMillisecondsSinceEpoch(
+        start + 1,
+        isUtc: true,
+      ).toIso8601String(),
+      'type': 'page',
+      'tab': 'YouTube',
+      'kind': 'hover',
+      'target': 'a "Provide URL"',
+    });
+
+    recorder.stop();
+    await pumpEventQueue();
+    expect(controller.scripts.last, 'window.__relayTrace?.stop()');
+    send([
+      {'at': start + 2, 'kind': 'hover'},
+    ]);
+    expect(recorder.events, hasLength(2));
+  });
+
   test('a Browser transcript arrives through the page channel', () async {
     final platform = TestWebPlatform();
     WebViewPlatform.instance = platform;

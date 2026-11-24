@@ -48,3 +48,4 @@ flutter:
     - assets/replace.sh
     - assets/page_fullscreen.js
     - assets/page_highlights.js
+    - assets/page_trace.js

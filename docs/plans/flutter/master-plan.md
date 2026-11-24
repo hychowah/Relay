@@ -188,11 +188,12 @@ real WKWebViews.
    folder on WSL. Remove it at publish time if that folder grows.
 3. Review Stable 0.0.19 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`. The suite's longest waits, on tab switches, are candidates for a smoothness fix. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
 4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable since 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified. The capture animation is in Stable 0.0.17: on the Mac, check that the flash and the flight to the composer run smoothly over a real page, and that the thumbnail takes over without a jump.
-5. On the Mac, try the record button and **Bug reports** against the live
-   backend: save, view, mark solved and delete. The screenshot now covers the
-   whole window (in Stable 0.0.18; a 2026-11-23 report pictured tabs, banner
-   and an app page): check the chat, a split and a Browser comment over a page, note
-   its size, and that pages still click and scroll.
+5. Bug reports on the Mac: view, mark solved and delete one; check that the
+   whole-window screenshot shows the chat, a split and a Browser comment over a
+   page, and that pages still click and scroll. The 2026-11-24 report (ChatGPT
+   hover jumping, mouse nearly still) held no page events; Browser pages are
+   now traced (unverified in WKWebView). Record it again: hover lost and
+   regained at poll times means the poll's redraw; scroll notes, the trackpad.
 6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 7. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
 8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.

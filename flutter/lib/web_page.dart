@@ -363,6 +363,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
             : null,
       ) {
     _initialize();
+    _recorder?.addListener(_traceChanged);
   }
   // Desktop (macOS) only; other platforms ignore the flag.
   bool get _vpn => spec.vpn && Platform.isMacOS;
@@ -371,6 +372,11 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   Completer<void>? _navigation;
   String _title = '', _url = 'about:blank';
   final RelayApi? _records;
+  // While a bug is recorded, the page notes what it sees of the mouse and
+  // scrolling (assets/page_trace.js); WebKit gets the mouse from macOS
+  // directly, so Relay cannot see this from outside the page.
+  BugRecorder? get _recorder => _records?.recorder;
+  static String? _traceScript;
   // The address this tab last counted as a visit. While a load is under way
   // its address may still pass through redirects; only the finished page counts.
   String? _visited;
@@ -437,6 +443,47 @@ class _BrowserPage extends _WebPage with BrowserSurface {
         ),
     ],
   );
+
+  void _traceChanged() {
+    if (!_disposed && _ready.isCompleted) unawaited(_trace());
+  }
+
+  /// Starts or stops the page trace to match the bug recording. A page
+  /// loaded while recording starts it when it finishes loading.
+  Future<void> _trace() async {
+    try {
+      if (_recorder?.recording != true) {
+        await controller.runJavaScript('window.__relayTrace?.stop()');
+        return;
+      }
+      _traceScript ??= await rootBundle.loadString('assets/page_trace.js');
+      await controller.runJavaScript(_traceScript!);
+    } catch (_) {
+      // The recording goes on without the page's own notes.
+    }
+  }
+
+  /// Adds a batch of the page trace's notes to the bug recording. A page's
+  /// own scripts can send these too, but only while a bug is recorded.
+  void _noteTrace(String batch) {
+    final recorder = _recorder;
+    if (recorder == null || !recorder.recording) return;
+    try {
+      for (final note in (jsonDecode(batch) as List).take(200)) {
+        // The note cannot pose as another kind of event or tab.
+        final details = {...note as Map<String, dynamic>}
+          ..remove('type')
+          ..remove('tab');
+        final at = details.remove('at') as int;
+        recorder.add('page', {
+          'tab': title,
+          ...details,
+        }, at: DateTime.fromMillisecondsSinceEpoch(at, isUtc: true));
+      }
+    } catch (_) {
+      // Not from the trace script.
+    }
+  }
 
   void _dismissComment() {
     if (_comment == null) return;
@@ -516,6 +563,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
           if (_disposed) return;
           try {
             await controller.runJavaScript(_observePage);
+            if (_recorder?.recording == true) unawaited(_trace());
             // The page is ready without waiting for the PDF viewer or the
             // highlights. A viewer still open belonged to the page before.
             _newDocument();
@@ -578,6 +626,10 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   /// the PDF it shows in the page's place.
   void _message(String message) {
     if (_disposed) return;
+    if (message.startsWith('trace:')) {
+      _noteTrace(message.substring('trace:'.length));
+      return;
+    }
     if (message.startsWith('transcript:')) {
       final reply = jsonDecode(message.substring(11)) as Map;
       final pending = _transcriptReplies.remove(reply['id']);
@@ -1000,6 +1052,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   @override
   void dispose() {
     super.dispose();
+    _recorder?.removeListener(_traceChanged);
     // A load the user has moved past, such as a tab switched to the other
     // network, ends quietly.
     if (_navigation?.isCompleted == false) _navigation!.complete();

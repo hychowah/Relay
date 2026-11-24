@@ -43,14 +43,22 @@ class BugRecorder extends ChangeNotifier {
     'events': List.of(events),
   };
 
-  void add(String type, Json details) {
+  /// [at] is when an event noted elsewhere and sent later, such as in a web
+  /// page, happened; the event goes in time order among the others.
+  void add(String type, Json details, {DateTime? at}) {
     if (!recording) return;
     if (events.length >= maxEvents) {
       events.removeAt(0);
       dropped++;
     }
-    events.add({
-      'at': DateTime.now().toUtc().toIso8601String(),
+    final time = (at ?? DateTime.now()).toUtc();
+    var index = events.length;
+    while (index > 0 &&
+        time.isBefore(DateTime.parse(events[index - 1]['at'] as String))) {
+      index--;
+    }
+    events.insert(index, {
+      'at': time.toIso8601String(),
       'type': type,
       ..._trim(details) as Json,
     });
@@ -69,17 +77,18 @@ class BugRecorder extends ChangeNotifier {
     required Duration elapsed,
   }) {
     if (!recording) return;
-    // The workspace polls every second; keep only replies that changed.
-    if (method == 'GET' && reply != null) {
-      if (_lastReply[path] == reply) return;
-      _lastReply[path] = reply;
-    }
+    // The workspace polls every second; a reply that has not changed is
+    // noted without its body, so its time still shows (each poll redraws
+    // the window, which a page trace may need to line up with).
+    final unchanged =
+        method == 'GET' && reply != null && _lastReply[path] == reply;
+    if (method == 'GET' && reply != null) _lastReply[path] = reply;
     add('request', {
       'method': method,
       'path': path,
       'body': ?_decode(body),
       'status': ?status,
-      'reply': ?_decode(reply),
+      if (unchanged) 'unchanged': true else 'reply': ?_decode(reply),
       'failure': ?failure?.toString(),
       'ms': elapsed.inMilliseconds,
     });

@@ -489,6 +489,9 @@ class _RelayShellState extends State<RelayShell> {
     // a second capture would clear the first one's page pictures.
     if (reportingBug) return;
     reportingBug = true;
+    // The recording goes on while the user describes the bug; this marks
+    // where the reproduction ended.
+    w.recorder.action('stop pressed');
     try {
       // Capture before the dialog so the picture shows what the user saw.
       Uint8List? screenshot;

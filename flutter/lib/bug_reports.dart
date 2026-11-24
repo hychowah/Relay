@@ -123,6 +123,12 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
         '${event['method']} ${event['path']} → '
             '${event['status'] ?? event['failure'] ?? '?'} (${event['ms']} ms)',
       'error' => '${event['message']}',
+      // What a Browser page saw (see assets/page_trace.js).
+      'page' => [
+        'Page ${event['kind']}',
+        event['target'],
+        if (event['x'] != null) '(${event['x']}, ${event['y']})',
+      ].nonNulls.join(' · '),
       'agent view command' =>
         'Agent ${command?['kind']} in ${command?['appId'] ?? command?['source']?['appId']}',
       _ => '${event['type']}',
@@ -183,6 +189,7 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
             ? (Icons.swap_vert, Colors.red)
             : (Icons.swap_vert, colors.onSurfaceVariant),
       'error' => (Icons.error_outline, Colors.red),
+      'page' => (Icons.web_outlined, colors.onSurfaceVariant),
       _ => (Icons.smart_toy_outlined, colors.onSurface),
     };
     return ExpansionTile(

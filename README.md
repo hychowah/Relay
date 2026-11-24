@@ -129,11 +129,21 @@ python3 tools/check_records.py
 **Bug reports.** In the Flutter app, press the record button at the top right,
 reproduce the problem, then press the red record button again and describe it.
 The recording holds your actions, each server request and reply (a repeated
-poll reply is kept once; Browser history and highlight requests are left out), error
+reply, such as the one-second poll, is noted with its time but not its body;
+Browser history and highlight requests are left out), error
 messages, the open tabs and a screenshot of the whole window, at most 2,000
 pixels on its longest side, with each shown page's own snapshot in place (a page
 that cannot be captured shows as a grey area marked "Page not captured"). Pixels
-are not redacted, so the picture shows whatever was on screen. The service saves
+are not redacted, so the picture shows whatever was on screen. On the desktop
+it also holds a trace of each loaded Browser tab, which Relay cannot otherwise
+see inside: the link or item under the mouse each time it changes or the mouse
+leaves the page, the mouse position about five times a second and every jump
+over 40 pixels, scrolling, wheel input, and the page's focus, size and
+visibility. Elements are named by tag, id, role and first 40 characters of
+text; key presses and the text in fields are not recorded. A **stop pressed**
+action marks the end of the reproduction. A recording keeps its latest 2,000
+events, a few minutes with the mouse moving over a page; the report counts
+any older ones it dropped. The service saves
 it as `bug-reports/<time>-<id>.json` (with a `.png`) in `RELAY_DATA_DIR`, adds
 its own record of the conversation and replaces API keys and other secret
 fields with `[redacted]`. Reports contain conversation text, so they stay with
