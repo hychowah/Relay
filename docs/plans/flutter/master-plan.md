@@ -127,10 +127,21 @@ Stable 0.0.17 and 0.0.18 were published from `main` on 2026-11-23 and 0.0.19
 on 2026-11-24. 0.0.19 adds OpenAI, VPN tabs, tab memory with unloading and a
 hover card, and update checks each minute; the commit history has the earlier
 ones. Analysis, 105 Flutter tests and 124 backend tests passed on its commit.
-The backend was last deployed on 2026-11-23 at `2d7d489`. The user asked for
+The backend was deployed on 2026-11-23 at `2d7d489`. The user asked for
 each release and said of 0.0.19's test build that all works well, but did not
 test unloading; which checks below they made is not recorded, and the native
 Mac workflow was not rerun.
+
+Test build `pre-0-0-20` (`7a1df86`, 2026-11-24) holds what was merged after
+0.0.19: report categories, an address bar in each split pane, the Mac file
+chooser, the page trace in bug recordings, no redraw for an unchanged
+conversation poll, and the hover fix. Analysis, 107
+Flutter tests and 127 backend tests passed on its commit, and the backend was
+deployed at that commit the same day. The user asked for the build in reply to
+an offer of a deploy and a build, and chose two report categories, Bug and
+Request. The user said the file picker is working (2026-11-24; with which
+build is not recorded). Nothing in this build has run through the native Mac
+workflow, and the web page service was not redeployed.
 
 Browser popups (desktop only): webview_flutter_wkwebview 3.27.2 loaded a
 page's new window into its opener, which broke sign-in popups. A forwarding UI
@@ -149,10 +160,12 @@ real WKWebViews.
 3. Review Stable 0.0.19 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`. The suite's longest waits, on tab switches, are candidates for a smoothness fix. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
 4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable since 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified. The capture animation is in Stable 0.0.17: on the Mac, check that the flash and the flight to the composer run smoothly over a real page, and that the thumbnail takes over without a jump.
 5. On the Mac, try the record button and **Reports** against the live
-   backend: save, view, mark solved, delete and categories (after a backend
-   deploy); check that the whole-window screenshot shows the chat, a split and
+   backend: save, view, mark solved, delete and the categories Bug and
+   Request; check that the whole-window screenshot shows the chat, a split and
    a Browser comment over a page, and that pages still click and scroll. Record
-   any ChatGPT scroll snapping back: script scrolls are noted.
+   any ChatGPT scroll snapping back: script scrolls are noted. For the file
+   chooser, check that a hidden tab's page cannot open it and that it names
+   the asking site.
    A page's hover jumped on each redraw: Flutter re-added the web view's
    container under its own top view each frame, so AppKit re-attached the web
    view and WebKit re-checked the hover from the window's corner (Mac probe,
@@ -174,8 +187,8 @@ real WKWebViews.
    tab, and closing it, and that the split tab's outline and pane map read
    clearly in light and dark. Check that the selected page clicks and scrolls:
    nothing may be drawn over it (the 0.0.12 bug; its outline has been a
-   2-pixel frame since 0.0.13). Per-pane address bars (2026-11-24, no Mac
-   build yet): check that selecting a pane resizes no page and narrow bars
+   2-pixel frame since 0.0.13). Per-pane address bars (in test build
+   `pre-0-0-20`): check that selecting a pane resizes no page and narrow bars
    fit.
 12. Check night mode on the Mac in Dark and Light, with macOS both light and
    dark: tabs, chat, Markdown replies, dialogs, menus and the empty Browser

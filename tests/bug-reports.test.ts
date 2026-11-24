@@ -57,10 +57,10 @@ test("bug reports save the recording with the server's conversation and without 
     assert.equal((await change({ status: "fixed" })).status, 400);
     assert.equal((await change({ category: "idea" })).status, 400);
     assert.equal((await change({ status: "solved" })).status, 200);
-    assert.equal((await change({ category: "feature" })).status, 200);
+    assert.equal((await change({ category: "request" })).status, 200);
     const [solved] = await (await workspace.app.request("/api/bug-reports")).json();
     assert.equal(solved.status, "solved");
-    assert.equal(solved.category, "feature");
+    assert.equal(solved.category, "request");
     const kept = JSON.parse(await readFile(join(dir, `${id}.json`), "utf8"));
     assert.equal(kept.events.length, 2);
 
@@ -68,9 +68,9 @@ test("bug reports save the recording with the server's conversation and without 
     assert.deepEqual(await readdir(dir), []);
     assert.equal((await workspace.app.request(`/api/bug-reports/${id}`, { method: "DELETE" })).status, 404);
 
-    assert.equal((await post({ description: "Show tab sizes", category: "update", events: [] })).status, 201);
+    assert.equal((await post({ description: "Show tab sizes", category: "request", events: [] })).status, 201);
     const [request] = await (await workspace.app.request("/api/bug-reports")).json();
-    assert.equal(request.category, "update");
+    assert.equal(request.category, "request");
 
     // Reports saved before categories existed are listed as bugs.
     const old = JSON.parse(await readFile(join(dir, `${request.id}.json`), "utf8"));

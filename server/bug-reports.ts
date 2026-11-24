@@ -11,7 +11,7 @@ const secretName = /api.?key|secret|password|authorization/i;
 const reportId = /^[0-9TZ-]+-[0-9a-f]{8}$/;
 const statuses = ["open", "solved"];
 // A report records a bug or asks for a new feature or a change to an existing one.
-const categories = ["bug", "feature", "update"];
+const categories = ["bug", "request"];
 
 // Recordings include request bodies, such as provider settings with an API key.
 function redact(value: unknown): unknown {
@@ -21,7 +21,7 @@ function redact(value: unknown): unknown {
     [key, secretName.test(key) && item ? "[redacted]" : redact(item)]));
 }
 
-/** Saves and serves development reports (bugs, feature and update requests): one JSON file each, plus an optional PNG. */
+/** Saves and serves development reports (bugs and requests): one JSON file each, plus an optional PNG. */
 export function addBugReports(app: Hono, dir: string, store: Store) {
   function reportFile(id: string, extension: "json" | "png") {
     const path = join(dir, `${id}.${extension}`);
@@ -49,7 +49,7 @@ export function addBugReports(app: Hono, dir: string, store: Store) {
     if (status !== undefined && (typeof status !== "string" || !statuses.includes(status)))
       throw new HTTPException(400, { message: "Status must be open or solved." });
     if (category !== undefined && (typeof category !== "string" || !categories.includes(category)))
-      throw new HTTPException(400, { message: "Category must be bug, feature or update." });
+      throw new HTTPException(400, { message: "Category must be bug or request." });
     const report = JSON.parse(readFileSync(path, "utf8"));
     const changed = { ...report, ...(status === undefined ? {} : { status }), ...(category === undefined ? {} : { category }) };
     writeFileSync(path, `${JSON.stringify(changed, null, 2)}\n`, { mode: 0o600 });
@@ -71,7 +71,7 @@ export function addBugReports(app: Hono, dir: string, store: Store) {
       throw new HTTPException(400, { message: "Send a description and the recorded events." });
     const category = body.category ?? "bug";
     if (typeof category !== "string" || !categories.includes(category))
-      throw new HTTPException(400, { message: "Category must be bug, feature or update." });
+      throw new HTTPException(400, { message: "Category must be bug or request." });
     const savedAt = new Date().toISOString();
     const id = `${savedAt.replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}`;
     const conversation = typeof body.conversationId === "string" ? store.snapshot(body.conversationId) : undefined;

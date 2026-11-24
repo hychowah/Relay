@@ -1955,8 +1955,8 @@ void main() {
     expect(f.bugReport!['category'], 'bug');
 
     page.frame = null;
-    final (_, notCaptured, _) = await record('Feature request');
-    expect(f.bugReport!['category'], 'feature');
+    final (_, notCaptured, _) = await record('Request');
+    expect(f.bugReport!['category'], 'request');
     expect(notCaptured, [0xd4, 0xd4, 0xd4]);
     expect(find.text('Page not captured'), findsNothing, reason: 'cleared');
 
