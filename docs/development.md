@@ -150,8 +150,9 @@ belong to this deployment. Keys remain in WSL and existing provider VPN checks
 apply. No keys go in Dart defines. If the connection uses a key file, also set
 `DEEPSEEK_API_KEY_FILE` on the backend.
 
-`RELAY_APPS_FILE` optionally adds existing HTTP integrations beside Browser,
-using Relay's usual registration format. For example:
+`RELAY_APPS_FILE` optionally adds existing HTTP integrations beside the
+built-in Browser and Files apps, using Relay's usual registration format. For
+example:
 
 ```json
 [{"id":"my-app","name":"My app","serverUrl":"http://127.0.0.1:4000","browserUrl":"http://<device-reachable-host>:4000","trustedNative":true}]

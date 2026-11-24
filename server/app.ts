@@ -484,13 +484,15 @@ export function createWorkspace(
   app.get("/api/config", (c) =>
     c.json({
       provider: {...provider, supportsImageInput: supportsImageInput(provider.mode), supportsReasoningEffort: supportsReasoningEffort(provider.mode, provider.model)},
-      apps: apps().map(({ id, name, description, resourceId, protocolVersion, capabilities }) => ({
+      apps: apps().map(({ id, name, description, resourceId, protocolVersion, capabilities, integration }) => ({
         id,
         name,
         description,
         resourceId,
         protocolVersion,
         capabilities,
+        // An app without a view, such as Files, serves only the agent.
+        hasView: Boolean(integration.open || integration.view),
       })),
     }),
   );

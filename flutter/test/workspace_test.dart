@@ -1849,6 +1849,12 @@ void main() {
       f.configApps = [
         apps[0],
         {'id': 'garden', 'name': 'Garden', 'protocolVersion': 2},
+        {
+          'id': 'files',
+          'name': 'Files',
+          'protocolVersion': 2,
+          'hasView': false,
+        },
       ];
       f.w.newTab();
       await tester.pump();
@@ -1859,6 +1865,7 @@ void main() {
       );
       expect(picker('Garden'), findsOneWidget);
       expect(picker('Room layout'), findsNothing);
+      expect(picker('Files'), findsNothing);
       expect(f.w.tabs, contains(room));
       expect((room.page as FakePage).disposed, isFalse);
       await tester.pumpWidget(const SizedBox());

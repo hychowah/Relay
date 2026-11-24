@@ -6,15 +6,17 @@ import {mkdirSync, existsSync, copyFileSync, chmodSync} from 'node:fs';
 import {appRegistry} from '../server/app-registry.ts';
 import {startWorkspace} from '../server/runtime.ts';
 import {createBrowser} from '../server/browser.ts';
+import {createFiles} from '../server/files.ts';
 import {attachBrowserProxy} from '../server/browser-proxy.ts';
 import {ProviderSettingsStore} from '../server/provider-settings.ts';
 import {addAppServers} from '../server/app-servers.ts';
 
 const relayOrigin = process.env.FLUTTER_RELAY_ORIGIN || 'http://127.0.0.1:3250';
 const browser = createBrowser();
-const apps = appRegistry(process.env.RELAY_APPS_FILE, [browser.app]);
 const dataDir = process.env.RELAY_DATA_DIR || 'runtime/flutter';
 mkdirSync(dataDir, {recursive:true});
+const files = createFiles(dataDir);
+const apps = appRegistry(process.env.RELAY_APPS_FILE, [browser.app, files.app]);
 // Import service settings once; subsequent changes belong to this experiment.
 if (process.env.RELAY_PROVIDER_DIR && !existsSync(`${dataDir}/provider.json`)) {
   const source = `${process.env.RELAY_PROVIDER_DIR}/provider.json`;
@@ -27,6 +29,7 @@ if (process.env.RELAY_PROVIDER_DIR && !existsSync(`${dataDir}/provider.json`)) {
 }
 const workspace = await startWorkspace(dataDir, apps);
 workspace.app.route('/', flutterReleases(`${dataDir}/releases`));
+files.addRoutes(workspace.app);
 addAppServers(workspace.app, process.env.RELAY_SERVERS_FILE, {
   hosts: [new URL(relayOrigin).host, '127.0.0.1:3250', 'localhost:3250'],
 });

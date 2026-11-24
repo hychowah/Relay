@@ -371,6 +371,21 @@ class RelayApi {
   Future<void> clearStoredData(String id) =>
       _request('/api/stored-data/$id', null, 'DELETE');
 
+  /// The folders the agent may read and search through the Files app; each
+  /// change answers the whole list.
+  Future<List<String>> sharedFolders() async =>
+      _folders(await _request<Json>('/api/settings/folders'));
+  Future<List<String>> addSharedFolder(String path) async =>
+      _folders(await _request<Json>('/api/settings/folders', {'path': path}));
+  Future<List<String>> removeSharedFolder(String path) async => _folders(
+    await _request<Json>(
+      '/api/settings/folders?${Uri(queryParameters: {'path': path}).query}',
+      null,
+      'DELETE',
+    ),
+  );
+  List<String> _folders(Json reply) => (reply['folders'] as List).cast();
+
   Future<void> checkIdleBeforeRestart(
     String deviceId,
     String windowId, {

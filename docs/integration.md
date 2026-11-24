@@ -231,6 +231,28 @@ also keeps Relay's Library control for a v2 app.
 An app that cannot serve the protocol itself can sit behind an external adapter
 registered by address. See [Setup](../README.md#setup) for registration.
 
+## Built-in Files app
+
+The Flutter backend registers `files`, beside Browser, for read-only access to
+the folders listed in Settings (`GET`, `POST {path}` and
+`DELETE ?path=` on `/api/settings/folders`, saved as `folders.json` in
+`RELAY_DATA_DIR`). A folder must be an existing directory given as an absolute
+WSL path. Its operations are `files.list`, `files.search` (names and words in
+readable text, capped at 50 matches, 20,000 entries, 10 seconds and 64 MB of
+text, with a note when capped) and `files.read` (pages with `nextOffset`).
+Readable files are plain text by extension and PDFs (text through `unpdf`, up
+to 20 MB and 300 pages); others are listed by name only. It has no view, so the app picker
+leaves it out (`hasView: false` in `/api/config`); bots reach it only through
+their allowed apps.
+
+The service enforces the rules, not the model instructions: a path counts only
+when its real location, after symlinks, is inside a shared folder; names that
+start with a dot below a shared folder are refused; and `RELAY_DATA_DIR`,
+`RELAY_PROVIDER_DIR`, any `*_API_KEY_FILE` and every folder holding a
+`relay.sqlite` (another Relay's records) stay out even inside a shared folder.
+Nothing is written or run. Shell and code tools still need the separate
+executor boundary.
+
 ## Standard fit
 
 This is **Relay protocol v2, not MCP compatibility**. Operation descriptors use

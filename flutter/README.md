@@ -209,6 +209,19 @@ the tab unchanged. Image input works with Claude and OpenAI. The service keeps
 a sent screenshot with its message, so reopening the chat shows it again; Trash
 hides it and the 24-hour Trash cleanup deletes it with the conversation.
 
+## Shared folders
+
+**Workspace menu → Shared folders** lists the folders on the computer that
+runs Relay (in WSL) that the agent may read and search. Type a folder's full
+path, such as `/home/you/notes` or `/mnt/c/Users/you/Documents`, and press
+**Add**. The bin button beside a folder, then **Remove**, stops sharing it.
+The agent reads plain text files (such as .txt, .md, .csv, .json, .yaml, .log
+and source code) and the text of PDFs; other files show by name only. It
+cannot change, move or delete anything. Hidden files and folders (names
+starting with a dot, such as `.ssh` or `.env`) and Relay's own records are
+always left out. Text the agent reads is sent to your model provider. Normal
+chat can use shared folders; a bot can only when **Files** is one of its apps.
+
 ## Stored data
 
 **Workspace menu → Stored data** lists what the Relay server keeps as you

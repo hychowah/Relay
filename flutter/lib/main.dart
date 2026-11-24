@@ -26,6 +26,7 @@ import 'workspace_style.dart';
 import 'workspace_tabs.dart';
 import 'page_surface.dart';
 import 'region_capture.dart';
+import 'shared_folders.dart';
 import 'split_layout.dart';
 import 'stored_data.dart';
 import 'tab_memory.dart';
@@ -551,6 +552,11 @@ class _RelayShellState extends State<RelayShell> {
           await showDialog<void>(
             context: context,
             builder: (_) => StoredDataDialog(api: w.api),
+          );
+        case 'folders':
+          await showDialog<void>(
+            context: context,
+            builder: (_) => SharedFoldersDialog(api: w.api),
           );
         case 'provider':
           await showDialog<void>(
@@ -1582,6 +1588,7 @@ class _RelayShellState extends State<RelayShell> {
             _menuItem('bots', 'Bots', Icons.smart_toy_outlined),
             _menuItem('memory', 'Memory', Icons.bookmarks_outlined),
             _menuItem('servers', 'App servers', Icons.dns_outlined),
+            _menuItem('folders', 'Shared folders', Icons.folder_outlined),
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 5),
               child: Divider(),
@@ -2242,9 +2249,11 @@ class _NewTabPageState extends State<NewTabPage> {
   Widget build(BuildContext context) {
     final matches = widget.apps
         .where(
-          (app) => '${app.name} ${app.description}'.toLowerCase().contains(
-            search.trim().toLowerCase(),
-          ),
+          (app) =>
+              app.hasView &&
+              '${app.name} ${app.description}'.toLowerCase().contains(
+                search.trim().toLowerCase(),
+              ),
         )
         .toList();
     return LayoutBuilder(

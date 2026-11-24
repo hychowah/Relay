@@ -6,6 +6,7 @@ class WorkspaceApp {
       name = json['name'],
       description = json['description'],
       protocolVersion = json['protocolVersion'],
+      hasView = json['hasView'] != false,
       canSearch =
           json['capabilities']?['search'] == true ||
           json['protocolVersion'] != 2;
@@ -13,6 +14,9 @@ class WorkspaceApp {
   final String? description;
   final int? protocolVersion;
   final bool canSearch;
+
+  /// False for an app that serves only the agent, such as Files.
+  final bool hasView;
   static const browserId = 'browser';
   bool get isBrowser => id == browserId;
   bool get opensInLibrary => !isBrowser && protocolVersion != 2;

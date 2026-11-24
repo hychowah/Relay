@@ -225,7 +225,7 @@ export interface WorkspaceConfig {
     configured: boolean;
     supportsReasoningEffort?: boolean;
   };
-  apps: Array<{ id: string; name: string; description: string; resourceId?: string; protocolVersion?: 2; capabilities?: Record<string, boolean> }>;
+  apps: Array<{ id: string; name: string; description: string; resourceId?: string; protocolVersion?: 2; capabilities?: Record<string, boolean>; hasView?: boolean }>;
 }
 
 export interface ProviderModel { id: string; name: string; supportsReasoningEffort?: boolean; }

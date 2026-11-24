@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:relay_flutter/provider_settings.dart';
 import 'package:relay_flutter/relay_api.dart';
+import 'package:relay_flutter/shared_folders.dart';
 import 'package:relay_flutter/workspace.dart';
 import 'package:relay_flutter/workspace_dialogs.dart';
 
@@ -196,6 +197,62 @@ void main() {
     await tester.tap(find.text('Save bot'));
     await tester.pumpAndSettle();
     expect(saved?['appIds'], ['notes']);
+  });
+  testWidgets('shared folders are listed, added and removed on the server', (
+    tester,
+  ) async {
+    final folders = ['/home/me/notes'];
+    final requests = <String>[];
+    final api = RelayApi(
+      Uri.parse('http://localhost'),
+      client: MockClient((request) async {
+        requests.add('${request.method} ${request.url}');
+        if (request.method == 'POST') {
+          final path = (jsonDecode(request.body) as Json)['path'] as String;
+          if (!path.startsWith('/')) {
+            return http.Response(
+              jsonEncode({'error': 'Enter the full path.'}),
+              400,
+            );
+          }
+          folders.add(path);
+        }
+        if (request.method == 'DELETE') {
+          folders.remove(request.url.queryParameters['path']);
+        }
+        return http.Response(jsonEncode({'folders': folders}), 200);
+      }),
+    );
+    addTearDown(api.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: SharedFoldersDialog(api: api)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('/home/me/notes'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'notes');
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter the full path.'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), '/mnt/c/Docs');
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+    expect(find.text('/mnt/c/Docs'), findsOneWidget);
+    expect(find.text('Enter the full path.'), findsNothing);
+
+    await tester.tap(find.byTooltip('Stop sharing').first);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+    expect(find.text('/home/me/notes'), findsNothing);
+    expect(
+      requests.last,
+      'DELETE http://localhost/api/settings/folders?path=%2Fhome%2Fme%2Fnotes',
+    );
   });
   testWidgets('memory editor keeps scope and saves an edited entry', (
     tester,

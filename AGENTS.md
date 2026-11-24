@@ -21,9 +21,9 @@ status, assumptions, and the next step. Update its Next section at handoff.
   measuring and publishing in the [development guide](docs/development.md),
   and plans in `docs/plans/`, never in a README.
 - Keep application-specific behavior in each app's own project, never in this
-  repository. Relay holds only the generic protocol, its Browser and the Room
-  example. Changes to another repository must follow that repository's
-  instructions and source/runtime boundaries.
+  repository. Relay holds only the generic protocol, its built-in Browser
+  and Files apps, and the Room example. Changes to another repository must
+  follow that repository's instructions and source/runtime boundaries.
 - Preserve unrelated changes and user data. Use synthetic fixtures for initial
   integration checks and distinguish source verification from live readiness.
 - Keep credentials and private runtime data out of source control and logs.
