@@ -643,19 +643,24 @@ void main() {
     recorder.start();
     await pumpEventQueue();
     expect(traced(), isTrue);
+    // The note's time is after the start and before the action, with room
+    // on both sides at the page's millisecond clock.
+    await Future<void>.delayed(const Duration(milliseconds: 5));
     final hovered = now();
     await Future<void>.delayed(const Duration(milliseconds: 5));
     recorder.action('later');
     // A batch arrives after the moment it describes; a note cannot pose as
-    // another kind of event, and only plain short fields are kept.
+    // another kind of event, and only the trace's own fields are kept, cut
+    // to their limits.
     send([
       {
         'at': hovered,
         'type': 'error',
         'kind': 'hover',
-        'target': 'a "Provide URL"',
+        'target': 'a "Provide URL"${'x' * 300}',
         'nested': {'a': 1},
-        'long': 'x' * 600,
+        'made up': 'y',
+        'x': 3,
       },
     ]);
     expect(recorder.events.map((event) => event['type']), ['page', 'action']);
@@ -667,43 +672,53 @@ void main() {
       'type': 'page',
       'tab': 'YouTube',
       'kind': 'hover',
-      'target': 'a "Provide URL"',
-      'long': 'x' * 500,
+      'target': 'a "Provide URL"${'x' * 300}'.substring(0, 200),
+      'x': 3,
     });
 
-    // A note of another kind is refused; one with a time outside the
-    // recording is held within it.
+    // A note of another kind is refused, and so is one too long as saved;
+    // one with a time outside the recording is held within it.
     send([
       {'at': now(), 'kind': 'made up'},
+      {
+        'at': now(),
+        'kind': 'script scroll',
+        'stack': '\u0001' * 500,
+        'url': '\u0001' * 2000,
+      },
       {'at': 0, 'kind': 'pointer'},
     ]);
-    expect(recorder.refusedPageNotes, 1);
+    expect(recorder.refusedPageNotes, 2);
     final pointer = recorder.events.firstWhere((e) => e['kind'] == 'pointer');
     expect(
       DateTime.parse(pointer['at'] as String).isBefore(recorder.startedAt!),
       isFalse,
     );
-    // A batch takes at most 200 notes, and a recording at most its limit;
-    // the rest are refused, apart from the oldest events let go.
+    // A batch takes at most 200 notes. A recording keeps its newest page
+    // notes up to its limit and lets the oldest go, keeping Relay's own.
     List<Json> pointers(int count) => [
       for (var i = 0; i < count; i++) {'at': now(), 'kind': 'pointer'},
     ];
     send(pointers(201));
-    expect(recorder.refusedPageNotes, 2);
-    final taken = recorder.events.where((e) => e['type'] == 'page').length;
+    expect(recorder.refusedPageNotes, 3);
+    final before = recorder.events.where((e) => e['type'] == 'page').length;
     for (var i = 0; i < 5; i++) {
       send(pointers(200));
     }
+    send([
+      {'at': now(), 'kind': 'hover', 'target': 'newest'},
+    ]);
+    final kept = recorder.events.where((event) => event['type'] == 'page');
+    expect(kept, hasLength(BugRecorder.maxPageNotes));
+    expect(kept.last['target'], 'newest');
     expect(
-      recorder.events.where((event) => event['type'] == 'page'),
-      hasLength(BugRecorder.maxPageNotes),
+      kept.where((e) => '${e['target']}'.startsWith('a "Provide URL"')),
+      isEmpty,
+      reason: 'the oldest page note went first',
     );
-    expect(
-      recorder.refusedPageNotes,
-      2 + 1000 - (BugRecorder.maxPageNotes - taken),
-    );
-    expect(recorder.dropped, 0);
-    expect(recorder.report['refusedPageNotes'], recorder.refusedPageNotes);
+    expect(recorder.events.where((e) => e['type'] == 'action'), hasLength(1));
+    expect(recorder.dropped, before + 1001 - BugRecorder.maxPageNotes);
+    expect(recorder.report['refusedPageNotes'], 3);
 
     recorder.stop();
     await pumpEventQueue();

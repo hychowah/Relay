@@ -47,10 +47,12 @@ sent message. The trace's first note keeps the page's full address, query
 included, and stack lines keep the addresses of the page's scripts; the
 service's redaction goes by field name, so tokens in an address stay. A
 page's own scripts can send notes too: Relay takes only the trace's kinds of
-note with short plain fields, at most 1,000 a recording, and the report counts
-the rest as refused. A **stop pressed** action marks the end of the
-reproduction. A recording keeps its latest 2,000 events, a few minutes with
-the mouse moving over a page; the report counts any older ones it dropped.
+note and fields, the address cut to 2,000 characters and other text to 500 or
+less, at most 6,000 characters a note as saved; the report counts other notes
+as refused. A recording holds at most 1,000 page notes, letting the oldest go,
+and 2,000 events in all, a few minutes with the mouse moving over a page; the
+report counts the events it let go. A **stop pressed** action marks the end of
+the reproduction.
 
 The service saves it as `bug-reports/<time>-<id>.json` (with a `.png`)
 in `RELAY_DATA_DIR`, adds its own record of the conversation and replaces API

@@ -8,7 +8,7 @@
 //
 // A note says which element was involved by its tag, id, role, label or
 // first few words. Key presses and the text in fields and editable elements
-// are never noted; see README.md for what a name can still contain.
+// are never noted; see docs/development.md for what a name can still contain.
 (() => {
   if (window.__relayTrace) return window.__relayTrace.start();
   const words = 40, jump = 40, sampleMs = 200, batchMs = 250;
@@ -21,6 +21,7 @@
   // a name that still cannot be read is "?", so the trace never throws.
   const dom = (owner, name) => Object.getOwnPropertyDescriptor(owner, name);
   const nodeName = dom(Node.prototype, "nodeName").get, parentOf = dom(Node.prototype, "parentElement").get;
+  const nodeType = dom(Node.prototype, "nodeType").get;
   const { getAttribute, matches, closest } = Element.prototype;
   const editable = "input, textarea, select, [contenteditable]:not([contenteditable=false]), [contenteditable]:not([contenteditable=false]) *";
 
@@ -41,7 +42,7 @@
   function describe(target) {
     try {
       if (target === document || target === window) return "document";
-      const element = target?.nodeType === 1 ? target : target && parentOf.call(target);
+      const element = nodeType.call(target) === 1 ? target : parentOf.call(target);
       if (!element) return "?";
       const id = getAttribute.call(element, "id"), role = getAttribute.call(element, "role");
       const name = getAttribute.call(element, "aria-label")?.slice(0, words) || text(element);

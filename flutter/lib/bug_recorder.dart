@@ -10,13 +10,14 @@ import 'relay_records.dart';
 class BugRecorder extends ChangeNotifier {
   static const maxEvents = 2000, maxText = 4000;
 
-  /// The most notes web pages may add to one recording, so that a page
-  /// cannot push Relay's own events out; further ones count as refused.
+  /// The most notes web pages may hold in one recording, so that a page
+  /// cannot push Relay's own events out. Past it the oldest page note goes,
+  /// counted in [dropped]: the newest tell most about the bug being shown.
   static const maxPageNotes = 1000;
   int _pageNotes = 0;
 
-  /// Page notes not taken: past [maxPageNotes], or not ones the page trace
-  /// sends. Apart from [dropped], which counts the oldest events let go.
+  /// Notes that are not ones the page trace sends, counted apart from the
+  /// events let go in [dropped].
   int refusedPageNotes = 0;
   final events = <Json>[];
   final _lastReply = <String, String>{};
@@ -63,8 +64,9 @@ class BugRecorder extends ChangeNotifier {
   void pageNote(Json details, int atMs) {
     if (!recording) return;
     if (_pageNotes >= maxPageNotes) {
-      refusedPageNotes++;
-      return;
+      events.removeAt(events.indexWhere((event) => event['type'] == 'page'));
+      _pageNotes--;
+      dropped++;
     }
     _pageNotes++;
     final now = DateTime.now().microsecondsSinceEpoch;
@@ -83,7 +85,7 @@ class BugRecorder extends ChangeNotifier {
   void add(String type, Json details, {DateTime? at}) {
     if (!recording) return;
     if (events.length >= maxEvents) {
-      events.removeAt(0);
+      if (events.removeAt(0)['type'] == 'page') _pageNotes--;
       dropped++;
     }
     final time = (at ?? DateTime.now()).toUtc();

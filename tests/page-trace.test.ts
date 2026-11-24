@@ -147,7 +147,7 @@ test("a page whose properties hide the DOM's neither breaks nor stops the trace"
   // A form's fields named like DOM properties are the form's properties.
   await page.evaluate(() => {
     document.body.insertAdjacentHTML("beforeend", `<form id="f" style="height:60px;overflow:auto">
-      <input name="id"><input name="nodeName"><input name="closest"><div style="height:400px"></div></form>`);
+      <input name="id"><input name="nodeName"><input name="nodeType"><input name="closest"><div style="height:400px"></div></form>`);
   });
   await notes(page);
   // Playwright's own locators read the hidden properties too.

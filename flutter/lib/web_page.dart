@@ -480,10 +480,21 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     'visibility',
   };
 
+  // The fields that assets/page_trace.js sends, each with the most text it
+  // may hold; 0 for a number or true/false.
+  static const _traceFields = {
+    'kind': 20, 'synthetic': 0, 'url': 2000, 'target': 200, 'state': 20, //
+    'method': 20, 'value': 120, 'stack': 500, 'skippedBefore': 0, //
+    'x': 0, 'y': 0, 'fromX': 0, 'fromY': 0, 'afterMs': 0, 'top': 0, //
+    'left': 0, 'width': 0, 'height': 0, 'dx': 0, 'dy': 0, 'events': 0, //
+    'pixelRatio': 0, 'zoom': 0, 'focused': 0,
+  };
+
   /// Adds a batch of the page trace's notes to the bug recording. Any
   /// script in the page or its frames can send these while a bug is
-  /// recorded, so only the trace's kinds of note are taken, at most 200 a
-  /// batch, each with a few short plain fields; the rest count as refused.
+  /// recorded, so only the trace's kinds of note and its fields are taken,
+  /// texts cut to their limits, at most 200 a batch and 6,000 characters a
+  /// note as saved; the rest count as refused.
   void _noteTrace(String batch) {
     final recorder = _recorder;
     if (recorder == null || !recorder.recording) return;
@@ -502,23 +513,27 @@ class _BrowserPage extends _WebPage with BrowserSurface {
           recorder.refusedPageNotes++;
           continue;
         }
-        recorder.pageNote({
+        final Json details = {
           'tab': title,
-          for (final MapEntry(:key, :value) in note.entries.take(12))
-            if (key is String && key.length <= 20 && !_ownKeys.contains(key))
-              if (value is String)
-                key: value.length > 500 ? value.substring(0, 500) : value
+          for (final MapEntry(:key, :value) in note.entries)
+            if (_traceFields[key] case final most?)
+              if (value is String && most > 0)
+                key: value.length > most ? value.substring(0, most) : value
               else if (value is num || value is bool)
                 key: value,
-        }, note['at'] as int);
+        };
+        // Text the report escapes, such as control characters, grows when
+        // saved; a note's saved size is what counts toward the report's.
+        if (jsonEncode(details).length > 6000) {
+          recorder.refusedPageNotes++;
+          continue;
+        }
+        recorder.pageNote(details, note['at'] as int);
       }
     } catch (_) {
       recorder.refusedPageNotes++;
     }
   }
-
-  // Keys that Relay sets on a page note itself.
-  static const _ownKeys = {'at', 'type', 'tab'};
 
   void _dismissComment() {
     if (_comment == null) return;
