@@ -131,8 +131,9 @@ any pane to split it again, side by side or stacked; dropping a tab that is
 already in the split moves it. The split tab has an accent outline and a small
 map of its panes, with the last selected pane filled. Click a pane to select it.
 Each Browser pane has its own address bar, so selecting a pane never resizes a
-page; a bar narrower than 480 pixels leaves out **Go** and the PDF zoom
-buttons, since Enter and a pinch do the same. Drag a divider to resize its two
+page; a bar narrower than 480 pixels leaves out **Go**, the PDF zoom buttons
+(Enter and a pinch do the same) and the VPN button's label. Only the selected
+pane's bar takes clicks and the keyboard. Drag a divider to resize its two
 sides, or double-click it to return to half and half. Click an app's own tab
 to show it full screen, and the split tab to return to the split. Closing the
 split tab ends the split and keeps every app open. Drag a tab from the split

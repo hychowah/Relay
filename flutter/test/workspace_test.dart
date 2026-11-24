@@ -1439,15 +1439,27 @@ void main() {
     (browser.page! as FakePage).url = 'https://example.org/other';
     f.w.changed();
     await tester.pump();
-    expect(
-      find.byWidgetPredicate(
-        (w) =>
-            w is TextField &&
-            w.decoration?.hintText == 'Search or enter a web address',
-      ),
-      findsOneWidget,
+    final field = find.byWidgetPredicate(
+      (w) =>
+          w is TextField &&
+          w.decoration?.hintText == 'Search or enter a web address',
     );
+    expect(field, findsOneWidget);
     expect(find.text('https://example.org/other'), findsOneWidget);
+    // Nor does the keyboard reach the dimmed pane's bar, whose buttons would
+    // act on the selected tab.
+    await tester.tap(field);
+    for (var i = 0; i < 40; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      var dimmed = false;
+      FocusManager.instance.primaryFocus?.context?.visitAncestorElements((e) {
+        dimmed = e.widget.key == ValueKey('bar-${browser.id}');
+        return !dimmed;
+      });
+      expect(dimmed, isFalse, reason: 'Tab $i');
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
     // One click on the dimmed top pane selects it.
     await tester.tapAt(page(browser).center);
     await tester.pump();

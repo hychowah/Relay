@@ -683,7 +683,8 @@ class _RelayShellState extends State<RelayShell> {
   /// A Browser tab's bar, at the top of its own pane. Only the selected tab's
   /// bar takes input: another pane's tint takes the first click and selects
   /// that pane, so these buttons always act on the selected tab. A narrow
-  /// pane's bar leaves out Go and the PDF zoom, which Enter and a pinch do.
+  /// pane's bar leaves out Go and the PDF zoom, which Enter and a pinch do,
+  /// and the VPN button's label.
   Widget _browserBar(WorkspaceTab tab) => LayoutBuilder(
     builder: (context, size) => ClipRect(
       child: Padding(
@@ -715,7 +716,7 @@ class _RelayShellState extends State<RelayShell> {
         onPressed: () => w.browserAction('reload'),
         icon: const Icon(Icons.refresh),
       ),
-      if (Platform.isMacOS) _vpnSwitch(tab),
+      if (Platform.isMacOS) _vpnSwitch(tab, label: wide),
       Expanded(child: tab == w.active ? _addressField() : _addressShown(tab)),
       if (wide)
         IconButton(
@@ -744,8 +745,9 @@ class _RelayShellState extends State<RelayShell> {
   }
 
   // Desktop (macOS) only: a quiet icon while the tab uses the Mac's own
-  // network, a filled "VPN" button while it goes through NordVPN in WSL.
-  Widget _vpnSwitch(WorkspaceTab tab) {
+  // network, a filled "VPN" button while it goes through NordVPN in WSL;
+  // without its label in a narrow bar.
+  Widget _vpnSwitch(WorkspaceTab tab, {required bool label}) {
     final on = tab.vpn;
     final tooltip = on
         ? 'VPN on: through NordVPN in WSL'
@@ -755,6 +757,13 @@ class _RelayShellState extends State<RelayShell> {
         tooltip: tooltip,
         onPressed: w.toggleVpn,
         icon: const Icon(Icons.vpn_lock_outlined),
+      );
+    }
+    if (!label) {
+      return IconButton.filled(
+        tooltip: tooltip,
+        onPressed: w.toggleVpn,
+        icon: const Icon(Icons.vpn_lock),
       );
     }
     return Tooltip(
@@ -1281,7 +1290,12 @@ class _RelayShellState extends State<RelayShell> {
                 rects[tab]!.width - 2 * frame,
                 bar(tab),
               ),
-              child: _browserBar(tab),
+              // Only the mouse is stopped by the tint, so the keyboard is
+              // kept out too: these buttons act on the selected tab.
+              child: ExcludeFocus(
+                excluding: w.active != tab,
+                child: _browserBar(tab),
+              ),
             ),
           // The other pane's tint is painted over its page on purpose: on
           // macOS a native page loses the mouse wherever Flutter paints over
