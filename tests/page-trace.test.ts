@@ -117,7 +117,7 @@ test("the trace notes the page's own scrolling and where in its code it came fro
     box.innerHTML = "<div contenteditable>private draft</div>";
     document.body.append(box);
     let reads = 0;
-    box.scrollIntoView({ get block() { reads++; return "end"; }, behavior: "instant" });
+    box.scrollIntoView({ get block() { reads++; return "end" as const; }, behavior: "instant" });
     return reads;
   });
   const draft = (await notes(page)).find((note) => note.method === "scrollIntoView");
