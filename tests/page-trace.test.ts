@@ -85,3 +85,57 @@ test("the trace notes the item under the mouse, its loss, jumps and scrolling, n
   await page.evaluate(script);
   assert.deepEqual((await notes(page)).map((note) => note.kind), ["trace start"]);
 });
+
+test("the trace notes the page's own scrolling and where in its code it came from, only while on", async (t) => {
+  const page = await open(t);
+  await notes(page);
+  // A string, so the named function keeps its name in the page's stack.
+  // A second call on the same element within 100 ms is counted, not noted.
+  await page.evaluate(`(() => {
+    function keepInView() { document.getElementById("list").scrollTop = 50; }
+    keepInView();
+    document.getElementById("list").scrollTop = 60;
+    document.querySelector("#list a").scrollIntoView();
+    scrollTo(0, 0);
+  })()`);
+  const noted = await notes(page);
+  const calls = noted.filter((note) => note.kind === "script scroll");
+  assert.deepEqual(calls.map((note) => [note.method, note.target.split(" ")[0], note.value]), [
+    ["scrollTop", "nav#list", "50"], ["scrollIntoView", "a", "[]"], ["scrollTo", "document", "[0,0]"],
+  ]);
+  assert.match(calls[0].stack.split(" < ")[0], /keepInView/, "the first frame is the page's own");
+  const scroll = noted.find((note) => note.kind === "scroll" && note.target.startsWith("nav#list"));
+  assert.ok(scroll.height > 120, "a scroll note gives the content's height");
+
+  await page.evaluate(() => { document.getElementById("list")!.scrollTop = 0; });
+  assert.equal((await notes(page)).find((note) => note.kind === "script scroll")?.skippedBefore, 1);
+
+  // An editor's draft inside the named element is not read, nor are the
+  // page's own getters on the options it passes.
+  const getterReads = await page.evaluate(() => {
+    const box = document.createElement("div");
+    box.innerHTML = "<div contenteditable>private draft</div>";
+    document.body.append(box);
+    let reads = 0;
+    box.scrollIntoView({ get block() { reads++; return "end"; }, behavior: "instant" });
+    return reads;
+  });
+  const draft = (await notes(page)).find((note) => note.method === "scrollIntoView");
+  assert.equal(draft.value, '[{"behavior":"instant"}]');
+  assert.equal(getterReads, 1, "only the browser reads the getter");
+  assert.ok(!JSON.stringify(draft).includes("private"));
+
+  // Stopped, the page's own methods are back, and one the page replaced
+  // meanwhile stays the page's.
+  await page.evaluate(() => {
+    const native = window.scrollBy;
+    (window as any).pageScrollBy = window.scrollBy = function (...args: any[]) { return native.apply(this, args as any); };
+    (window as any).__relayTrace.stop();
+  });
+  assert.deepEqual(await page.evaluate(() => [
+    Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop")!.set!.toString().includes("[native code]"),
+    Element.prototype.scrollIntoView.toString().includes("[native code]"),
+    window.scrollTo.toString().includes("[native code]"),
+    window.scrollBy === (window as any).pageScrollBy,
+  ]), [true, true, true, true]);
+});

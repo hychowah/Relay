@@ -138,12 +138,15 @@ are not redacted, so the picture shows whatever was on screen. On the desktop
 it also holds a trace of each loaded Browser tab, which Relay cannot otherwise
 see inside: the link or item under the mouse each time it changes or the mouse
 leaves the page, the mouse position about five times a second and every jump
-over 40 pixels, scrolling, wheel input, and the page's focus, size and
-visibility. Elements are named by tag, id, role and first 40 characters of
-text; key presses and the text in fields are not recorded. A **stop pressed**
-action marks the end of the reproduction. A recording keeps its latest 2,000
-events, a few minutes with the mouse moving over a page; the report counts
-any older ones it dropped. The service saves
+over 40 pixels, scrolling with the content's height, wheel input, the page's
+focus, size and visibility, and each time the page's own code scrolls or
+focuses an element (at most every 100 ms per element), with the value and
+where in its code the call came from. Elements are named by tag, id, role
+and first 40 characters of text; key presses and the text in fields and
+editors are not recorded. A **stop pressed** action marks the end of the
+reproduction. A recording keeps its latest 2,000 events, a few minutes with
+the mouse moving over a page; the report counts any older ones it dropped.
+The service saves
 it as `bug-reports/<time>-<id>.json` (with a `.png`) in `RELAY_DATA_DIR`, adds
 its own record of the conversation and replaces API keys and other secret
 fields with `[redacted]`. Reports contain conversation text, so they stay with

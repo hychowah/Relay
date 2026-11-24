@@ -21,7 +21,9 @@
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     let found = "";
     for (let node; found.length < words && (node = walker.nextNode());) {
-      if (node.parentElement?.closest("script, style, noscript")) continue;
+      // A field or editor inside the element, such as a chat's draft, too.
+      const parent = node.parentElement;
+      if (!parent || parent.isContentEditable || parent.closest("script, style, noscript, textarea")) continue;
       found = `${found} ${node.data}`.replace(/\s+/g, " ");
     }
     return found.trim().slice(0, words);
@@ -59,7 +61,9 @@
     // A scroll is noted once per batch, where it ended up.
     for (const target of scrolled) {
       const box = target === document ? document.scrollingElement : target;
-      if (box) push("scroll", { target: describe(target), top: Math.round(box.scrollTop), left: Math.round(box.scrollLeft) });
+      if (box) push("scroll", {
+        target: describe(target), top: Math.round(box.scrollTop), left: Math.round(box.scrollLeft), height: box.scrollHeight,
+      });
     }
     scrolled.clear();
     if (wheel) push("wheel", wheel);
@@ -114,12 +118,86 @@
   addEventListener("resize", () => note("resize", { width: innerWidth, height: innerHeight }));
   document.addEventListener("visibilitychange", () => note("visibility", { state: document.visibilityState }));
 
+  // The page's own code scrolling (or focusing, which can scroll) is noted
+  // with the element, the value and where in the page's code the call came
+  // from, at most every 100 ms per element. A scroll with no such note was
+  // the user's or the browser's own. The page's methods are wrapped only
+  // while the trace is on.
+  const wrapped = [], called = new WeakMap();
+  // A note must never break the page's own call.
+  function noteCall(method, receiver, value) {
+    if (!on) return;
+    try {
+      const target = receiver == null || receiver === window ? document : receiver;
+      const now = Date.now(), last = called.get(target);
+      if (last && now - last.at < 100) {
+        last.skipped++;
+        return;
+      }
+      // Past this function and the wrapper; Chromium starts with an "Error" line.
+      const stack = String(new Error().stack ?? "").split("\n").map((line) => line.trim())
+        .filter((line) => line && line !== "Error").slice(2, 5).map((line) => line.slice(0, 160)).join(" < ");
+      note("script scroll", {
+        method, target: describe(target), value: shown(value), stack,
+        ...(last?.skipped ? { skippedBefore: last.skipped } : {}),
+      });
+      called.set(target, { at: now, skipped: 0 });
+    } catch (_) { /* The call goes on unnoted. */ }
+  }
+  // The call's value or arguments, read without running the page's getters:
+  // numbers and strings as they are, and an options object's own plain
+  // values for the scroll and focus options.
+  const optionNames = ["top", "left", "behavior", "block", "inline", "preventScroll"];
+  function shown(value) {
+    const one = (item) => {
+      if (item === null || typeof item !== "object") return typeof item === "function" ? "function" : item;
+      return Object.fromEntries(optionNames.flatMap((name) => {
+        const own = Object.getOwnPropertyDescriptor(item, name);
+        return own && "value" in own && typeof own.value !== "object" ? [[name, own.value]] : [];
+      }));
+    };
+    return JSON.stringify(Array.isArray(value) ? value.slice(0, 3).map(one) : one(value))?.slice(0, 120);
+  }
+  // Stopping puts back only what is still the trace's own: a page that
+  // replaced one of these meanwhile keeps its version.
+  function wrap(owner, name, replace) {
+    const original = Object.getOwnPropertyDescriptor(owner, name);
+    if (!original) return;
+    const mine = replace(original);
+    Object.defineProperty(owner, name, mine);
+    wrapped.push([owner, name, original, mine]);
+  }
+  function watchScripts() {
+    for (const name of ["scrollTop", "scrollLeft"]) {
+      wrap(Element.prototype, name, (original) => ({
+        ...original, set(value) { noteCall(name, this, value); original.set.call(this, value); },
+      }));
+    }
+    const methods = [
+      [Element.prototype, ["scrollTo", "scroll", "scrollBy", "scrollIntoView"]],
+      [HTMLElement.prototype, ["focus"]],
+      [window, ["scrollTo", "scroll", "scrollBy"]],
+    ];
+    for (const [owner, names] of methods) {
+      for (const name of names) {
+        wrap(owner, name, (original) => ({
+          ...original,
+          value(...args) {
+            noteCall(name, this, args);
+            return original.value.apply(this, args);
+          },
+        }));
+      }
+    }
+  }
+
   window.__relayTrace = {
     start() {
       if (on) return;
       on = true;
       moved = null;
       hovered = null;
+      watchScripts();
       note("trace start", {
         url: location.href.slice(0, 2000), width: innerWidth, height: innerHeight,
         pixelRatio: devicePixelRatio, zoom: visualViewport?.scale ?? 1, focused: document.hasFocus(),
@@ -129,6 +207,10 @@
       if (!on) return;
       flush();
       on = false;
+      for (const [owner, name, original, mine] of wrapped.splice(0)) {
+        const now = Object.getOwnPropertyDescriptor(owner, name);
+        if (now && now.value === mine.value && now.set === mine.set) Object.defineProperty(owner, name, original);
+      }
     },
   };
   window.__relayTrace.start();

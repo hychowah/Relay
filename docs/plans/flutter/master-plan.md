@@ -192,8 +192,9 @@ real WKWebViews.
    whole-window screenshot shows the chat, a split and a Browser comment over a
    page, and that pages still click and scroll. A page trace (2026-11-24)
    showed each Relay redraw moving WebKit's hover down by the page's offset in
-   the window. Unchanged polls no longer redraw (unverified on the Mac); other
-   redraws still move it.
+   the window. Unchanged polls no longer redraw (user-confirmed); other redraws
+   still do. A ChatGPT chat's scroll snapping back needs a trace with script
+   scrolls.
 6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 7. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
 8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.
