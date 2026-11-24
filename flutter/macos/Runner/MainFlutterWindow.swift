@@ -11,6 +11,7 @@ class MainFlutterWindow: NSWindow {
   private var ownsFullScreen = false
 
   override func awakeFromNib() {
+    MainFlutterWindow.keepWebViewsAttached()
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
@@ -90,7 +91,7 @@ class MainFlutterWindow: NSWindow {
       #if DEBUG
         // Mac checks send real mouse input this way: queued AppKit events
         // reach Flutter, WebKit and PDFKit as a user's would, unlike a
-        // test's own taps. `type` is down, dragged or up, at Flutter's
+        // test's own taps. `type` is down, dragged, up or moved, at Flutter's
         // logical `x` and `y` from the window's content top left.
         if call.method == "mouse" {
           guard let window = self, let view = window.contentView,
@@ -102,12 +103,19 @@ class MainFlutterWindow: NSWindow {
           }
           let kinds: [String: NSEvent.EventType] = [
             "down": .leftMouseDown, "dragged": .leftMouseDragged, "up": .leftMouseUp,
+            "moved": .mouseMoved,
           ]
-          if type == "down" {
+          if type == "down" || (type == "moved" && !NSApp.isActive) {
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
           }
           let point = view.convert(NSPoint(x: x, y: view.isFlipped ? y : view.bounds.height - y), to: nil)
+          // A moved event also moves the real pointer there: WebKit finds the
+          // item under the mouse from the pointer, not only from events.
+          if type == "moved", let screen = NSScreen.screens.first {
+            let global = window.convertPoint(toScreen: point)
+            CGWarpMouseCursorPosition(CGPoint(x: global.x, y: screen.frame.height - global.y))
+          }
           if let kind = kinds[type], let event = NSEvent.mouseEvent(
             with: kind, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
@@ -243,6 +251,30 @@ class MainFlutterWindow: NSWindow {
     }
 
     super.awakeFromNib()
+  }
+
+  /// On every frame Flutter adds each web view's container to its parent
+  /// again, under a view of Flutter's own that it then puts back on top. To
+  /// reorder them AppKit takes the container out of the window and puts it
+  /// back, and WebKit then finds the item under the mouse from the wrong
+  /// place: as far below and to the right of the mouse as the page is inside
+  /// the window, until the mouse moves (bug reports of 2026-11-24). Flutter's
+  /// two container classes skip adding a view to the parent it already has;
+  /// the views end in the same order. If a Flutter update renames them or
+  /// adds its own `addSubview:`, nothing is changed.
+  private static func keepWebViewsAttached() {
+    let selector = #selector(NSView.addSubview(_:))
+    guard let method = class_getInstanceMethod(NSView.self, selector) else { return }
+    typealias AddSubview = @convention(c) (NSView, Selector, NSView) -> Void
+    let add = unsafeBitCast(method_getImplementation(method), to: AddSubview.self)
+    let keep: @convention(block) (NSView, NSView) -> Void = { parent, child in
+      if child.superview === parent { return }
+      add(parent, selector, child)
+    }
+    for name in ["FlutterMutatorView", "FlutterPathClipView"] {
+      guard let type = NSClassFromString(name) else { continue }
+      class_addMethod(type, selector, imp_implementationWithBlock(keep), method_getTypeEncoding(method))
+    }
   }
 
   /// Puts the window into macOS fullscreen for a Browser tab's fullscreen

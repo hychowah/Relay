@@ -151,10 +151,16 @@ real WKWebViews.
 5. On the Mac, try the record button and **Reports** against the live
    backend: save, view, mark solved, delete and categories (after a backend
    deploy); check that the whole-window screenshot shows the chat, a split and
-   a Browser comment over a page, and that pages still click and scroll. Each
-   Relay redraw moves WebKit's hover down by the page's window offset;
-   unchanged polls no longer redraw (user-confirmed). Record any ChatGPT scroll
-   snapping back: script scrolls are noted.
+   a Browser comment over a page, and that pages still click and scroll. Record
+   any ChatGPT scroll snapping back: script scrolls are noted.
+   A page's hover jumped on each redraw: Flutter re-added the web view's
+   container under its own top view each frame, so AppKit re-attached the web
+   view and WebKit re-checked the hover from the window's corner (Mac probe,
+   2026-11-24; macOS 26.6). The runner now skips re-adding a view to its own
+   parent; the probe's hover moved without that and stayed with it. Its
+   permanent form, `hover_redraw_test.dart`, has not run yet: run it, check by
+   hand that hovers stay put while a reply streams, and re-run it after each
+   Flutter upgrade.
 6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 7. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
 8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.
@@ -188,8 +194,8 @@ real WKWebViews.
 15. In Stable 0.0.14, sign in to figma.com with **Continue with
    Google**: the popup shows its host, closes itself and leaves Figma signed in.
    Close a tab, and the main window, with a popup open. New-tab links stay in the tab.
-16. Next smoothness work: an unchanged poll is no longer decoded or redrawn,
-   but a changed one still decodes the whole conversation on the UI thread.
+16. Next smoothness work: an unchanged poll is no longer decoded or redrawn
+   (the user confirmed the idle hover stopped jumping), but a changed one still decodes the whole conversation on the UI thread.
    Decode large bodies off the UI isolate. Check with `npm run perf:ui` and
    `npm run perf:stress`.
 17. On 2026-11-23 a hidden Figma tab held 1.1 GB. The user chose to unload

@@ -197,11 +197,13 @@ figure, reports what a reading costs, pictures a tab hidden for two minutes and
 plays silent audio to check the playing-sound rule,
 `video_fullscreen_test.dart`, which puts the test window into macOS fullscreen
 for a few seconds, `pdf_viewer_test.dart`, which opens one arXiv paper as
-a PDF and as a web page and so needs the internet on the Mac, or
-`highlight_clicks_test.dart`. That one drags and clicks with real mouse
-events (a debug build's runner queues them), so the Mac must be awake,
-unlocked and left alone for about half a minute: with its lid closed, or
-another app in front, the app cannot come forward and no click arrives.
+a PDF and as a web page and so needs the internet on the Mac,
+`highlight_clicks_test.dart`, or `hover_redraw_test.dart`, which checks that
+a redraw of the window leaves a page's hover under the still mouse. These two
+use real mouse events (a debug build's runner queues them; a moved event also
+moves the pointer), so the Mac must be awake, unlocked and left alone for
+about half a minute: with its lid closed, or another app in front, the app
+cannot come forward and no click arrives.
 Queued events never hold the mouse button down, so a PDF press always ends
 at once there; by hand, drag-select and click a highlight in a PDF, click
 elsewhere after dragging the PDF's scroll bar, and highlight on a few real
