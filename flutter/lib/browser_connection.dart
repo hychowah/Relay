@@ -6,13 +6,24 @@ import 'browser_transcript.dart';
 import 'page_surface.dart';
 import 'relay_api.dart';
 
-/// The desktop Browser's link to Relay: only scoped page reads and video
-/// transcript pages travel this socket.
+const _requests = {'read', 'transcript', 'form', 'fill'};
+
+/// The desktop Browser's link to Relay: only scoped page reads, video
+/// transcript pages and form fills travel this socket.
 class BrowserConnection {
-  BrowserConnection(this.origin, this.sessionId, this.browser, this.changed);
+  BrowserConnection(
+    this.origin,
+    this.sessionId,
+    this.browser,
+    this.shownBrowser,
+    this.changed,
+  );
   final Uri origin;
   final String sessionId;
   final Future<BrowserSurface> Function(String tabId) browser;
+
+  /// Form reads and fills reach only a tab on screen.
+  final Future<BrowserSurface> Function(String tabId) shownBrowser;
   final void Function(bool) changed;
   WebSocket? _socket;
   Timer? _retry;
@@ -38,18 +49,24 @@ class BrowserConnection {
           Json? request;
           try {
             request = jsonDecode(raw as String) as Json;
-            if (!['read', 'transcript'].contains(request['type']) ||
+            if (!_requests.contains(request['type']) ||
                 request['id'] is! String ||
                 request['tabId'] is! String) {
               return;
             }
-            final tab = await browser(request['tabId'] as String);
-            final data = request['type'] == 'read'
-                ? await tab.read()
-                : transcriptPage(
-                    await tab.loadTranscript(),
-                    (request['offset'] as num?)?.toInt() ?? 0,
-                  );
+            final tabId = request['tabId'] as String;
+            final tab = ['form', 'fill'].contains(request['type'])
+                ? await shownBrowser(tabId)
+                : await browser(tabId);
+            final data = switch (request['type']) {
+              'read' => await tab.read(),
+              'form' => await tab.readForm(),
+              'fill' => await tab.fillForm(request['fields'] as List? ?? []),
+              _ => transcriptPage(
+                await tab.loadTranscript(),
+                (request['offset'] as num?)?.toInt() ?? 0,
+              ),
+            };
             if (socket.readyState == WebSocket.open) {
               socket.add(jsonEncode({'id': request['id'], 'data': data}));
             }

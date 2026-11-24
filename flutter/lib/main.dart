@@ -100,6 +100,7 @@ Future<void> main() async {
     api.origin,
     workspace.browserSessionId,
     workspace.browserTab,
+    workspace.shownBrowserTab,
     (_) => workspace.changed(),
   );
   unawaited(connection.connect());
@@ -643,8 +644,8 @@ class _RelayShellState extends State<RelayShell> {
     // A fullscreen page takes the whole screen when its tab shows alone; in
     // split view it fills only its own pane. Leaving the screen for any other
     // reason, such as another tab opening, also ends the page's fullscreen.
-    final inSplit =
-        MediaQuery.sizeOf(context).width >= 900 && w.shownSplit != null;
+    w.splitShown = MediaQuery.sizeOf(context).width >= 900;
+    final inSplit = w.splitShown && w.shownSplit != null;
     final active = w.active?.page?.browser;
     final full = active?.fullScreen == true && !inSplit ? active : null;
     if (full != onScreen) {

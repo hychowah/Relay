@@ -18,13 +18,24 @@ class FakeBrowser with BrowserSurface {
     'text': '[0:01] First\n[0:40] Second',
   };
   @override
+  Future<Json> readForm() async => {
+    'fields': [
+      {'id': 'f1', 'type': 'email'},
+    ],
+  };
+  @override
+  Future<Json> fillForm(List<Object?> fields) async => {
+    'filled': fields.length,
+    'submitted': false,
+  };
+  @override
   Future<double?> playbackTime() async => null;
   @override
   Future<void> navigate(String text, {bool restoring = false}) async {}
 }
 
 void main() {
-  test('the Browser socket answers page reads and transcript pages', () async {
+  test('the Browser socket answers reads, transcripts and fills', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     final peer = Completer<WebSocket>();
@@ -35,9 +46,12 @@ void main() {
     final connection = BrowserConnection(
       Uri.parse('http://127.0.0.1:${server.port}'),
       'session',
-      (tabId) async => tabId == 'tab'
+      (tabId) async => ['tab', 'hidden'].contains(tabId)
           ? FakeBrowser()
           : throw StateError('The requested browser tab is closed.'),
+      (tabId) async => tabId == 'tab'
+          ? FakeBrowser()
+          : throw StateError('Open that tab to fill its form.'),
       (_) {},
     );
     addTearDown(connection.close);
@@ -70,6 +84,33 @@ void main() {
       'totalLength': 26,
       'text': '[0:40] Second',
     });
+    expect((await ask({'type': 'form', 'id': '4', 'tabId': 'tab'}))['data'], {
+      'fields': [
+        {'id': 'f1', 'type': 'email'},
+      ],
+    });
+    expect(
+      (await ask({
+        'type': 'fill',
+        'id': '5',
+        'tabId': 'tab',
+        'fields': [
+          {'id': 'f1', 'value': 'ada@example.com'},
+        ],
+      }))['data'],
+      {'filled': 1, 'submitted': false},
+    );
+    // A tab off screen is read, but its form is neither read nor filled.
+    expect(
+      (await ask({'type': 'read', 'id': '6', 'tabId': 'hidden'}))['data'],
+      {'text': 'Page text'},
+    );
+    for (final type in ['form', 'fill']) {
+      expect(await ask({'type': type, 'id': type, 'tabId': 'hidden'}), {
+        'id': type,
+        'error': 'Open that tab to fill its form.',
+      });
+    }
     expect(await ask({'type': 'transcript', 'id': '3', 'tabId': 'gone'}), {
       'id': '3',
       'error': 'The requested browser tab is closed.',

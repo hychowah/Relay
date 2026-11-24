@@ -167,6 +167,20 @@ rule. If the PDF cannot be fetched again for the viewer, or needs a password,
 WebKit's own view stays, without these features. A PDF embedded inside a web
 page keeps the page's own viewer.
 
+### Filling forms
+
+On the desktop only, ask the agent to fill in a form on the page in a Browser
+tab, for example with details from files you shared with it. Only a tab shown
+on screen, alone or in a split, can be filled. The agent lists the page's form
+fields and fills those it has values for: text fields, text areas, lists,
+check boxes, radio buttons and dates. Each filled field gets a blue outline,
+and the page scrolls to the first one. The agent never submits the form or
+presses a button: check the outlined fields, then press Submit yourself.
+Passwords, file uploads, and disabled, read-only or hidden fields are left to
+you, and so are fields in a frame from another site, as many card payment
+boxes are. As with typing, the website's own scripts see a filled value before
+you submit.
+
 ## Highlights
 
 On the desktop, select text on a page or PDF in a Browser tab: once the mouse

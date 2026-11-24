@@ -119,6 +119,10 @@ class Workspace extends ChangeNotifier {
 
   /// Desktop only: the split tab being shown, whose panes include [active].
   SplitTab? shownSplit;
+
+  /// Whether the window is wide enough to show [shownSplit]; narrow windows
+  /// show only [active]. The window sets this as it draws.
+  bool splitShown = true;
   String? conversationId, error, status, _commandId;
   bool sending = false, _polling = false, _disposed = false;
   int _manualRevision = 0;
@@ -719,6 +723,22 @@ class Workspace extends ChangeNotifier {
     final browser = tab?.page?.browser;
     if (browser == null) {
       throw StateError(tab?.error ?? 'The requested browser tab is closed.');
+    }
+    return browser;
+  }
+
+  /// Desktop only. A Browser tab shown on this device now, for reading and
+  /// filling its form: the user must see what the agent fills, so a hidden
+  /// tab is refused, not loaded.
+  Future<BrowserSurface> shownBrowserTab(String tabId) async {
+    final shown = splitShown ? _shown : [?active];
+    final tab = shown.where((tab) => tab.id == tabId).firstOrNull;
+    if (tab == null || !tab.isBrowser) {
+      throw StateError('Open that tab to fill its form.');
+    }
+    final browser = tab.page?.browser;
+    if (browser == null) {
+      throw StateError(tab.error ?? 'That tab is still loading; try again.');
     }
     return browser;
   }

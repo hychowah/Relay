@@ -1182,6 +1182,33 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     }
   }
 
+  static String? _formsScript;
+
+  // Desktop only. Relay never submits the form; see assets/page_forms.js.
+  @override
+  Future<Json> readForm() => _forms('read');
+  @override
+  Future<Json> fillForm(List<Object?> fields) => _forms('fill', fields);
+
+  Future<Json> _forms(String action, [List<Object?>? fields]) async {
+    if (!Platform.isMacOS && !Platform.isWindows) {
+      throw StateError('Only the desktop app fills forms.');
+    }
+    if (pdf) {
+      throw StateError('This tab shows a PDF, which has no form fields.');
+    }
+    _formsScript ??= await rootBundle.loadString('assets/page_forms.js');
+    final raw = await controller
+        .runJavaScriptReturningResult(
+          'JSON.stringify(($_formsScript)'
+          '(${jsonEncode(action)}, ${jsonEncode(fields)}))',
+        )
+        .timeout(const Duration(seconds: 6));
+    dynamic data = raw is String ? jsonDecode(raw) : raw;
+    if (data is String) data = jsonDecode(data);
+    return Map<String, dynamic>.from(data as Map);
+  }
+
   // Desktop only. The transcript pane polls this while it is open.
   @override
   Future<double?> playbackTime() async {

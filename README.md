@@ -4,7 +4,8 @@ Relay is a personal agent workspace. You chat with an AI agent beside your own
 apps. The agent can read from a connected app, answer with sources, and show
 the result inside that app's own screen. In the Flutter app, it can also read
 and search folders on your computer that you choose to share, without changing
-them.
+them, and fill in a web form in the built-in Browser for you to check and
+submit yourself.
 
 ## Vision
 
