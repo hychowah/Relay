@@ -9,15 +9,16 @@ Uses Flutter 3.50.0 / Dart 3.14.0; dependency versions are pinned in pubspec.loc
 Use a Flutter SDK of that version; this machine's SDK location is in the local machine notes.
 
 `packages/webview_flutter_wkwebview` is a copy of that package's 3.27.2
-release with one addition: `websiteDataStoreIdentifier` on
-`WebKitWebViewControllerCreationParams`, a named, persistent WebKit profile,
-which VPN tabs use (pubspec.yaml overrides the package with it). Its bridge
+release with two additions (pubspec.yaml overrides the package with it):
+`websiteDataStoreIdentifier` on `WebKitWebViewControllerCreationParams`, a
+named, persistent WebKit profile, which VPN tabs use; and, on macOS, a file
+chooser for `<input type="file">` in `UIDelegateProxyAPIDelegate.swift`,
+without which WebKit ignores the click. The package's bridge
 files are generated: change `pigeons/web_kit.dart`, then in that folder run
 `flutter pub get` and `dart run pigeon --input pigeons/web_kit.dart` (pigeon
 is pinned so the output matches the committed files), and format the output
 with `dart format --page-width 100` and Xcode's `swift-format`. On a package
-upgrade, reapply the addition, or drop the copy if the package gains the
-option.
+upgrade, reapply the additions, or drop the copy if the package gains them.
 
 ```sh
 flutter pub get

@@ -248,6 +248,47 @@ class UIDelegateImpl: NSObject, WKUIDelegate {
       }
     }
   #endif
+
+  // Relay addition: on macOS, WebKit ignores a click on <input type="file"> unless the app
+  // shows the file chooser itself. iOS shows its own.
+  #if os(macOS)
+    #if compiler(>=6.0)
+      func webView(
+        _ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor ([URL]?) -> Void
+      ) {
+        showOpenPanel(webView, parameters) { urls in
+          DispatchQueue.main.async { completionHandler(urls) }
+        }
+      }
+    #else
+      func webView(
+        _ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
+        initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void
+      ) {
+        showOpenPanel(webView, parameters, completionHandler)
+      }
+    #endif
+
+    private func showOpenPanel(
+      _ webView: WKWebView, _ parameters: WKOpenPanelParameters,
+      _ done: @escaping ([URL]?) -> Void
+    ) {
+      let panel = NSOpenPanel()
+      panel.canChooseFiles = true
+      panel.canChooseDirectories = parameters.allowsDirectories
+      panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+      let finish = { (response: NSApplication.ModalResponse) in
+        done(response == .OK ? panel.urls : nil)
+      }
+      if let window = webView.window {
+        panel.beginSheetModal(for: window, completionHandler: finish)
+      } else {
+        panel.begin(completionHandler: finish)
+      }
+    }
+  #endif
 }
 
 /// ProxyApi implementation for `WKUIDelegate`.
