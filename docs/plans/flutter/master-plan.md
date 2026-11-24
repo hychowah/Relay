@@ -245,6 +245,8 @@ real WKWebViews.
    real agent to fill a test form in WKWebView: the outlines show, the page
    scrolls to the first field, a React form takes the values and Relay does
    not submit. A fill aimed at a hidden tab, or made while the conversation
-   is expanded, must be refused, and hidden fields must not be listed.
+   is expanded, must be refused, and hidden fields must not be listed. Also
+   share a test folder holding a PDF in **Shared folders** and have the real
+   provider search and read it ([decision 0003](../prototype/phases/phase-01/decisions/0003-shared-folders-and-form-filling.md)).
 
 Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).

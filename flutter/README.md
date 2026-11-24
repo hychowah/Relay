@@ -240,8 +240,11 @@ The agent reads plain text files (such as .txt, .md, .csv, .json, .yaml, .log
 and source code) and the text of PDFs; other files show by name only. It
 cannot change, move or delete anything. Hidden files and folders (names
 starting with a dot, such as `.ssh` or `.env`) and Relay's own records are
-always left out. Text the agent reads is sent to your model provider. Normal
-chat can use shared folders; a bot can only when **Files** is one of its apps.
+always left out; everything else in a shared folder, such as a Windows
+profile's AppData, is shared with it. Text the agent reads is sent to your
+model provider. Normal chat can use shared folders; a bot can only when
+**Files** is one of its apps. A web page or file the agent reads could try to
+steer it into reading shared files and sending them out through the Browser.
 
 ## Stored data
 
