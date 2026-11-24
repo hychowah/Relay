@@ -648,6 +648,7 @@ class _RelayShellState extends State<RelayShell> {
       onScreen = full;
     }
     final screen = full != null;
+    w.pageShown = !chatOnly || screen;
     return Scaffold(
       body: SafeArea(
         child: Column(

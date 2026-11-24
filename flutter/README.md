@@ -171,12 +171,19 @@ page keeps the page's own viewer.
 
 On the desktop only, ask the agent to fill in a form on the page in a Browser
 tab, for example with details from files you shared with it. Only a tab shown
-on screen, alone or in a split, can be filled. The agent lists the page's form
-fields and fills those it has values for: text fields, text areas, lists,
+on screen, alone or in a split, can be filled, and not while the conversation
+is expanded over it. The agent sees only the fields you can see: their labels,
+their choices and which one is picked, and for a text field only whether it is
+empty, not what you typed. Like the rest of the chat, this goes to the model
+provider. It fills those it has values for: text fields, text areas, lists,
 check boxes, radio buttons and dates. Each filled field gets a blue outline,
-and the page scrolls to the first one. The agent never submits the form or
-presses a button: check the outlined fields, then press Submit yourself.
-Passwords, file uploads, and disabled, read-only or hidden fields are left to
+kept until the page reloads, and the page scrolls to the first one. Relay
+itself never presses a button, presses Enter or submits the form: check the
+outlined fields, then press Submit yourself. A page can still act on a change
+by itself, for example a list that sends the form as soon as an option is
+picked; when Relay sees the page submit, the agent tells you. If the page
+changed since the agent read it, the fill is refused and the agent reads it
+again. Passwords, file uploads, and disabled or read-only fields are left to
 you, and so are fields in a frame from another site, as many card payment
 boxes are. As with typing, the website's own scripts see a filled value before
 you submit.

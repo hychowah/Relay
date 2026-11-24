@@ -123,6 +123,10 @@ class Workspace extends ChangeNotifier {
   /// Whether the window is wide enough to show [shownSplit]; narrow windows
   /// show only [active]. The window sets this as it draws.
   bool splitShown = true;
+
+  /// Whether pages show at all; an expanded conversation covers them. The
+  /// window sets this as it draws.
+  bool pageShown = true;
   String? conversationId, error, status, _commandId;
   bool sending = false, _polling = false, _disposed = false;
   int _manualRevision = 0;
@@ -731,6 +735,11 @@ class Workspace extends ChangeNotifier {
   /// filling its form: the user must see what the agent fills, so a hidden
   /// tab is refused, not loaded.
   Future<BrowserSurface> shownBrowserTab(String tabId) async {
+    if (!pageShown) {
+      throw StateError(
+        'The expanded conversation covers the page; show the workspace to fill its form.',
+      );
+    }
     final shown = splitShown ? _shown : [?active];
     final tab = shown.where((tab) => tab.id == tabId).firstOrNull;
     if (tab == null || !tab.isBrowser) {

@@ -32,7 +32,7 @@ test("the built-in Browser relays page reads, transcripts and form fills to the 
       else if (request.type === "form")
         client.send(JSON.stringify({ id: request.id, data: { fields: [{ id: "f1", type: "email", label: "Email" }] } }));
       else if (request.type === "fill")
-        client.send(JSON.stringify({ id: request.id, data: { asked: request.fields, submitted: false } }));
+        client.send(JSON.stringify({ id: request.id, data: { token: request.token, asked: request.fields } }));
       else if (request.offset === 0)
         client.send(JSON.stringify({ id: request.id, data: { text: "[0:01] Hello", nextOffset: 13 } }));
       else client.send(JSON.stringify({ id: request.id, error: "This video has no captions, so it has no transcript." }));
@@ -43,9 +43,9 @@ test("the built-in Browser relays page reads, transcripts and form fills to the 
     assert.match(await failure("browser.transcript", { sessionId: session, tabId: "tab", offset: 13 }), /no captions/);
     assert.deepEqual((await call("browser.form", { sessionId: session, tabId: "tab" })).data,
       { fields: [{ id: "f1", type: "email", label: "Email" }] });
-    assert.deepEqual((await call("browser.fill", { sessionId: session, tabId: "tab",
+    assert.deepEqual((await call("browser.fill", { sessionId: session, tabId: "tab", token: "read-1",
       fields: [{ id: "f1", value: "ada@example.com" }, { id: "f2", value: true }, { id: 3, value: 4 }] })).data,
-    { asked: [{ id: "f1", value: "ada@example.com" }, { id: "f2", value: true }, { id: "3", value: "4" }], submitted: false });
+    { token: "read-1", asked: [{ id: "f1", value: "ada@example.com" }, { id: "f2", value: true }, { id: "3", value: "4" }] });
     assert.match(await failure("browser.fill", { sessionId: session, tabId: "tab", fields: [] }), /browser\.form/);
     assert.deepEqual((await call("browser.open", { url: "https://example.com/a" })).data,
       { presentation: { viewId: "browser", state: { url: "https://example.com/a" } } });
