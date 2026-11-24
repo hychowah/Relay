@@ -20,17 +20,16 @@ For a change to the Flutter client, also run its [checks](#flutter-client).
 ## Bug reports and requests
 
 In the Flutter app, press the record button at the top right, reproduce the
-problem or show the screen in question, then press the red record button
-again. Choose **Bug**, **Feature request** (something new) or **Update
-request** (a change to something that exists) and describe it. The recording
-holds your actions, each server request and reply (a repeated poll reply is
-kept once; Browser history and highlight requests are left out, though
-addresses typed in the address bar are still recorded as navigation), error
-messages, the open tabs and a screenshot of the whole window, at most 2,000
-pixels on its longest side, with each shown page's own snapshot in place (a
-page that cannot be captured shows as a grey area marked "Page not
-captured"). Pixels are not redacted, so the picture shows whatever was on
-screen.
+problem or show the screen in question, then press the red record button again.
+Choose **Bug** or **Request** (something new, or a change to something that
+exists) and describe it. The recording holds your actions, each server request
+and reply (a repeated poll reply is kept once; Browser history and highlight
+requests are left out, though addresses typed in the address bar are still
+recorded as navigation), error messages, the open tabs and a screenshot of the
+whole window, at most 2,000 pixels on its longest side, with each shown page's
+own snapshot in place (a page that cannot be captured shows as a grey area
+marked "Page not captured"). Pixels are not redacted, so the picture shows
+whatever was on screen.
 
 On the desktop the recording also holds a trace of each loaded Browser tab,
 which Relay cannot otherwise see inside: the link or item under the mouse each
@@ -66,8 +65,8 @@ The chips above the list show all reports or one category; the chip under a
 report's description moves it to another category. Mark a report solved with
 the circle beside it (click again to reopen it); the header counts open and
 solved reports. The bin button deletes the report and its screenshot. The
-report file saves `status` (`open` or `solved`) and `category` (`bug`,
-`feature` or `update`; older reports without one are bugs).
+report file saves `status` (`open` or `solved`) and `category` (`bug` or
+`request`; older reports without one are bugs).
 
 ## Measure the service's performance
 

@@ -574,13 +574,11 @@ Future<({bool save, String category, String description})?> askBugReport(
               maxLines: 8,
               decoration: InputDecoration(
                 labelText: switch (category) {
-                  'feature' => 'What should Relay do?',
-                  'update' => 'What should change?',
+                  'request' => 'What do you want?',
                   _ => 'What went wrong?',
                 },
                 hintText: switch (category) {
-                  'feature' => 'The new feature and what you would use it for',
-                  'update' => 'How it works now and how it should work',
+                  'request' => 'What should be added or changed, and what you would use it for',
                   _ => 'What you expected and what happened instead',
                 },
               ),

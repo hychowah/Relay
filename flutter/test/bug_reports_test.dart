@@ -165,14 +165,14 @@ void main() {
     expect(find.text('1 open · 1 solved'), findsOneWidget);
     expect(find.byTooltip('Mark open'), findsOneWidget);
 
-    // Moving b to feature requests leaves a alone under Bug.
+    // Moving b to requests leaves a alone under Bug.
     await tester.tap(find.text('Bug b'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Change category'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Feature request').last);
+    await tester.tap(find.text('Request').last);
     await tester.pumpAndSettle();
-    expect(saved['b']!['category'], 'feature');
+    expect(saved['b']!['category'], 'request');
     await tester.tap(find.byTooltip('All reports'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Bug (1)'));
@@ -180,7 +180,7 @@ void main() {
     expect(find.text('Bug a'), findsOneWidget);
     expect(find.text('Bug b'), findsNothing);
     expect(find.text('0 open · 1 solved'), findsOneWidget);
-    await tester.tap(find.text('Feature request (1)'));
+    await tester.tap(find.text('Request (1)'));
     await tester.pumpAndSettle();
     expect(find.text('Bug a'), findsNothing);
     expect(find.text('Bug b'), findsOneWidget);

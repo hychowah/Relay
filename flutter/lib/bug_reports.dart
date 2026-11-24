@@ -11,8 +11,7 @@ import 'workspace_style.dart';
 /// Reports saved before categories existed are bugs.
 const reportCategories = {
   'bug': ('Bug', Icons.bug_report_outlined),
-  'feature': ('Feature request', Icons.lightbulb_outline),
-  'update': ('Update request', Icons.auto_fix_high_outlined),
+  'request': ('Request', Icons.lightbulb_outline),
 };
 
 String reportCategory(Json item) =>
