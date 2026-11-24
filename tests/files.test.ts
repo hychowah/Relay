@@ -59,9 +59,9 @@ function fixture(t: TestContext) {
   write(join(dataDir, "provider.json"), "{\"zebra\":true}\n");
   const files = createFiles(dataDir, {});
   const server = new Hono();
-  files.addRoutes(server);
-  const request = (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => server.request(path, {
-    method, headers: { "Content-Type": "application/json", ...headers }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  files.addRoutes(server, ["relay.test:3250"]);
+  const request = (method: string, path: string, body?: unknown, host = "relay.test:3250") => server.request(path, {
+    method, headers: { "Content-Type": "application/json", Host: host }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const call = async (operation: string, args: Record<string, unknown>) =>
     (await files.app.integration.call!(operation, args, {})).data as Record<string, any>;
@@ -70,7 +70,7 @@ function fixture(t: TestContext) {
   return { base, shared, dataDir, files, request, call, failure };
 }
 
-test("shared folders are added as existing absolute folders, kept on disk and removed", async (t) => {
+test("shared folders are added as existing absolute folders, kept on disk, removed, and changed only through Relay's own address", async (t) => {
   const f = fixture(t);
   for (const path of ["shared", join(f.base, "missing"), join(f.shared, "notes.md"), f.dataDir, join(f.shared, "old-relay")])
     assert.equal((await f.request("POST", "/api/settings/folders", { path })).status, 400, path);
@@ -79,8 +79,10 @@ test("shared folders are added as existing absolute folders, kept on disk and re
   assert.deepEqual(await createFiles(f.dataDir, {}).app.integration.call!("files.list", {}, {}), { data: { folders: [f.shared] } });
   const removed = await f.request("DELETE", `/api/settings/folders?path=${encodeURIComponent(f.shared)}`);
   assert.deepEqual(await removed.json(), { folders: [] });
-  const fromPage = await f.request("POST", "/api/settings/folders", { path: f.shared }, { Origin: "https://example.com" });
-  assert.equal(fromPage.status, 403);
+  // A page rebound to Relay's address (DNS rebinding) sends its own Host.
+  for (const [method, path, body] of [["GET", "/api/settings/folders"], ["POST", "/api/settings/folders", { path: f.shared }],
+    ["DELETE", `/api/settings/folders?path=${encodeURIComponent(f.shared)}`]] as const)
+    assert.equal((await f.request(method, path, body, "evil.test:3250")).status, 403, method);
   assert.deepEqual(await (await f.request("GET", "/api/settings/folders")).json(), { folders: [] });
 });
 

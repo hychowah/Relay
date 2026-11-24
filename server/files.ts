@@ -5,6 +5,7 @@ import type { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { getDocumentProxy } from "unpdf";
 import type { RegisteredApp } from "./app.ts";
+import { onlyRelayHosts } from "./app-servers.ts";
 
 // Relay's built-in Files app: read-only access to the folders the user shares
 // in Settings. The rules live here, not in the model's instructions: a path
@@ -38,8 +39,8 @@ const kind = (path: string) => {
 const storeFile = "relay.sqlite";
 const limits = {
   listPage: 200, readBytes: 20_000, pdfChars: 20_000,
-  pdfBytes: 20 << 20, pdfPages: 300, pdfMs: 30_000,
-  matches: 50, entries: 20_000, searchMs: 10_000, fileBytes: 1 << 20, contentBytes: 64 << 20,
+  pdfBytes: 20 << 20, pdfMs: 30_000,
+  matches: 50, searchMs: 10_000, fileBytes: 1 << 20,
 };
 
 function inside(path: string, root: string) {
@@ -61,13 +62,12 @@ async function textStart(path: string, bytes: number) {
   } finally { await file.close(); }
 }
 
-/** A PDF's text with a [Page N] line before each page, stopping at the page cap or the deadline. */
+/** A PDF's text with a [Page N] line before each page, stopping at the deadline. */
 async function pdfText(path: string, deadline: number) {
   const document = await getDocumentProxy(new Uint8Array(await readFile(path)));
   try {
     const parts: string[] = [];
-    const last = Math.min(document.numPages, limits.pdfPages);
-    for (let number = 1; number <= last && Date.now() < deadline; number++) {
+    for (let number = 1; number <= document.numPages && Date.now() < deadline; number++) {
       const content = await (await document.getPage(number)).getTextContent();
       parts.push(`[Page ${number}]\n` + content.items.map((item) => "str" in item ? item.str + (item.hasEOL ? "\n" : "") : "").join(""));
     }
@@ -151,15 +151,15 @@ export function createFiles(dataDir: string, env: NodeJS.ProcessEnv = process.en
     const seen = new Set(queue.map(({ real }) => real));
     const deadline = Date.now() + limits.searchMs;
     const matches: Array<{ path: string; match: "name" | "content"; snippet?: string }> = [];
-    let entries = 0, contentBytes = 0, stopped = "", partial = false;
+    let stopped = "";
     walk: while (queue.length) {
       const { real, shown } = queue.shift()!;
       const items = await readdir(real, { withFileTypes: true }).catch(() => []);
       if (items.some((item) => item.name === storeFile)) continue;
       for (const item of items.filter(({ name }) => !name.startsWith(".")).sort((a, b) => a.name < b.name ? -1 : 1)) {
         if (signal?.aborted) throw new Error("The search was cancelled.");
-        if (++entries > limits.entries || Date.now() > deadline) {
-          stopped = `Stopped after looking at ${entries - 1} entries`;
+        if (Date.now() > deadline) {
+          stopped = `Stopped after ${limits.searchMs / 1000} seconds`;
           break walk;
         }
         const path = join(shown, item.name);
@@ -180,35 +180,26 @@ export function createFiles(dataDir: string, env: NodeJS.ProcessEnv = process.en
         if (!regular) continue;
         const type = kind(entryReal);
         if (words.every((word) => item.name.toLowerCase().includes(word))) matches.push({ path, match: "name" });
-        else if (type && contentBytes < limits.contentBytes) {
+        else if (type) {
           let content: string | undefined;
           try {
             const { size } = await stat(entryReal);
-            if (type === "text") {
-              contentBytes += Math.min(size, limits.fileBytes);
-              content = await textStart(entryReal, Math.min(size, limits.fileBytes));
-            } else if (size <= limits.pdfBytes) {
-              contentBytes += size;
-              content = (await pdfText(entryReal, deadline)).text;
-            }
+            if (type === "text") content = await textStart(entryReal, Math.min(size, limits.fileBytes));
+            else if (size <= limits.pdfBytes) content = (await pdfText(entryReal, deadline)).text;
           } catch { /* An unreadable file is not a match. */ }
           const lower = content?.toLowerCase();
           if (lower && words.every((word) => lower.includes(word))) {
             const at = lower.indexOf(words[0]);
             matches.push({ path, match: "content", snippet: content!.slice(Math.max(0, at - 100), at + 150).replace(/\s+/g, " ").trim() });
           }
-        } else if (type) partial = true;
+        }
         if (matches.length >= limits.matches) {
           stopped = `Stopped at ${limits.matches} matches`;
           break walk;
         }
       }
     }
-    const notes = [
-      stopped && `${stopped}; there may be more. Narrow the search with path or more words.`,
-      partial && `Only the first ${limits.contentBytes >> 20} MB of file text was searched; later files were matched by name only.`,
-    ].filter(Boolean);
-    return { matches, ...(notes.length ? { note: notes.join(" ") } : {}) };
+    return { matches, ...(stopped ? { note: `${stopped}; there may be more. Narrow the search with path or more words.` } : {}) };
   }
 
   async function read(args: Record<string, unknown>) {
@@ -259,15 +250,11 @@ export function createFiles(dataDir: string, env: NodeJS.ProcessEnv = process.en
     folders = next;
   }
 
-  function addRoutes(server: Hono) {
-    const fromRelay = (request: Request) => {
-      const origin = request.headers.get("origin");
-      if (origin && origin !== new URL(request.url).origin)
-        throw new HTTPException(403, { message: "Open settings from Relay to change shared folders." });
-    };
+  /** Adds the folder settings routes, answering only requests to Relay's own addresses (host:port). */
+  function addRoutes(server: Hono, hosts: string[]) {
+    onlyRelayHosts(server, ["/api/settings/folders"], hosts, "This address may not see or change shared folders.");
     server.get("/api/settings/folders", (c) => c.json({ folders }));
     server.post("/api/settings/folders", async (c) => {
-      fromRelay(c.req.raw);
       const path = (await c.req.json() as Record<string, unknown> | null)?.path;
       if (typeof path !== "string" || !isAbsolute(path.trim()))
         throw new HTTPException(400, { message: "Enter the folder's full WSL path, such as /home/you/notes or /mnt/c/Users/you/Documents." });
@@ -280,7 +267,6 @@ export function createFiles(dataDir: string, env: NodeJS.ProcessEnv = process.en
       return c.json({ folders });
     });
     server.delete("/api/settings/folders", (c) => {
-      fromRelay(c.req.raw);
       save(folders.filter((folder) => folder !== c.req.query("path")));
       return c.json({ folders });
     });

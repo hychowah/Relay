@@ -236,12 +236,15 @@ registered by address. See [Setup](../README.md#setup) for registration.
 The Flutter backend registers `files`, beside Browser, for read-only access to
 the folders listed in Settings (`GET`, `POST {path}` and
 `DELETE ?path=` on `/api/settings/folders`, saved as `folders.json` in
-`RELAY_DATA_DIR`). A folder must be an existing directory given as an absolute
-WSL path. Its operations are `files.list`, `files.search` (names and words in
-readable text, capped at 50 matches, 20,000 entries, 10 seconds and 64 MB of
-text, with a note when capped) and `files.read` (pages with `nextOffset`).
-Readable files are plain text by extension and PDFs (text through `unpdf`, up
-to 20 MB and 300 pages); others are listed by name only. It has no view, so the app picker
+`RELAY_DATA_DIR`). Like App servers, these routes answer only requests whose
+Host is one of Relay's own addresses, so a page rebound to Relay's address
+cannot use them. A folder must be an existing directory given as an absolute
+WSL path. Its operations are `files.list`, `files.search` (names, plus words
+in the first 1 MB of each text file and in the text of each PDF, stopping at
+50 matches or after 10 seconds, with a note when it stops early) and
+`files.read` (pages with `nextOffset`; a PDF gets 30 seconds to extract).
+Readable files are plain text by extension and PDFs up to 20 MB (text through
+`unpdf`); others are listed by name only. It has no view, so the app picker
 leaves it out (`hasView: false` in `/api/config`); bots reach it only through
 their allowed apps.
 

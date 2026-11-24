@@ -29,10 +29,10 @@ if (process.env.RELAY_PROVIDER_DIR && !existsSync(`${dataDir}/provider.json`)) {
 }
 const workspace = await startWorkspace(dataDir, apps);
 workspace.app.route('/', flutterReleases(`${dataDir}/releases`));
-files.addRoutes(workspace.app);
-addAppServers(workspace.app, process.env.RELAY_SERVERS_FILE, {
-  hosts: [new URL(relayOrigin).host, '127.0.0.1:3250', 'localhost:3250'],
-});
+// Relay's own addresses; requests naming another Host cannot reach these settings.
+const hosts = [new URL(relayOrigin).host, '127.0.0.1:3250', 'localhost:3250'];
+files.addRoutes(workspace.app, hosts);
+addAppServers(workspace.app, process.env.RELAY_SERVERS_FILE, {hosts});
 workspace.app.use('/flutter-host.html', async (c, next) => {c.header('Cache-Control', 'no-store'); await next();});
 workspace.app.use('/*', serveStatic({root:'./public'}));
 const server = serve({fetch:workspace.app.fetch, hostname:'127.0.0.1', port:3250});
