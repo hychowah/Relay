@@ -129,12 +129,15 @@ the tab strip. The page's edge nearest the pointer (left, right, top or bottom)
 is where the tab goes, and the highlighted half shows it. Drop more tabs onto
 any pane to split it again, side by side or stacked; dropping a tab that is
 already in the split moves it. The split tab has an accent outline and a small
-map of its panes, with the last selected pane filled. Click a pane to select it. Drag a divider to
-resize its two sides, or double-click it to return to half and half. Click an
-app's own tab to show it full screen, and the split tab to return to the split.
-Closing the split tab ends the split and keeps every app open. Drag a tab from
-the split back onto the tab strip to take it out; closing an app's tab takes it
-out of every split. Narrow windows show only the selected tab.
+map of its panes, with the last selected pane filled. Click a pane to select it.
+Each Browser pane has its own address bar, so selecting a pane never resizes a
+page; a bar narrower than 480 pixels leaves out **Go** and the PDF zoom
+buttons, since Enter and a pinch do the same. Drag a divider to resize its two
+sides, or double-click it to return to half and half. Click an app's own tab
+to show it full screen, and the split tab to return to the split. Closing the
+split tab ends the split and keeps every app open. Drag a tab from the split
+back onto the tab strip to take it out; closing an app's tab takes it out of
+every split. Narrow windows show only the selected tab.
 
 On macOS only, a page in a Browser tab that opens a sized window on a user
 action (`window.open` with a width or height), as **Continue with Google**
@@ -214,8 +217,9 @@ they never get another address's.
 
 On macOS only, a video's fullscreen button works in a Browser tab, also for a
 player embedded from another site that allows fullscreen. In split view the
-video fills its own pane. A tab shown alone takes the whole screen: the tab
-strip, address bar and chat hide and the window enters macOS fullscreen.
+video fills its own pane, address bar included. A tab shown alone takes the
+whole screen: the tab strip, address bar and chat hide and the window enters
+macOS fullscreen.
 Escape, the player's own button, or leaving macOS fullscreen ends it, and so
 does another tab opening, or the player leaving the page. As in a browser, only
 a click or key press can start it, and each one starts it once. A video in a
@@ -223,7 +227,8 @@ popup window fills only that window.
 
 On macOS only, a PDF opened in a Browser tab shows in the Mac's own PDF viewer
 (PDFKit, as in Preview) in place of WebKit's. **Zoom out**, **Zoom in** and
-**Fit to width** appear beside the address bar, and a pinch zooms too.
+**Fit to width** appear beside an address bar at least 480 pixels wide, and a
+pinch zooms too.
 **Highlight** works as on web pages; a PDF's highlight also keeps where its
 lines are drawn, so a PDF that changes under the same address can show old
 highlights in the wrong place. Text selected in the PDF shows in the chat's

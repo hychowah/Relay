@@ -666,56 +666,9 @@ class _RelayShellState extends State<RelayShell> {
             Expanded(
               child: LayoutBuilder(
                 builder: (context, size) {
-                  final page = Column(
-                    children: [
-                      if (w.active?.isBrowser == true && !screen)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          child: Row(
-                            children: [
-                              IconButton(
-                                tooltip: 'Back',
-                                onPressed:
-                                    w.active?.page?.browser?.canGoBack == true
-                                    ? () => w.browserAction('back')
-                                    : null,
-                                icon: const Icon(Icons.arrow_back),
-                              ),
-                              IconButton(
-                                tooltip: 'Forward',
-                                onPressed:
-                                    w.active?.page?.browser?.canGoForward ==
-                                        true
-                                    ? () => w.browserAction('forward')
-                                    : null,
-                                icon: const Icon(Icons.arrow_forward),
-                              ),
-                              IconButton(
-                                tooltip: 'Reload',
-                                onPressed: () => w.browserAction('reload'),
-                                icon: const Icon(Icons.refresh),
-                              ),
-                              if (Platform.isMacOS) _vpnSwitch(),
-                              Expanded(child: _addressField()),
-                              IconButton(
-                                tooltip: 'Go',
-                                onPressed: () => _go(_addressTarget),
-                                icon: const Icon(Icons.arrow_forward),
-                              ),
-                              ..._readingControls(),
-                            ],
-                          ),
-                        ),
-                      Expanded(
-                        child: LayoutBuilder(
-                          builder: (context, area) =>
-                              _pages(area.biggest, size.maxWidth >= 900),
-                        ),
-                      ),
-                    ],
+                  final page = LayoutBuilder(
+                    builder: (context, area) =>
+                        _pages(area.biggest, size.maxWidth >= 900),
                   );
                   return _panels(size, page, screen);
                 },
@@ -727,10 +680,73 @@ class _RelayShellState extends State<RelayShell> {
     );
   }
 
-  // Desktop (macOS) only: a quiet icon while the active tab uses the Mac's own
+  /// A Browser tab's bar, at the top of its own pane. Only the selected tab's
+  /// bar takes input: another pane's tint takes the first click and selects
+  /// that pane, so these buttons always act on the selected tab. A narrow
+  /// pane's bar leaves out Go and the PDF zoom, which Enter and a pinch do.
+  Widget _browserBar(WorkspaceTab tab) => LayoutBuilder(
+    builder: (context, size) => ClipRect(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Row(children: _barControls(tab, wide: size.maxWidth >= 480)),
+      ),
+    ),
+  );
+
+  List<Widget> _barControls(WorkspaceTab tab, {required bool wide}) {
+    final browser = tab.page?.browser;
+    return [
+      IconButton(
+        tooltip: 'Back',
+        onPressed: browser?.canGoBack == true
+            ? () => w.browserAction('back')
+            : null,
+        icon: const Icon(Icons.arrow_back),
+      ),
+      IconButton(
+        tooltip: 'Forward',
+        onPressed: browser?.canGoForward == true
+            ? () => w.browserAction('forward')
+            : null,
+        icon: const Icon(Icons.arrow_forward),
+      ),
+      IconButton(
+        tooltip: 'Reload',
+        onPressed: () => w.browserAction('reload'),
+        icon: const Icon(Icons.refresh),
+      ),
+      if (Platform.isMacOS) _vpnSwitch(tab),
+      Expanded(child: tab == w.active ? _addressField() : _addressShown(tab)),
+      if (wide)
+        IconButton(
+          tooltip: 'Go',
+          onPressed: () => _go(_addressTarget),
+          icon: const Icon(Icons.arrow_forward),
+        ),
+      ..._readingControls(tab, zoom: wide),
+    ];
+  }
+
+  /// Another pane's address, drawn as the address field draws it.
+  Widget _addressShown(WorkspaceTab tab) {
+    final url = tab.page?.url;
+    final text = url == null || url == 'about:blank' ? '' : url;
+    return InputDecorator(
+      decoration: _addressDecoration,
+      isEmpty: text.isEmpty,
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.bodyLarge,
+      ),
+    );
+  }
+
+  // Desktop (macOS) only: a quiet icon while the tab uses the Mac's own
   // network, a filled "VPN" button while it goes through NordVPN in WSL.
-  Widget _vpnSwitch() {
-    final on = w.active!.vpn;
+  Widget _vpnSwitch(WorkspaceTab tab) {
+    final on = tab.vpn;
     final tooltip = on
         ? 'VPN on: through NordVPN in WSL'
         : "VPN off: the Mac's own network";
@@ -757,12 +773,12 @@ class _RelayShellState extends State<RelayShell> {
 
   // Desktop only: zoom for a PDF, which shows in the Mac's own PDF viewer,
   // and Highlight for the text selected on any page of a Browser tab.
-  List<Widget> _readingControls() {
-    final browser = w.active?.page?.browser;
-    final selection = w.active?.page?.context?['selection'];
+  List<Widget> _readingControls(WorkspaceTab tab, {required bool zoom}) {
+    final browser = tab.page?.browser;
+    final selection = tab.page?.context?['selection'];
     final selected = selection is String && selection.isNotEmpty;
     return [
-      if (browser?.pdf == true) ...[
+      if (zoom && browser?.pdf == true) ...[
         IconButton(
           tooltip: 'Zoom out',
           onPressed: () => w.browserAction('zoomOut'),
@@ -869,14 +885,7 @@ class _RelayShellState extends State<RelayShell> {
           child: TextField(
             controller: controller,
             focusNode: focus,
-            decoration: const InputDecoration(
-              hintText: 'Search or enter a web address',
-              isDense: true,
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 10,
-              ),
-            ),
+            decoration: _addressDecoration,
             inputFormatters: [
               TextInputFormatter.withFunction(
                 (before, now) => _edited(context, before, now),
@@ -1051,6 +1060,20 @@ class _RelayShellState extends State<RelayShell> {
         Positioned.fromRect(key: key, rect: rects[tab] ?? area, child: child);
 
     final frame = split == null ? 0.0 : 2.0;
+    // A Browser tab's bar sits at the top of its own pane, so selecting
+    // another pane never moves a page. A page in fullscreen fills its pane.
+    double bar(WorkspaceTab tab) =>
+        tab.isBrowser && tab.page?.browser?.fullScreen != true ? _barHeight : 0;
+    // What shows in place of the page, such as its error, starts below it.
+    Widget below(WorkspaceTab tab, Widget child, {Key? key}) {
+      final rect = rects[tab] ?? area;
+      final top = bar(tab) == 0 ? 0.0 : frame + bar(tab);
+      return Positioned.fromRect(
+        key: key,
+        rect: Rect.fromLTRB(rect.left, rect.top + top, rect.right, rect.bottom),
+        child: child,
+      );
+    }
 
     // A tab dropped on a pane takes the side whose edge is nearest.
     Widget dropZone(WorkspaceTab target) => pane(
@@ -1117,13 +1140,14 @@ class _RelayShellState extends State<RelayShell> {
             pane(
               tab,
               key: ValueKey(tab.id),
-              // The selected pane's outline is a frame around its page, never
-              // a drawing over it: anything painted over a native page takes
-              // its mouse on macOS. Both panes keep the frame, so selecting
-              // only changes a colour and never resizes a page.
+              // The selected pane's outline is a frame around its bar and
+              // page, never a drawing over the page: anything painted over a
+              // native page takes its mouse on macOS. Both panes keep the
+              // frame, so selecting only changes a colour and never resizes
+              // a page.
               Builder(
                 builder: (context) {
-                  final bar = ColoredBox(
+                  final edge = ColoredBox(
                     color: split != null && w.active == tab
                         ? colors.primary.withValues(alpha: .45)
                         : Colors.transparent,
@@ -1135,32 +1159,32 @@ class _RelayShellState extends State<RelayShell> {
                         right: 0,
                         top: 0,
                         height: frame,
-                        child: bar,
+                        child: edge,
                       ),
                       Positioned(
                         left: 0,
                         right: 0,
                         bottom: 0,
                         height: frame,
-                        child: bar,
+                        child: edge,
                       ),
                       Positioned(
                         left: 0,
                         top: frame,
                         bottom: frame,
                         width: frame,
-                        child: bar,
+                        child: edge,
                       ),
                       Positioned(
                         right: 0,
                         top: frame,
                         bottom: frame,
                         width: frame,
-                        child: bar,
+                        child: edge,
                       ),
                       Positioned.fill(
                         left: frame,
-                        top: frame,
+                        top: frame + bar(tab),
                         right: frame,
                         bottom: frame,
                         child: Offstage(
@@ -1185,7 +1209,7 @@ class _RelayShellState extends State<RelayShell> {
           ),
         for (final tab in shown) ...[
           if (selecting case final s? when s.tab == tab)
-            pane(
+            below(
               tab,
               RegionCapture(
                 key: ValueKey(s.image),
@@ -1206,7 +1230,7 @@ class _RelayShellState extends State<RelayShell> {
               ),
             ),
           if (tab.report != null && (tab.page == null || tab.error != null))
-            pane(
+            below(
               tab,
               key: ValueKey('report-${tab.id}'),
               SavedReport(
@@ -1216,7 +1240,7 @@ class _RelayShellState extends State<RelayShell> {
               ),
             ),
           if (tab.error != null && tab.report == null)
-            pane(
+            below(
               tab,
               key: ValueKey('error-${tab.id}'),
               Center(
@@ -1240,10 +1264,24 @@ class _RelayShellState extends State<RelayShell> {
               tab.page == null &&
               tab.report == null &&
               tab.error == null)
-            pane(
+            below(
               tab,
               key: ValueKey('loading-${tab.id}'),
               const Center(child: CircularProgressIndicator()),
+            ),
+          // The selected tab's bar keeps one key as the selection moves
+          // between panes, so its address field, with the shared controller
+          // and focus, is never built twice.
+          if (bar(tab) > 0)
+            Positioned.fromRect(
+              key: ValueKey(w.active == tab ? 'address-bar' : 'bar-${tab.id}'),
+              rect: Rect.fromLTWH(
+                rects[tab]!.left + frame,
+                rects[tab]!.top + frame,
+                rects[tab]!.width - 2 * frame,
+                bar(tab),
+              ),
+              child: _browserBar(tab),
             ),
           // The other pane's tint is painted over its page on purpose: on
           // macOS a native page loses the mouse wherever Flutter paints over
@@ -2347,6 +2385,16 @@ String? inlineCompletion(String typed, String url) {
   }
   return typed + address.substring(start.length);
 }
+
+/// The height of a Browser tab's bar above its page. It is fixed, so a page
+/// keeps its size whichever pane is selected.
+const _barHeight = 46.0;
+
+const _addressDecoration = InputDecoration(
+  hintText: 'Search or enter a web address',
+  isDense: true,
+  contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+);
 
 /// An address-bar suggestion: a visited page, or [_typedText].
 typedef _Suggestion = ({String url, String title});
