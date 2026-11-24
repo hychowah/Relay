@@ -1091,10 +1091,10 @@ void main() {
     await tester.pump();
     expect(reading.page, isNull);
     expect(reading.error, contains('No network'));
-    expect((reading.unloaded?.url, reading.title), (
-      'https://example.com/desk',
-      'Browser',
-    ));
+    expect(
+      (reading.unloaded?.url, reading.title),
+      ('https://example.com/desk', 'Browser'),
+    );
     expect(f.w.session()['tabs'][0]['url'], 'https://example.com/desk');
     await expectLater(
       f.w.browserTab(reading.id),
@@ -1386,10 +1386,23 @@ void main() {
     expect(left.width, closeTo(right.width, 1));
     expect(find.byIcon(Icons.vertical_split), findsNWidgets(2));
 
+    // Browser's bar is at the top of its own pane whichever pane is
+    // selected, so selecting a pane moves no page.
+    final reload = tester.getRect(find.byTooltip('Reload'));
+    expect(reload.left, greaterThan(right.left));
+    expect(reload.bottom, lessThanOrEqualTo(right.top));
+    expect(left.top, lessThan(right.top));
     await tester.tapAt(right.center);
     await tester.pump();
     expect(f.w.active, browser);
-    // Browser shows its address bar once selected, which moves the pages.
+    expect((page(room), page(browser)), (left, right));
+    await tester.tapAt(left.center);
+    await tester.pump();
+    expect(f.w.active, room);
+    expect((page(room), page(browser)), (left, right));
+    expect(tester.getRect(find.byTooltip('Reload')), reload);
+    await tester.tapAt(right.center);
+    await tester.pump();
     final selected = page(browser), beside = page(room);
     // On macOS a native page gets no input wherever Flutter paints over it, so
     // nothing may overlap the selected page, edges included. Its outline is a
@@ -1462,6 +1475,32 @@ void main() {
     expect(tester.element(browserView.first), same(browserElement));
     expect(f.w.active, second);
     expectNothingOver(second, [room, browser]);
+    // Only the selected pane has an address field; another Browser pane's bar
+    // shows that pane's own address.
+    (browser.page! as FakePage).url = 'https://example.org/other';
+    f.w.changed();
+    await tester.pump();
+    final field = find.byWidgetPredicate(
+      (w) =>
+          w is TextField &&
+          w.decoration?.hintText == 'Search or enter a web address',
+    );
+    expect(field, findsOneWidget);
+    expect(find.text('https://example.org/other'), findsOneWidget);
+    // Nor does the keyboard reach the dimmed pane's bar, whose buttons would
+    // act on the selected tab.
+    await tester.tap(field);
+    for (var i = 0; i < 40; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      var dimmed = false;
+      FocusManager.instance.primaryFocus?.context?.visitAncestorElements((e) {
+        dimmed = e.widget.key == ValueKey('bar-${browser.id}');
+        return !dimmed;
+      });
+      expect(dimmed, isFalse, reason: 'Tab $i');
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
     // One click on the dimmed top pane selects it.
     await tester.tapAt(page(browser).center);
     await tester.pump();
@@ -1502,11 +1541,7 @@ void main() {
     await back.up();
     await tester.pumpAndSettle();
     expect(split.layout.tabs, [room, browser]);
-    expect(
-      page(browser).height,
-      page(room).height,
-      reason: 'its neighbour grows',
-    );
+    expect(page(browser), right, reason: 'its neighbour grows');
 
     // Clicking an app's own tab shows it full screen; the split tab stays.
     await tester.tap(chip('Room layout'));
@@ -1552,7 +1587,7 @@ void main() {
     Rect page(WorkspaceTab tab) =>
         tester.getRect(find.byKey(ValueKey('page-${tab.id}')));
     final width = page(browser).right - page(room).left;
-    final height = page(second).bottom - page(browser).top;
+    final (top, bottom) = (page(browser).height, page(second).height);
     Offset grip(int index) =>
         tester.getRect(find.byKey(ValueKey('split-divider-$index'))).center;
     double saved() => f.stored.last['tabs'][3]['split']['fraction'] as double;
@@ -1580,8 +1615,8 @@ void main() {
 
     // The divider between the stacked panes moves up and down.
     await dragDivider(1, const Offset(0, 100));
-    expect(page(browser).height, closeTo(height / 2 + 97, 2));
-    expect(page(second).height, closeTo(height / 2 - 103, 2));
+    expect(page(browser).height, closeTo(top + 100, 2));
+    expect(page(second).height, closeTo(bottom - 100, 2));
 
     final reset = grip(0);
     await tester.tapAt(reset, kind: PointerDeviceKind.mouse);
@@ -1590,6 +1625,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(page(room).width, closeTo(page(browser).width, 1));
     expect(saved(), .5);
+
+    // A narrow Browser pane's bar fits by leaving out Go and the PDF zoom.
+    (second.page! as FakePage).pdf = true;
+    f.w.changed();
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Zoom in'), findsOneWidget);
+    await dragDivider(0, const Offset(2000, 0));
+    expect(page(browser).width, lessThan(480));
+    expect(find.byTooltip('Zoom in'), findsNothing);
+    expect(find.byTooltip('Go'), findsNothing);
+    expect(find.byTooltip('Reload'), findsNWidgets(2));
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets(
@@ -1649,15 +1695,22 @@ void main() {
       expect(video.fullScreen, isFalse);
       expect(menu, findsOneWidget);
 
-      // In split view the video fills only its own pane.
+      // In split view the video fills only its own pane, where its bar was.
       f.w.dropInSplit(browser, room, SplitSide.right);
       await tester.pumpAndSettle();
       final pane = tester.getRect(view);
+      final beside = tester.getRect(find.byKey(ValueKey('page-${room.id}')));
       await pageFullScreen(true);
-      expect(tester.getRect(view), pane);
+      expect(
+        tester.getRect(view),
+        Rect.fromLTRB(pane.left, beside.top, pane.right, pane.bottom),
+      );
+      expect(find.byTooltip('Reload'), findsNothing);
       expect(video.screenFills, [true, false, true, false]);
       expect(menu, findsOneWidget);
       expect(chat, findsOneWidget);
+      await pageFullScreen(false);
+      expect(tester.getRect(view), pane);
       await tester.pumpWidget(const SizedBox());
     },
   );
@@ -1675,9 +1728,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byTooltip('Zoom in'), findsNothing);
     // With nothing selected there is nothing to highlight.
-    IconButton highlight() => tester.widget(
-      find.widgetWithIcon(IconButton, Icons.border_color),
-    );
+    IconButton highlight() =>
+        tester.widget(find.widgetWithIcon(IconButton, Icons.border_color));
     pdf.selection = '';
     pdf.changed(false);
     await tester.pumpAndSettle();
@@ -1859,16 +1911,18 @@ void main() {
     }
 
     // The saved picture's width and its colours in the page and the chat.
-    Future<(int, List<int>, List<int>)> record() async {
-      await tester.tap(find.byTooltip('Record a bug'));
+    Future<(int, List<int>, List<int>)> record([String? category]) async {
+      await tester.tap(find.byTooltip('Record a bug or request'));
       await tester.pump();
       expect(f.w.recorder.recording, isTrue);
       // A second click during the capture must not start another one.
-      await tester.tap(find.byTooltip('Recording a bug. Stop and save'));
-      await tester.tap(find.byTooltip('Recording a bug. Stop and save'));
-      await settle(find.text('Save bug report'));
+      await tester.tap(find.byTooltip('Recording. Stop and save'));
+      await tester.tap(find.byTooltip('Recording. Stop and save'));
+      await settle(find.text('Save report'));
       await tester.pumpAndSettle();
-      expect(find.text('Save bug report'), findsOneWidget);
+      expect(find.text('Save report'), findsOneWidget);
+      if (category != null) await tester.tap(find.text(category));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Save on server'));
       await tester.pumpAndSettle();
       expect(f.w.recorder.recording, isFalse);
@@ -1899,20 +1953,22 @@ void main() {
     expect(width, 2000, reason: 'the longest side is capped');
     expect(inPage, [0x21, 0x96, 0xf3], reason: 'the page snapshot in place');
     expect(inChat, isNot(inPage), reason: 'the chat panel is in the picture');
+    expect(f.bugReport!['category'], 'bug');
 
     page.frame = null;
-    final (_, notCaptured, _) = await record();
+    final (_, notCaptured, _) = await record('Feature request');
+    expect(f.bugReport!['category'], 'feature');
     expect(notCaptured, [0xd4, 0xd4, 0xd4]);
     expect(find.text('Page not captured'), findsNothing, reason: 'cleared');
 
-    await tester.tap(find.byTooltip('Record a bug'));
+    await tester.tap(find.byTooltip('Record a bug or request'));
     await tester.pump();
-    await tester.tap(find.byTooltip('Recording a bug. Stop and save'));
-    await settle(find.text('Save bug report'));
+    await tester.tap(find.byTooltip('Recording. Stop and save'));
+    await settle(find.text('Save report'));
     await tester.tap(find.text('Discard'));
     await tester.pumpAndSettle();
     expect(f.w.recorder.recording, isFalse);
-    expect(find.byTooltip('Record a bug'), findsOneWidget);
+    expect(find.byTooltip('Record a bug or request'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets(

@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import 'bug_reports.dart';
 import 'relay_api.dart';
 import 'workspace.dart';
 import 'workspace_style.dart';
@@ -511,50 +512,81 @@ class _MemoryEditorState extends State<MemoryEditor> {
   );
 }
 
-/// Asks how to finish a bug recording. Null keeps recording; otherwise the
-/// result says whether to save it, with the user's description.
-Future<({bool save, String description})?> askBugReport(
+/// Asks how to finish a recording. Null keeps recording; otherwise the result
+/// says whether to save it, with its category and the user's description.
+Future<({bool save, String category, String description})?> askBugReport(
   BuildContext context,
   int events,
 ) {
   final description = TextEditingController();
-  return showDialog<({bool save, String description})>(
+  var category = 'bug';
+  return showDialog<({bool save, String category, String description})>(
     context: context,
-    builder: (context) => WorkspaceDialog(
-      title: 'Save bug report',
-      actions: [
-        TextButton(
-          onPressed: () =>
-              Navigator.pop(context, (save: false, description: '')),
-          child: const Text('Discard'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, (
-            save: true,
-            description: description.text.trim(),
-          )),
-          child: const Text('Save on server'),
-        ),
-      ],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '$events recorded events, a screenshot of the window and '
-            'the server record of this conversation will be saved.',
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) => WorkspaceDialog(
+        title: 'Save report',
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, (
+              save: false,
+              category: category,
+              description: '',
+            )),
+            child: const Text('Discard'),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: description,
-            autofocus: true,
-            minLines: 3,
-            maxLines: 8,
-            decoration: const InputDecoration(
-              labelText: 'What went wrong?',
-              hintText: 'What you expected and what happened instead',
-            ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, (
+              save: true,
+              category: category,
+              description: description.text.trim(),
+            )),
+            child: const Text('Save on server'),
           ),
         ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SegmentedButton<String>(
+              showSelectedIcon: false,
+              segments: [
+                for (final MapEntry(:key, value: (label, icon))
+                    in reportCategories.entries)
+                  ButtonSegment(
+                    value: key,
+                    icon: Icon(icon, size: 18),
+                    label: Text(label),
+                  ),
+              ],
+              selected: {category},
+              onSelectionChanged: (chosen) =>
+                  setState(() => category = chosen.single),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '$events recorded events, a screenshot of the window and '
+              'the server record of this conversation will be saved.',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: description,
+              autofocus: true,
+              minLines: 3,
+              maxLines: 8,
+              decoration: InputDecoration(
+                labelText: switch (category) {
+                  'feature' => 'What should Relay do?',
+                  'update' => 'What should change?',
+                  _ => 'What went wrong?',
+                },
+                hintText: switch (category) {
+                  'feature' => 'The new feature and what you would use it for',
+                  'update' => 'How it works now and how it should work',
+                  _ => 'What you expected and what happened instead',
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );

@@ -57,10 +57,10 @@ The implemented workflows include the following.
   device. When on, a tab the user clicks or opens, or the agent opens, slides
   to the left end of the strip. Restoring, closing and split changes keep the
   order; reduced motion skips the slide.
-- Development bug recording: actions, server exchanges, errors, tabs and a
-  whole-window screenshot are saved on the service as a report and read in the Bug reports
-  viewer, where each report is marked open or solved, or deleted (see the root
-  README).
+- Development recording: actions, server exchanges, errors, tabs and a
+  whole-window screenshot are saved on the service as a bug, feature or update
+  request and read in the Reports viewer, filtered by category, where each is
+  marked solved or deleted (see the root README).
 
 `server/runtime.ts` shares the existing harness/provider lifecycle between the
 web and Flutter deployments. Provider settings are imported once into Flutter's
@@ -188,13 +188,13 @@ real WKWebViews.
    folder on WSL. Remove it at publish time if that folder grows.
 3. Review Stable 0.0.19 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`. The suite's longest waits, on tab switches, are candidates for a smoothness fix. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
 4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable since 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified. The capture animation is in Stable 0.0.17: on the Mac, check that the flash and the flight to the composer run smoothly over a real page, and that the thumbnail takes over without a jump.
-5. Bug reports on the Mac: view, mark solved and delete one; check that the
-   whole-window screenshot shows the chat, a split and a Browser comment over a
-   page, and that pages still click and scroll. A page trace (2026-11-24)
-   showed each Relay redraw moving WebKit's hover down by the page's offset in
-   the window. Unchanged polls no longer redraw (user-confirmed); other redraws
-   still do. A ChatGPT chat's scroll snapping back needs a trace with script
-   scrolls.
+5. On the Mac, try the record button and **Reports** against the live
+   backend: save, view, mark solved, delete and categories (after a backend
+   deploy); check that the whole-window screenshot shows the chat, a split and
+   a Browser comment over a page, and that pages still click and scroll. Each
+   Relay redraw moves WebKit's hover down by the page's window offset;
+   unchanged polls no longer redraw (user-confirmed). Record any ChatGPT scroll
+   snapping back: script scrolls are noted.
 6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 7. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
 8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.
@@ -207,8 +207,9 @@ real WKWebViews.
    tab, and closing it, and that the split tab's outline and pane map read
    clearly in light and dark. Check that the selected page clicks and scrolls:
    nothing may be drawn over it (the 0.0.12 bug; its outline has been a
-   2-pixel frame since 0.0.13). In Stable 0.0.14; 66 Flutter tests pass on
-   WSL with fake pages. Splits saved by 0.0.13 are not restored.
+   2-pixel frame since 0.0.13). Per-pane address bars (2026-11-24, no Mac
+   build yet): check that selecting a pane resizes no page and narrow bars
+   fit.
 12. Check night mode on the Mac in Dark and Light, with macOS both light and
    dark: tabs, chat, Markdown replies, dialogs, menus and the empty Browser
    page. Also check that System follows a live macOS switch. Only widget tests

@@ -214,11 +214,10 @@ class RelayApi {
       (await _request<List>('/api/bug-reports')).cast<Json>();
   Future<Json> bugReport(String id) =>
       _request('/api/bug-reports/${Uri.encodeComponent(id)}');
-  Future<void> setBugReportStatus(String id, String status) => _request(
-    '/api/bug-reports/${Uri.encodeComponent(id)}',
-    {'status': status},
-    'PATCH',
-  );
+
+  /// Changes a report's `status` or `category`.
+  Future<void> updateBugReport(String id, Json changes) =>
+      _request('/api/bug-reports/${Uri.encodeComponent(id)}', changes, 'PATCH');
   Future<void> deleteBugReport(String id) =>
       _request('/api/bug-reports/${Uri.encodeComponent(id)}', null, 'DELETE');
   Future<Uint8List> bugReportScreenshot(String id) async {
