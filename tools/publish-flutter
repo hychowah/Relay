@@ -40,7 +40,7 @@ def main():
         ssh = git("config", "--get", "relay.macSSH")
         releases = Path(git("config", "--get", "relay.flutterReleases"))
     except subprocess.CalledProcessError:
-        sys.exit("Set relay.macSSH and relay.flutterReleases in local git config (see flutter/README.md).")
+        sys.exit("Set relay.macSSH and relay.flutterReleases in local git config (see docs/development.md).")
     if not releases.is_absolute():
         sys.exit("Use an absolute relay.flutterReleases path shared by all worktrees.")
     releases.mkdir(parents=True, exist_ok=True)

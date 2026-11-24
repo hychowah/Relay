@@ -42,7 +42,7 @@ function hours(etime: string) {
 function read(): Reading | undefined {
   let ssh: string;
   try { ssh = execFileSync("git", ["config", "--get", "relay.macSSH"], { cwd: root, encoding: "utf8" }).trim(); }
-  catch { throw new Error("Set relay.macSSH in local git config (see flutter/README.md)."); }
+  catch { throw new Error("Set relay.macSSH in local git config (see docs/development.md)."); }
   const output = execFileSync(ssh, ["/bin/sh -s"], { input: script, encoding: "utf8" }).trim();
   if (!output) return undefined;
   const [etime, ...rest] = output.split("\n");
