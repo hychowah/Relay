@@ -243,16 +243,16 @@ test("a fill reports a submit that the page's own change handler starts", async 
 });
 
 // Fields a person sees once a box scrolls, the page scrolls past a fixed
-// banner, or inside web components, and radios shown only as colour swatches.
+// banner, or inside web components, and radios shown only as swatch pictures.
 const scrolled = `<div style="position:fixed;top:0;left:0;right:0;height:100px;background:#eee;z-index:1">Banner</div>
 <div style="height:400px"></div><label>Under the banner <input name="under"></label>
 <div id="slotted"><label>In a shadow box <input name="slotted"></label></div>
 <div id="card"></div>
 <fieldset><legend>Colour</legend>
   <input type="radio" name="colour" value="c1" id="c1" style="position:absolute;opacity:0">
-  <label for="c1" title="Red" style="display:inline-block;width:24px;height:24px;background:red"></label>
+  <label for="c1" title="Red" style="display:inline-block;width:24px;height:24px;background-image:linear-gradient(red,red)"></label>
   <input type="radio" name="colour" value="c2" id="c2" style="position:absolute;opacity:0">
-  <label for="c2" title="Blue" style="display:inline-block;width:24px;height:24px;background:blue"></label>
+  <label for="c2" title="Blue" style="display:inline-block;width:24px;height:24px;background-image:linear-gradient(blue,blue)"></label>
 </fieldset>
 <div id="modal" style="position:fixed;top:120px;left:420px;width:300px;height:120px;overflow:auto;background:white;z-index:2">
   <div style="height:200px">Terms</div><label>Initials <input name="initials"></label><div style="height:400px"></div>
@@ -337,6 +337,8 @@ test("a check box shows through its label only when the label shows text or a pi
   const page = await open(t, `<form>
     <input type="checkbox" id="charge" name="charge" style="display:none">
     <label for="charge" aria-label="I authorise a monthly charge" style="display:inline-block;width:6px;height:6px"></label>
+    <input type="checkbox" id="charge2" name="charge2" style="display:none">
+    <label for="charge2" aria-label="I authorise a monthly charge" style="display:inline-block;width:12px;height:12px;background:#ccc"></label>
     <input type="checkbox" id="star" name="star" style="display:none">
     <label for="star" title="Five stars" style="display:inline-block"><svg width="16" height="16"><circle cx="8" cy="8" r="8"/></svg></label>
     <input type="checkbox" id="news" name="news" aria-label="Hidden name">
@@ -354,7 +356,7 @@ test("a check box shows through its label only when the label shows text or a pi
   const read = await run(page, "read");
   const byName = Object.fromEntries(read.fields.map((field: any) => [field.name, field]));
   assert.deepEqual(Object.keys(byName), ["star", "news", "nickname", "country", "slotLabel"],
-    "an empty 6 px label, a faint and a filtered field are not shown");
+    "an empty 6 px label, a 12 px label with only a colour, a faint and a filtered field are not shown");
   assert.equal(byName.star.label, "Five stars");
   assert.equal(byName.news.label, "Hidden name", "a shown box keeps its own name, not that of a label that is not shown");
   assert.equal(byName.nickname.label, undefined, "a text field shows its placeholder, not a hidden name");

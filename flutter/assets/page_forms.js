@@ -131,8 +131,8 @@
 
   // A styled check box or radio often hides its own box and shows its label
   // instead. Such a label counts as the box when it passes the test itself
-  // and shows text or a picture of real size (a star, a colour swatch), not
-  // an empty box.
+  // and shows text or a picture of real size (an image, an icon, a background
+  // image), not an empty box, which a box with only a colour is.
   const boxLike = (el) => el.type === "checkbox" || el.type === "radio" || el.type === "file";
   function picture(label) {
     const view = label.ownerDocument.defaultView;
@@ -140,7 +140,7 @@
       if (/^(input|select|textarea)$/.test(node.localName) || !draws(node)) return false;
       const box = node.getBoundingClientRect(), style = view.getComputedStyle(node);
       return box.width >= 12 && box.height >= 12 && (/^(img|svg|canvas|picture|video)$/.test(node.localName)
-        || style.backgroundImage !== "none" || !/^(transparent|rgba\(0, 0, 0, 0\))$/.test(style.backgroundColor));
+        || style.backgroundImage !== "none");
     });
   }
   const shownLabel = (label) => visible(label) && Boolean(textOf(label) || picture(label));
