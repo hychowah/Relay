@@ -158,10 +158,10 @@ real WKWebViews.
    view and WebKit re-checked the hover from the window's corner (Mac probe,
    2026-11-24; macOS 26.6). The runner now skips re-adding a view to its own
    parent; the probe's hover moved without that and stayed with it. The
-   committed code is built and published (test build `bug-page-trace`,
-   111e7ca) but not yet tried; `hover_redraw_test.dart` has not run. Run it,
-   check by hand that hovers stay put while a reply streams, and re-run it
-   after each Flutter upgrade.
+   committed code is in test build `bug-page-trace` (111e7ca); the user tried
+   it on the Mac and said it "seems good" (2026-11-24; which cases they tried
+   is not recorded). `hover_redraw_test.dart` has not run: run it, and re-run
+   it after each Flutter upgrade.
 6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 7. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
 8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.
