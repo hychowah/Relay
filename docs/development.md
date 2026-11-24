@@ -265,22 +265,28 @@ figure changes. A tab's process comes from WebKit's private
 - Highlights are painted without changing the page's own elements.
 - The agent reads a YouTube transcript with `browser.transcript` and a PDF's
   text with `browser.read`.
-- The agent fills forms (desktop only) with `browser.form` and
-  `browser.fill`, through `flutter/assets/page_forms.js`
-  (`tests/page-forms.test.ts` checks it in Chromium). A read lists the fields
-  it finds a person can see, in the page and its open shadow roots (it draws,
-  is not see-through, is more than a dot, and its centre is not covered or
-  clipped where it is or once scrolled to the middle of the window), keeps
-  them in the page under a random token, and returns that token with
+- The agent fills forms (desktop only) with `browser.form` and `browser.fill`,
+  through `flutter/assets/page_forms.js` (`tests/page-forms.test.ts` checks it
+  in Chromium). A read lists the fields it finds a person can see, in the page
+  and its open shadow roots: it draws (opacity and `opacity()` filters,
+  multiplied down its ancestors, at least 0.1), is more than a dot, and its
+  centre is not covered or clipped where it is or once scrolled into view and
+  then to the middle of the window. A field that a box with hidden or clipped
+  overflow (a slider, a later step) must scroll for is not shown. A check box
+  or radio hidden behind its label counts when that label passes the same test
+  and shows text or a picture of at least 12 by 12 pixels. The read keeps the
+  fields in the page under a random token and returns that token with
   `notShown`, the fields that draw in the window but failed the hit test. The
   test is best effort, both ways. Every scroll it makes is put back, through
   shadow roots and frames. A fill must bring the token from the same page and
   address; the client checks it before any value enters the page
-  (`fillReadForm` in `page_surface.dart`). Values go in through each
-  element's own value setter with `input` and `change` events, so
-  React-style inputs notice; check boxes and radio buttons are clicked. Relay
-  itself presses no button or key and calls no submit, but a page's own
-  handlers can; a fill reports a submit seen during the fill.
+  (`fillReadForm` in `page_surface.dart`). Values go in through each element's
+  own value setter with `input` (which leaves a shadow root) and `change`
+  events, so React-style inputs notice; check boxes and radio buttons are
+  clicked. The page then scrolls to the first filled field, moving only boxes
+  a person can scroll. Relay itself presses no button or key and calls no
+  submit, but a page's own handlers can; a fill reports a submit seen during
+  the fill.
 - Address-bar suggestions and highlights are not yet checked on Windows.
 
 ## Publish the Flutter app

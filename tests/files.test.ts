@@ -113,7 +113,7 @@ test("shared folders are added as existing absolute folders, kept on disk, remov
   assert.deepEqual(await (await f.request("GET", "/api/settings/folders")).json(), { folders: [] });
 });
 
-test("a damaged folders file shares nothing, is kept aside, and a saved list keeps each folder once", async (t) => {
+test("a damaged folders file shares nothing and is kept aside", async (t) => {
   const f = fixture(t);
   writeFileSync(join(f.dataDir, "folders.json"), "{");
   assert.deepEqual((await createFiles(f.dataDir, {}).app.integration.call!("files.list", {}, {})).data,
@@ -122,11 +122,6 @@ test("a damaged folders file shares nothing, is kept aside, and a saved list kee
   assert.equal(aside.length, 1);
   assert.equal(readFileSync(join(f.dataDir, aside[0]), "utf8"), "{", "the user's list is not lost");
   assert.equal(existsSync(join(f.dataDir, "folders.json")), false);
-
-  // A list saved before folders were kept once.
-  symlinkSync(f.shared, join(f.base, "shared-link"));
-  writeFileSync(join(f.dataDir, "folders.json"), JSON.stringify([f.shared, join(f.base, "shared-link"), f.shared]));
-  assert.deepEqual((await createFiles(f.dataDir, {}).app.integration.call!("files.list", {}, {})).data, { folders: [f.shared] });
 });
 
 test("listing, search and reading stay inside shared folders and skip hidden names and Relay's records", async (t) => {

@@ -92,7 +92,8 @@ test("a form read lists only fields a person can see, with no typed text", async
   const byName = Object.fromEntries(read.fields.map((field: any) => [field.name, field]));
   assert.deepEqual(Object.keys(byName), ["name", "email", "nickname", "about", "country", "plan", "terms", "news", "birthday",
     "password", "scan", "member", "coupon"], "hidden, see-through, off-page, tiny, covered and clipped fields are not listed");
-  assert.equal(read.notShown, 3, "fields that draw in the window but fail the hit test (dot, covered, clipped) are counted");
+  assert.equal(read.notShown, 2, "fields that draw in the window but fail the hit test (dot, covered) are counted; one in a "
+    + "collapsed box with hidden overflow is simply not shown");
   assert.deepEqual(byName.name, { id: "f1", type: "text", form: "form1", label: "Full name", name: "name", placeholder: "Jane Doe",
     required: false, empty: true }, "a label leaves out text that does not draw");
   assert.equal(byName.about.empty, false);
@@ -281,12 +282,19 @@ test("a read scrolls boxes, frames and shadow roots to test a field, puts them a
   assert.equal(read.notShown, 1, "the covered field in the component");
   assert.deepEqual(await scrolls(), [360, 0, 0], "every scroll is put back, inside the shadow root too");
 
+  // A framework bound outside the component hears its input events.
+  await page.evaluate(() => {
+    const w = window as any;
+    w.hostInputs = 0;
+    document.getElementById("card")!.addEventListener("input", () => w.hostInputs++);
+  });
   const filled = await run(page, "fill", { token: read.token, fields: [{ id: byName.cardName.id, value: "Ada" }, { id: byName.colour.id, value: "Blue" }] });
   assert.equal(filled.filled, 2);
   assert.deepEqual(await page.evaluate(() => {
     const input = document.getElementById("card")!.shadowRoot!.querySelector("input")!;
-    return [input.value, getComputedStyle(input).outlineStyle, (document.getElementById("c2") as HTMLInputElement).checked];
-  }), ["Ada", "solid", true], "a field inside a component is filled and outlined");
+    return [input.value, getComputedStyle(input).outlineStyle, (document.getElementById("c2") as HTMLInputElement).checked,
+      (window as any).hostInputs];
+  }), ["Ada", "solid", true, 1], "a field inside a component is filled, outlined and its input event leaves the component");
 
   // A component's own form that submits when a field changes.
   await page.evaluate(() => {
@@ -299,4 +307,58 @@ test("a read scrolls boxes, frames and shadow roots to test a field, puts them a
   const again = await run(page, "read");
   const coupon = again.fields.find((field: any) => field.name === "coupon").id;
   assert.equal((await run(page, "fill", { token: again.token, fields: [{ id: coupon, value: "SAVE" }] })).pageSubmitted, true);
+});
+
+// Step 2 of a form waits in a slider a person cannot scroll, and a panel with
+// hidden overflow shows a field that is not in its middle; both are below the fold.
+const steps = `<div style="height:1000px">Top</div>
+<div id="slider" style="width:400px;overflow:hidden;white-space:nowrap">
+  <div style="display:inline-block;width:400px"><label>Step 1 name <input name="step1"></label></div>
+  <div style="display:inline-block;width:400px"><label>Step 2 card number <input name="step2"></label></div>
+</div>
+<div id="panel" style="height:200px;overflow:hidden"><div style="height:150px"></div>
+  <label>In the panel <input name="inPanel"></label><div style="height:600px"></div></div>
+<div style="height:2000px"></div>`;
+
+test("a field that only a box with hidden overflow could bring into view is not shown, and a fill never moves such a box", async (t) => {
+  const page = await open(t, steps);
+  const read = await run(page, "read");
+  assert.deepEqual(read.fields.map((field: any) => field.name), ["step1", "inPanel"]);
+  assert.equal(read.notShown, undefined, "step 2 is not counted: a person cannot reach it yet");
+  const ids = idsOf(read);
+  await run(page, "fill", { token: read.token, fields: [{ id: ids.inPanel, value: "Ada" }, { id: ids.step1, value: "Ada" }] });
+  // The page scrolls smoothly to the first filled field; the slider and the panel stay as they were.
+  await page.waitForFunction(() => scrollY > 500, null, { timeout: 3000 });
+  await page.waitForTimeout(500);
+  assert.deepEqual(await page.evaluate(() => [document.getElementById("slider")!.scrollLeft, document.getElementById("panel")!.scrollTop]), [0, 0]);
+});
+
+test("a check box shows through its label only when the label shows text or a picture, and takes a name only from what is shown", async (t) => {
+  const page = await open(t, `<form>
+    <input type="checkbox" id="charge" name="charge" style="display:none">
+    <label for="charge" aria-label="I authorise a monthly charge" style="display:inline-block;width:6px;height:6px"></label>
+    <input type="checkbox" id="star" name="star" style="display:none">
+    <label for="star" title="Five stars" style="display:inline-block"><svg width="16" height="16"><circle cx="8" cy="8" r="8"/></svg></label>
+    <input type="checkbox" id="news" name="news" aria-label="Hidden name">
+    <label for="news" aria-label="Unshown label"></label>
+    <input name="nickname" placeholder="Nickname" aria-label="Social security number">
+    <select name="country" aria-label="Country"><option>Japan</option></select>
+    <div style="opacity:0.3"><div style="opacity:0.3"><div style="opacity:0.3"><input name="faint"></div></div></div>
+    <input name="filtered" style="filter:opacity(0)">
+    <div id="host">Name on card</div>
+  </form>`);
+  await page.evaluate(() => {
+    // Label text given to a component through a slot.
+    document.getElementById("host")!.attachShadow({ mode: "open" }).innerHTML = "<label><slot></slot> <input name=slotLabel></label>";
+  });
+  const read = await run(page, "read");
+  const byName = Object.fromEntries(read.fields.map((field: any) => [field.name, field]));
+  assert.deepEqual(Object.keys(byName), ["star", "news", "nickname", "country", "slotLabel"],
+    "an empty 6 px label, a faint and a filtered field are not shown");
+  assert.equal(byName.star.label, "Five stars");
+  assert.equal(byName.news.label, "Hidden name", "a shown box keeps its own name, not that of a label that is not shown");
+  assert.equal(byName.nickname.label, undefined, "a text field shows its placeholder, not a hidden name");
+  assert.equal(byName.nickname.placeholder, "Nickname");
+  assert.equal(byName.country.label, "Country", "a shown field without a label or placeholder keeps its own name");
+  assert.equal(byName.slotLabel.label, "Name on card");
 });

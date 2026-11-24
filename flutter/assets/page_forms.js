@@ -39,25 +39,51 @@
   // or the host of the shadow root it is in.
   const up = (node) => node.assignedSlot ?? node.parentElement ?? node.parentNode?.host ?? null;
 
-  // Whether an element draws: laid out, visible, not see-through on itself
-  // or any ancestor, and more than a dot (screen-reader-only text is 1 px).
+  // Whether an element draws: laid out, visible, not see-through (opacity
+  // and opacity() filters multiply down the ancestors), and more than a dot
+  // (screen-reader-only text is 1 px).
   function draws(el) {
     const view = el.ownerDocument.defaultView;
     if (!el.isConnected || !el.getClientRects().length || view.getComputedStyle(el).visibility !== "visible") return false;
-    for (let node = el; node; node = up(node))
-      if (Number(view.getComputedStyle(node).opacity) < 0.1) return false;
+    let opacity = 1;
+    for (let node = el; node; node = up(node)) {
+      const style = view.getComputedStyle(node);
+      opacity *= Number(style.opacity);
+      for (const [, value, percent] of style.filter.matchAll(/opacity\(([\d.]+)(%?)\)/g)) opacity *= percent ? value / 100 : value;
+      if (opacity < 0.1) return false;
+    }
     const box = el.getBoundingClientRect();
     return box.width >= 4 && box.height >= 4;
   }
+
+  // Every box around [el] that scrolling it into view may move, through
+  // shadow roots and frames, with where it is scrolled now.
+  function scrollBoxes(el) {
+    const boxes = [];
+    for (let node = el; node; node = node.ownerDocument.defaultView.frameElement)
+      for (let parent = up(node); parent; parent = up(parent))
+        boxes.push([parent, parent.scrollLeft, parent.scrollTop]);
+    return boxes;
+  }
+  // Whether a person can scroll [box] along an axis: the page itself, or a
+  // box whose overflow scrolls (not hidden or clip, as sliders and steps use).
+  const scrollable = (box, axis) => box === box.ownerDocument.scrollingElement
+    || /^(auto|scroll|overlay)$/.test(box.ownerDocument.defaultView.getComputedStyle(box)[axis === "x" ? "overflowX" : "overflowY"]);
+  const putBack = (boxes) => {
+    for (const [box, left, top] of boxes)
+      if (box.scrollLeft !== left || box.scrollTop !== top) box.scrollTo({ left, top, behavior: "instant" });
+  };
 
   // Whether a person can see [el]: it draws, its centre lies inside the page
   // and nothing covers it there (a field and its label may overlap), and
   // the same holds for the frame it is in. The hit test also catches fields
   // clipped away by clip-path, clip or an ancestor's overflow. A field that
   // fails where it is, off screen, scrolled out of its box or under a sticky
-  // bar, is tested again scrolled to the middle of the window, and every
-  // scroll is put back at once, within this one script, so nothing moves on
-  // screen. Fields that draw inside the window but still fail are doubtful:
+  // bar, is tested again scrolled into view, and then in the middle of the
+  // window, but only as far as a person could scroll: a field that a box
+  // with hidden or clipped overflow must move for is not shown. Every scroll
+  // is put back at once, within this one script, so nothing moves on screen.
+  // Fields that draw inside the window but still fail are doubtful:
   // covered, clipped, or drawn by something the test cannot tell from a cover.
   let seen = null;
   const doubtful = new Set();
@@ -71,11 +97,9 @@
     if (!draws(el)) return false;
     const frame = el.ownerDocument.defaultView.frameElement;
     if (frame && !visible(frame)) return false;
-    // Every box scrollIntoView may scroll, through shadow roots and frames.
-    const scrolls = [];
-    for (let node = el; node; node = node.ownerDocument.defaultView.frameElement)
-      for (let parent = up(node); parent; parent = up(parent))
-        scrolls.push([parent, parent.scrollLeft, parent.scrollTop]);
+    const boxes = scrollBoxes(el);
+    const locked = () => boxes.some(([box, left, top]) =>
+      (box.scrollLeft !== left && !scrollable(box, "x")) || (box.scrollTop !== top && !scrollable(box, "y")));
     try {
       const view = el.ownerDocument.defaultView;
       // The hit test runs in the field's own tree: a field inside a web
@@ -91,36 +115,59 @@
           ? "seen" : "covered";
       };
       if (look() === "seen") return true;
-      el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
-      const answer = look();
+      el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+      if (locked()) return false;
+      let answer = look();
+      if (answer === "covered") {
+        el.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+        if (!locked()) answer = look();
+      }
       if (answer === "covered") doubtful.add(el);
       return answer === "seen";
     } finally {
-      for (const [node, left, top] of scrolls)
-        if (node.scrollLeft !== left || node.scrollTop !== top) node.scrollTo({ left, top, behavior: "instant" });
+      putBack(boxes);
     }
   }
 
   // A styled check box or radio often hides its own box and shows its label
-  // instead, as text, a star or a colour swatch; a shown label counts as the
-  // box being shown.
+  // instead. Such a label counts as the box when it passes the test itself
+  // and shows text or a picture of real size (a star, a colour swatch), not
+  // an empty box.
   const boxLike = (el) => el.type === "checkbox" || el.type === "radio" || el.type === "file";
-  const shown = (el) => visible(el) || (boxLike(el) && [...(el.labels ?? [])].some(visible));
+  function picture(label) {
+    const view = label.ownerDocument.defaultView;
+    return [label, ...label.querySelectorAll("*")].some((node) => {
+      if (/^(input|select|textarea)$/.test(node.localName) || !draws(node)) return false;
+      const box = node.getBoundingClientRect(), style = view.getComputedStyle(node);
+      return box.width >= 12 && box.height >= 12 && (/^(img|svg|canvas|picture|video)$/.test(node.localName)
+        || style.backgroundImage !== "none" || !/^(transparent|rgba\(0, 0, 0, 0\))$/.test(style.backgroundColor));
+    });
+  }
+  const shownLabel = (label) => visible(label) && Boolean(textOf(label) || picture(label));
+  const shown = (el) => visible(el) || (boxLike(el) && [...(el.labels ?? [])].some(shownLabel));
   const unsure = (el) => doubtful.has(el) || (boxLike(el) && [...(el.labels ?? [])].some((label) => doubtful.has(label)));
 
-  // The text a person sees in [node], leaving out what does not draw and a
-  // list's options or a text area's text inside a label.
-  function textOf(node) {
-    return clip([...node.childNodes].map((child) => child.nodeType === Node.TEXT_NODE ? child.data
-      : child.nodeType === Node.ELEMENT_NODE && !/^(SELECT|TEXTAREA|SCRIPT|STYLE)$/.test(child.tagName) && draws(child)
-        ? textOf(child) : "").join(""));
+  // The text a person sees in [nodes], leaving out what does not draw and a
+  // list's options or a text area's text inside a label. A slot shows the
+  // nodes given to it.
+  function textIn(nodes) {
+    return nodes.map((child) => child.nodeType === Node.TEXT_NODE ? child.data
+      : child.nodeType !== Node.ELEMENT_NODE ? ""
+        : child.localName === "slot" ? textIn(child.assignedNodes({ flatten: true }))
+          : !/^(SELECT|TEXTAREA|SCRIPT|STYLE)$/.test(child.tagName) && draws(child) ? textIn([...child.childNodes]) : "").join("");
   }
-  // A label's text, or for an icon without text (a star, a swatch) its name.
+  const textOf = (node) => clip(textIn([...node.childNodes]));
+  // A label's text. Without one, the name of a picture label or of the field
+  // itself, unless the field shows a placeholder, which speaks for it. Only
+  // drawing is checked here, so a fill's check of the label stays the read's;
+  // whether the field is shown is decided by shown().
   function labelOf(el) {
     const ids = el.getAttribute("aria-labelledby");
     const labels = ids ? ids.split(/\s+/).map((id) => el.getRootNode().getElementById(id)).filter(Boolean) : [...(el.labels ?? [])];
-    return clip(labels.filter(draws).map(textOf).join(" "))
-      || clip([el, ...labels].map((node) => node.getAttribute("aria-label") || node.title).find(Boolean));
+    const text = clip(labels.filter(draws).map(textOf).join(" "));
+    if (text || el.getAttribute("placeholder")) return text;
+    const named = [...labels.filter((label) => draws(label) && picture(label)), ...(draws(el) ? [el] : [])];
+    return clip(named.map((node) => node.getAttribute("aria-label") || node.title).find(Boolean));
   }
   function legendOf(el) {
     const legend = el.closest("fieldset")?.querySelector("legend");
@@ -270,9 +317,21 @@
     } finally {
       submits.forEach((restore) => restore());
     }
-    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    filled[0]?.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+    if (filled[0]) reveal(filled[0]);
     return { results, filled: filled.length, ...(pageSubmitted ? { pageSubmitted } : {}) };
+  }
+
+  // Scrolls [el] to the middle of the window, moving only boxes a person can
+  // scroll: the positions come from an instant scroll that is put back at once.
+  function reveal(el) {
+    const boxes = scrollBoxes(el);
+    el.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+    const targets = boxes.map(([box, left, top]) =>
+      [box, scrollable(box, "x") ? box.scrollLeft : left, scrollable(box, "y") ? box.scrollTop : top]);
+    putBack(boxes);
+    const behavior = matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    for (const [box, left, top] of targets)
+      if (box.scrollLeft !== left || box.scrollTop !== top) box.scrollTo({ left, top, behavior });
   }
 
   function fillOne(field, value) {
@@ -335,7 +394,8 @@
     const view = el.ownerDocument.defaultView;
     const proto = el.tagName === "TEXTAREA" ? view.HTMLTextAreaElement : el.tagName === "SELECT" ? view.HTMLSelectElement : view.HTMLInputElement;
     Object.getOwnPropertyDescriptor(proto.prototype, "value").set.call(el, value);
-    el.dispatchEvent(new view.Event("input", { bubbles: true }));
+    // input leaves a shadow root, as typing's does; change does not.
+    el.dispatchEvent(new view.Event("input", { bubbles: true, composed: true }));
     el.dispatchEvent(new view.Event("change", { bubbles: true }));
   }
 

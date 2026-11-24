@@ -69,14 +69,7 @@ export function createFiles(dataDir: string, env: NodeJS.ProcessEnv = process.en
   try {
     const saved: unknown = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : [];
     if (!Array.isArray(saved) || saved.some((folder) => typeof folder !== "string")) throw new Error("not a list of paths");
-    // A list saved before folders were kept once can hold one folder twice.
-    const seen = new Set<string>();
-    folders = saved.filter((folder) => {
-      const real = realOrSelf(folder);
-      if (seen.has(real)) return false;
-      seen.add(real);
-      return true;
-    });
+    folders = saved;
   } catch {
     // Kept aside, so the next change in Settings does not overwrite the user's list.
     const aside = `folders.json.damaged-${new Date().toISOString().replace(/[:.]/g, "-")}`;

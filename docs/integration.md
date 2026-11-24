@@ -237,22 +237,22 @@ The Flutter backend registers `files`, beside Browser, for read-only access to
 the folders listed in Settings (`GET`, `POST {path}` and `DELETE ?path=` on
 `/api/settings/folders`, saved as `folders.json` in `RELAY_DATA_DIR`; a damaged
 file shares nothing, is logged and is kept aside as
-`folders.json.damaged-<time>`). A folder reached by several paths is kept once,
-also when loaded. Like App servers, these routes answer only requests whose
-Host is one of Relay's own addresses, so a page rebound to Relay's address
-cannot use them. Changes that carry another site's Origin are refused too. A
-folder must be an existing directory given as an absolute WSL path. Its
-operations are `files.list`, `files.search` (names, plus words in the first 1
-MB of each text file and in the text of each PDF, stopping at 50 matches or
-after 10 seconds, with a note when it stops early) and `files.read` (pages with
-`nextOffset`; a PDF gets 30 seconds). Readable files are plain text by
-extension and PDFs up to 20 MB. PDF text comes from `unpdf` in a worker thread,
-one per search or read, ended at the deadline or on Stop, so a large PDF does
-not stall the service. The worker stops a PDF after 5 million characters of
-text and the result says so. Other files are listed by name only. It has no
-view, so the app picker leaves it out (`hasView: false` in `/api/config`). A
-chat with no bot can use every registered app, Files included; a bot can use
-Files only when it is among the bot's allowed apps.
+`folders.json.damaged-<time>`). A folder added again by another path is kept
+once. Like App servers, these routes answer only requests whose Host is one of
+Relay's own addresses, so a page rebound to Relay's address cannot use them.
+Changes that carry another site's Origin are refused too. A folder must be an
+existing directory given as an absolute WSL path. Its operations are
+`files.list`, `files.search` (names, plus words in the first 1 MB of each text
+file and in the text of each PDF, stopping at 50 matches or after 10 seconds,
+with a note when it stops early) and `files.read` (pages with `nextOffset`; a
+PDF gets 30 seconds). Readable files are plain text by extension and PDFs up to
+20 MB. PDF text comes from `unpdf` in a worker thread, one per search or read,
+ended at the deadline or on Stop, so a large PDF does not stall the service.
+The worker stops a PDF after 5 million characters of text and the result says
+so. Other files are listed by name only. It has no view, so the app picker
+leaves it out (`hasView: false` in `/api/config`). A chat with no bot can use
+every registered app, Files included; a bot can use Files only when it is among
+the bot's allowed apps.
 
 The service enforces the rules, not the model instructions: a path counts only
 when its real location, after symlinks, is inside a shared folder; names that
