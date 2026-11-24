@@ -6,15 +6,18 @@
 // Relay itself clicks no button or link, presses no key, and calls neither
 // submit() nor requestSubmit(). It sets values as typing does and ticks boxes
 // with a click, so a page whose own scripts react to a change can still
-// submit its form or move on; a fill reports a submit it saw.
+// submit its form or move on; a fill reports a submit seen during the fill.
 //
-// A read lists only fields a person can see, with values only for choices
-// (a text field says only whether it is empty), and keeps its fields in the
-// page under a new random token. A fill must bring that token, from the same
-// address, and finds fields only through it, so it cannot reach a button, a
-// page left by Back or a field that changed since. Password and file fields
-// are listed but never filled. Fields inside another site's frame cannot be
-// reached; they are only counted.
+// A read lists the fields it finds a person can see, with values only for
+// choices (a text field says only whether it is empty), counts in notShown
+// those it could not confirm, and keeps its fields in the page under a new
+// random token. The test is best effort: a page can hide a field from it,
+// and it leaves out some fields a person can see. A fill must bring that
+// token, from the same address, and finds fields only through it, so it
+// cannot reach a button, a page left by Back or a field that changed since.
+// Password and file fields are listed but never filled. Fields inside
+// another site's frame or a closed shadow root cannot be reached; another
+// site's frames are only counted.
 (action, request) => {
   const readKey = Symbol.for("relay.formRead");
   const textTypes = new Set(["text", "email", "tel", "url", "search", "number",
@@ -32,24 +35,32 @@
     return textTypes.has(type) || type === "checkbox" || type === "radio" || leftToUser.has(type) ? type : null;
   }
 
+  // The element that lays [node] out: the slot it is shown in, its parent,
+  // or the host of the shadow root it is in.
+  const up = (node) => node.assignedSlot ?? node.parentElement ?? node.parentNode?.host ?? null;
+
   // Whether an element draws: laid out, visible, not see-through on itself
   // or any ancestor, and more than a dot (screen-reader-only text is 1 px).
   function draws(el) {
     const view = el.ownerDocument.defaultView;
     if (!el.isConnected || !el.getClientRects().length || view.getComputedStyle(el).visibility !== "visible") return false;
-    for (let node = el; node; node = node.parentElement)
+    for (let node = el; node; node = up(node))
       if (Number(view.getComputedStyle(node).opacity) < 0.1) return false;
     const box = el.getBoundingClientRect();
     return box.width >= 4 && box.height >= 4;
   }
 
   // Whether a person can see [el]: it draws, its centre lies inside the page
-  // and nothing covers it there (a label over its own field is fine), and
+  // and nothing covers it there (a field and its label may overlap), and
   // the same holds for the frame it is in. The hit test also catches fields
-  // clipped away by clip-path, clip or an ancestor's overflow. A field off
-  // screen is scrolled to for the test and every scroll put back at once,
-  // within this one script, so nothing moves on screen.
+  // clipped away by clip-path, clip or an ancestor's overflow. A field that
+  // fails where it is, off screen, scrolled out of its box or under a sticky
+  // bar, is tested again scrolled to the middle of the window, and every
+  // scroll is put back at once, within this one script, so nothing moves on
+  // screen. Fields that draw inside the window but still fail are doubtful:
+  // covered, clipped, or drawn by something the test cannot tell from a cover.
   let seen = null;
+  const doubtful = new Set();
   function visible(el) {
     if (seen?.has(el)) return seen.get(el);
     const answer = visibleNow(el);
@@ -60,23 +71,30 @@
     if (!draws(el)) return false;
     const frame = el.ownerDocument.defaultView.frameElement;
     if (frame && !visible(frame)) return false;
+    // Every box scrollIntoView may scroll, through shadow roots and frames.
     const scrolls = [];
     for (let node = el; node; node = node.ownerDocument.defaultView.frameElement)
-      for (let parent = node.parentElement; parent; parent = parent.parentElement)
+      for (let parent = up(node); parent; parent = up(parent))
         scrolls.push([parent, parent.scrollLeft, parent.scrollTop]);
     try {
       const view = el.ownerDocument.defaultView;
-      const centre = () => {
+      // The hit test runs in the field's own tree: a field inside a web
+      // component is found as itself, and a cover inside it still counts.
+      const tree = el.getRootNode();
+      const look = () => {
         const box = el.getBoundingClientRect();
-        return [box.left + box.width / 2, box.top + box.height / 2];
+        const [x, y] = [box.left + box.width / 2, box.top + box.height / 2];
+        if (x < 0 || y < 0 || x >= view.innerWidth || y >= view.innerHeight) return "off";
+        const hit = tree.elementFromPoint(x, y);
+        // A field and its own labels may cover each other.
+        return hit && (el.contains(hit) || hit === el.control || [...(el.labels ?? [])].some((label) => label.contains(hit)))
+          ? "seen" : "covered";
       };
-      let [x, y] = centre();
-      if (x < 0 || y < 0 || x >= view.innerWidth || y >= view.innerHeight) {
-        el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
-        [x, y] = centre();
-      }
-      const hit = el.ownerDocument.elementFromPoint(x, y);
-      return !!hit && (el.contains(hit) || [...(el.labels ?? [])].some((label) => label.contains(hit)));
+      if (look() === "seen") return true;
+      el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+      const answer = look();
+      if (answer === "covered") doubtful.add(el);
+      return answer === "seen";
     } finally {
       for (const [node, left, top] of scrolls)
         if (node.scrollLeft !== left || node.scrollTop !== top) node.scrollTo({ left, top, behavior: "instant" });
@@ -84,9 +102,11 @@
   }
 
   // A styled check box or radio often hides its own box and shows its label
-  // instead; a shown label with text counts as the box being shown.
-  const shown = (el) => visible(el) || ((el.type === "checkbox" || el.type === "radio" || el.type === "file")
-    && [...(el.labels ?? [])].some((label) => textOf(label) && visible(label)));
+  // instead, as text, a star or a colour swatch; a shown label counts as the
+  // box being shown.
+  const boxLike = (el) => el.type === "checkbox" || el.type === "radio" || el.type === "file";
+  const shown = (el) => visible(el) || (boxLike(el) && [...(el.labels ?? [])].some(visible));
+  const unsure = (el) => doubtful.has(el) || (boxLike(el) && [...(el.labels ?? [])].some((label) => doubtful.has(label)));
 
   // The text a person sees in [node], leaving out what does not draw and a
   // list's options or a text area's text inside a label.
@@ -95,10 +115,12 @@
       : child.nodeType === Node.ELEMENT_NODE && !/^(SELECT|TEXTAREA|SCRIPT|STYLE)$/.test(child.tagName) && draws(child)
         ? textOf(child) : "").join(""));
   }
+  // A label's text, or for an icon without text (a star, a swatch) its name.
   function labelOf(el) {
     const ids = el.getAttribute("aria-labelledby");
-    const labels = ids ? ids.split(/\s+/).map((id) => el.ownerDocument.getElementById(id)).filter(Boolean) : [...(el.labels ?? [])];
-    return clip(labels.filter(draws).map(textOf).join(" "));
+    const labels = ids ? ids.split(/\s+/).map((id) => el.getRootNode().getElementById(id)).filter(Boolean) : [...(el.labels ?? [])];
+    return clip(labels.filter(draws).map(textOf).join(" "))
+      || clip([el, ...labels].map((node) => node.getAttribute("aria-label") || node.title).find(Boolean));
   }
   function legendOf(el) {
     const legend = el.closest("fieldset")?.querySelector("legend");
@@ -113,7 +135,7 @@
     return null;
   }
   // A radio group is one field: radios with one name in one form.
-  const radiosOf = (el) => !el.name ? [el] : [...el.ownerDocument.querySelectorAll("input[type=radio]")]
+  const radiosOf = (el) => !el.name ? [el] : [...el.getRootNode().querySelectorAll("input[type=radio]")]
     .filter((radio) => radio.name === el.name && radio.form === el.form);
   const signature = (el, type) => JSON.stringify([type, el.name, labelOf(el)]);
   const bytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
@@ -141,10 +163,19 @@
     return { found, otherSiteFrames };
   }
 
+  // A document and the open shadow roots in it, where web components keep fields.
+  function trees(doc) {
+    const found = [doc];
+    for (let i = 0; i < found.length; i++)
+      for (const el of found[i].querySelectorAll("*")) if (el.shadowRoot) found.push(el.shadowRoot);
+    return found;
+  }
+
   function read() {
     // Nothing changes while the page is read, so each answer holds for this read.
     seen = new Map();
     const { found, otherSiteFrames } = documents();
+    let notShown = 0;
     const token = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
     const kept = new Map(), fields = [], forms = new Map(), grouped = new Set();
     function formOf(el) {
@@ -157,36 +188,43 @@
       }
       return forms.get(form).form;
     }
-    for (const doc of found) {
-      for (const el of doc.querySelectorAll("input,textarea,select")) {
-        if (fields.length > 300) break;
-        const type = kind(el);
-        if (!type || grouped.has(el) || !shown(el)) continue;
-        const group = type === "radio" ? radiosOf(el).filter(shown) : [el];
-        group.forEach((radio) => grouped.add(radio));
-        const id = "f" + (fields.length + 1);
-        const field = { id, type, form: formOf(el),
-          label: type === "radio" ? legendOf(el) : labelOf(el),
-          name: clip(el.name, 100), placeholder: clip(el.getAttribute("placeholder"), 100), required: group.some((r) => r.required) };
-        const why = group.every((member) => refusal(member, type)) ? refusal(el, type) : null;
-        if (why) Object.assign(field, { fillable: false, reason: why });
-        if (type === "checkbox") field.checked = el.checked;
-        else if (type === "radio") {
-          field.value = clip(group.find((radio) => radio.checked)?.value, 100);
-          field.options = group.map((radio) => ({ value: clip(radio.value, 100), label: labelOf(radio),
-            ...(refusal(radio, type) ? { fillable: false } : {}) }));
-        } else if (type === "select") {
-          field.value = clip(el.value, 100);
-          field.options = [...el.options].map((option) => ({ value: clip(option.value, 100), label: clip(option.text, 100),
-            ...(option.matches(":disabled") ? { fillable: false } : {}) }));
-        } else if (type !== "password") field.empty = el.value === "";
-        for (const key of ["label", "name", "placeholder", "form"]) if (!field[key]) delete field[key];
-        fields.push(field);
-        kept.set(id, { elements: group, type, signatures: group.map((member) => signature(member, type)) });
+    for (const el of found.flatMap(trees).flatMap((tree) => [...tree.querySelectorAll("input,textarea,select")])) {
+      if (fields.length > 300) break;
+      const type = kind(el);
+      if (!type || grouped.has(el)) continue;
+      if (!shown(el)) {
+        // A radio group is shown when any of its radios is.
+        const members = type === "radio" ? radiosOf(el) : [el];
+        if (!members.some(shown)) {
+          members.forEach((member) => grouped.add(member));
+          if (members.some(unsure)) notShown++;
+        }
+        continue;
       }
+      const group = type === "radio" ? radiosOf(el).filter(shown) : [el];
+      group.forEach((radio) => grouped.add(radio));
+      const id = "f" + (fields.length + 1);
+      const field = { id, type, form: formOf(el),
+        label: type === "radio" ? legendOf(el) : labelOf(el),
+        name: clip(el.name, 100), placeholder: clip(el.getAttribute("placeholder"), 100), required: group.some((r) => r.required) };
+      const why = group.every((member) => refusal(member, type)) ? refusal(el, type) : null;
+      if (why) Object.assign(field, { fillable: false, reason: why });
+      if (type === "checkbox") field.checked = el.checked;
+      else if (type === "radio") {
+        field.value = clip(group.find((radio) => radio.checked)?.value, 100);
+        field.options = group.map((radio) => ({ value: clip(radio.value, 100), label: labelOf(radio),
+          ...(refusal(radio, type) ? { fillable: false } : {}) }));
+      } else if (type === "select") {
+        field.value = clip(el.value, 100);
+        field.options = [...el.options].map((option) => ({ value: clip(option.value, 100), label: clip(option.text, 100),
+          ...(option.matches(":disabled") ? { fillable: false } : {}) }));
+      } else if (type !== "password") field.empty = el.value === "";
+      for (const key of ["label", "name", "placeholder", "form"]) if (!field[key]) delete field[key];
+      fields.push(field);
+      kept.set(id, { elements: group, type, signatures: group.map((member) => signature(member, type)) });
     }
     const reply = { token, url: location.href.slice(0, 2000), title: clip(document.title), forms: [...forms.values()],
-      fields: [], otherSiteFrames, truncated: true };
+      fields: [], otherSiteFrames, ...(notShown ? { notShown } : {}), truncated: true };
     let size = bytes(reply);
     for (const field of fields) {
       size += bytes(field) + 1;
@@ -205,14 +243,21 @@
     if (!read || typeof token !== "string" || read.token !== token)
       return { error: "The page changed since browser.form; read the form again." };
     const { found } = documents();
-    // A submit the page's own scripts start while a field changes is noted, not stopped.
+    // A submit the page's own scripts start while this script sets a field is
+    // noted, not stopped. One started later, by a timer, a promise or a
+    // request, is not seen, and the page can still cancel one that is.
     let pageSubmitted = false;
     const noteSubmit = () => { pageSubmitted = true; };
     const submits = found.map((doc) => {
       const forms = doc.defaultView.HTMLFormElement.prototype, submit = forms.submit;
       forms.submit = function (...args) { pageSubmitted = true; return submit.apply(this, args); };
-      doc.addEventListener("submit", noteSubmit, true);
-      return () => { forms.submit = submit; doc.removeEventListener("submit", noteSubmit, true); };
+      // A submit event stays inside its shadow root, so each tree listens.
+      const listening = trees(doc);
+      listening.forEach((tree) => tree.addEventListener("submit", noteSubmit, true));
+      return () => {
+        forms.submit = submit;
+        listening.forEach((tree) => tree.removeEventListener("submit", noteSubmit, true));
+      };
     });
     const results = [], filled = [];
     try {
@@ -299,12 +344,14 @@
   // as they were, and it stays on every field filled on this page.
   function mark(elements) {
     for (const el of elements) {
-      const doc = el.ownerDocument;
-      if (!doc.adoptedStyleSheets.some((sheet) => sheet[readKey])) {
-        const sheet = new doc.defaultView.CSSStyleSheet();
+      // The field's document or shadow root: a document's style sheet does
+      // not reach into a shadow root.
+      const tree = el.getRootNode();
+      if (!tree.adoptedStyleSheets.some((sheet) => sheet[readKey])) {
+        const sheet = new el.ownerDocument.defaultView.CSSStyleSheet();
         sheet.replaceSync("[data-relay-filled]{outline:3px solid #0a84ff !important;outline-offset:2px !important}");
         sheet[readKey] = true;
-        doc.adoptedStyleSheets = [...doc.adoptedStyleSheets, sheet];
+        tree.adoptedStyleSheets = [...tree.adoptedStyleSheets, sheet];
       }
       el.setAttribute("data-relay-filled", "");
     }

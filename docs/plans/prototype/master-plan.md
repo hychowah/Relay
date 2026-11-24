@@ -48,7 +48,7 @@ storage and export.
 | R19 | Provide normal chat and reusable bots with individual objectives, scope, allowed apps and memory. Share personal preferences; keep bot knowledge separate. Forward a chosen conversation with a handoff and recoverable source messages. |
 | R20 | Show meaningful app actions while the agent works: search/results, selected evidence and the final focused view with field highlights. Progress reflects actual operations. Keep chat expandable and Stop available; preserve direct manual app use. |
 | R21 | Each Mac Browser tab can route through WSL's NordVPN. See the [Browser VPN plan](../browser-vpn/master-plan.md). |
-| R22 | Read-only shared folders, Browser form filling: [decision 0003](phases/phase-01/decisions/0003-shared-folders-and-form-filling.md). |
+| R22 | Read-only shared folders, form filling: [decision 0003](phases/phase-01/decisions/0003-shared-folders-and-form-filling.md). |
 
 A project is proposed to group conversations, memory, outputs, and links to
 relevant app resources. One project may use several apps; one app may serve
@@ -340,7 +340,7 @@ Phase 1 of the [app servers plan](../app-servers/master-plan.md) (R17) is deploy
    records and the user opened both apps on the Mac. See the
    [Phase 02 evidence](phases/phase-02/README.md).
 2. Evaluate sourced Research Web answers, memory correction and forgetting, and retrieval of old details after compaction with the configured real provider.
-3. Establish the Compose executor boundary before enabling any terminal or code tool.
+3. Establish the Compose executor boundary before enabling any file-writing, terminal or code tool.
 4. Serve the web page from the app backend so both clients share one set of records.
 5. Defer the Android device trial and phone work until separately requested.
 6. Have Analysis Web and Backtest Web serve the Relay protocol from their own projects, then retire the adapter project.

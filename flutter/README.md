@@ -172,21 +172,25 @@ page keeps the page's own viewer.
 On the desktop only, ask the agent to fill in a form on the page in a Browser
 tab, for example with details from files you shared with it. Only a tab shown
 on screen, alone or in a split, can be filled, and not while the conversation
-is expanded over it. The agent sees only the fields you can see: their labels,
-their choices and which one is picked, and for a text field only whether it is
-empty, not what you typed. Like the rest of the chat, this goes to the model
+is expanded over it. The agent sees the fields Relay finds you can see: their
+labels, their choices and which one is picked, and for a text field only
+whether it is empty, not what you typed. That test is best effort: a page built
+to trick it can still hide a field from you that the agent sees, and Relay
+leaves out some fields you can see, such as one under a cover it cannot tell
+apart from decoration; the agent tells you how many it left out, so you can
+fill those yourself. Like the rest of the chat, this goes to the model
 provider. It fills those it has values for: text fields, text areas, lists,
 check boxes, radio buttons and dates. Each filled field gets a blue outline,
 kept until the page reloads, and the page scrolls to the first one. Relay
 itself never presses a button, presses Enter or submits the form: check the
 outlined fields, then press Submit yourself. A page can still act on a change
 by itself, for example a list that sends the form as soon as an option is
-picked; when Relay sees the page submit, the agent tells you. If the page
-changed since the agent read it, the fill is refused and the agent reads it
-again. Passwords, file uploads, and disabled or read-only fields are left to
-you, and so are fields in a frame from another site, as many card payment
-boxes are. As with typing, the website's own scripts see a filled value before
-you submit.
+picked; when Relay sees the page submit during the fill, the agent tells you,
+but a submit the page makes later is not seen. If the page changed since the
+agent read it, the fill is refused and the agent reads it again. Passwords,
+file uploads, and disabled or read-only fields are left to you, and so are
+fields in a frame from another site, as many card payment boxes are. As with
+typing, the website's own scripts see a filled value before you submit.
 
 ## Highlights
 
@@ -232,19 +236,21 @@ hides it and the 24-hour Trash cleanup deletes it with the conversation.
 
 ## Shared folders
 
-**Workspace menu → Shared folders** lists the folders on the computer that
-runs Relay (in WSL) that the agent may read and search. Type a folder's full
-path, such as `/home/you/notes` or `/mnt/c/Users/you/Documents`, and press
-**Add**. The bin button beside a folder, then **Remove**, stops sharing it.
-The agent reads plain text files (such as .txt, .md, .csv, .json, .yaml, .log
-and source code) and the text of PDFs; other files show by name only. It
-cannot change, move or delete anything. Hidden files and folders (names
-starting with a dot, such as `.ssh` or `.env`) and Relay's own records are
-always left out; everything else in a shared folder, such as a Windows
-profile's AppData, is shared with it. Text the agent reads is sent to your
-model provider. Normal chat can use shared folders; a bot can only when
-**Files** is one of its apps. A web page or file the agent reads could try to
-steer it into reading shared files and sending them out through the Browser.
+**Workspace menu → Shared folders** lists the folders on the computer that runs
+Relay (in WSL) that the agent may read and search. Type a folder's full path,
+such as `/home/you/notes` or `/mnt/c/Users/you/Documents`, and press **Add**.
+The bin button beside a folder, then **Remove**, stops sharing it. The agent
+reads plain text files (such as .txt, .md, .csv, .json, .yaml, .log and source
+code) and the text of PDFs, up to 5 million characters each; other files show
+by name only. It cannot change, move or delete anything. Hidden files and
+folders (names starting with a dot, such as `.ssh` or `.env`) inside a shared
+folder and Relay's own records are left out; a hidden folder you add itself,
+such as `~/.config`, is shared like any other folder, and everything else in a
+shared folder is shared too, such as a Windows profile's AppData. Text the
+agent reads is sent to your model provider. Normal chat can use shared folders;
+a bot can only when **Files** is one of its apps. A web page or file the agent
+reads could try to steer it into reading shared files and sending them out
+through the Browser.
 
 ## Stored data
 

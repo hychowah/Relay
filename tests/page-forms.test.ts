@@ -92,6 +92,7 @@ test("a form read lists only fields a person can see, with no typed text", async
   const byName = Object.fromEntries(read.fields.map((field: any) => [field.name, field]));
   assert.deepEqual(Object.keys(byName), ["name", "email", "nickname", "about", "country", "plan", "terms", "news", "birthday",
     "password", "scan", "member", "coupon"], "hidden, see-through, off-page, tiny, covered and clipped fields are not listed");
+  assert.equal(read.notShown, 3, "fields that draw in the window but fail the hit test (dot, covered, clipped) are counted");
   assert.deepEqual(byName.name, { id: "f1", type: "text", form: "form1", label: "Full name", name: "name", placeholder: "Jane Doe",
     required: false, empty: true }, "a label leaves out text that does not draw");
   assert.equal(byName.about.empty, false);
@@ -193,7 +194,7 @@ test("a fill sets fields as typing would, keeps outlines and does not submit", a
   assert.equal(await page.evaluate(() => (document.querySelector("[name=terms]") as HTMLInputElement).checked), false);
 });
 
-test("a fill after the page changed is refused before any value goes in", async (t) => {
+test("a fill after the page changed is refused and changes no field", async (t) => {
   const page = await open(t);
   const read = await run(page, "read");
   const ids = idsOf(read);
@@ -210,6 +211,7 @@ test("a fill after the page changed is refused before any value goes in", async 
   const changed = await run(page, "fill", { token: read.token, fields: [{ id: ids.name, value: "Ada" }, { id: ids.email, value: "a@b.c" }] });
   assert.deepEqual(changed.results.map((result: any) => result.reason), [
     "This field changed since browser.form; read the form again.", "The field is not shown on the page."]);
+  assert.equal(await inputs(), 0, "no field took a value");
 
   // Another address in the same document, then a new document at the first address.
   await page.evaluate(() => history.pushState(null, "", "/signup/step-2"));
@@ -218,8 +220,13 @@ test("a fill after the page changed is refused before any value goes in", async 
   await page.evaluate(() => history.back());
   await page.waitForURL("https://forms.test/signup");
   await page.reload();
+  await page.evaluate(() => {
+    const w = window as any;
+    w.inputs = 0;
+    document.addEventListener("input", () => w.inputs++, true);
+  });
   assert.match((await run(page, "fill", { token: read.token, fields: [{ id: ids.nickname, value: "Ada" }] })).error, /read the form again/);
-  assert.equal(await inputs(), undefined, "the reloaded page saw no input");
+  assert.equal(await inputs(), 0, "the reloaded page saw no input");
   assert.equal(await page.evaluate(() => (document.querySelector("[name=nickname]") as HTMLInputElement).value), "");
 });
 
@@ -232,4 +239,64 @@ test("a fill reports a submit that the page's own change handler starts", async 
   const filled = await run(page, "fill", { token: read.token, fields: [{ id: read.fields[0].id, value: "Oldest" }] });
   assert.deepEqual(filled, { results: [{ id: "f1", status: "filled" }], filled: 1, pageSubmitted: true });
   await sent;
+});
+
+// Fields a person sees once a box scrolls, the page scrolls past a fixed
+// banner, or inside web components, and radios shown only as colour swatches.
+const scrolled = `<div style="position:fixed;top:0;left:0;right:0;height:100px;background:#eee;z-index:1">Banner</div>
+<div style="height:400px"></div><label>Under the banner <input name="under"></label>
+<div id="slotted"><label>In a shadow box <input name="slotted"></label></div>
+<div id="card"></div>
+<fieldset><legend>Colour</legend>
+  <input type="radio" name="colour" value="c1" id="c1" style="position:absolute;opacity:0">
+  <label for="c1" title="Red" style="display:inline-block;width:24px;height:24px;background:red"></label>
+  <input type="radio" name="colour" value="c2" id="c2" style="position:absolute;opacity:0">
+  <label for="c2" title="Blue" style="display:inline-block;width:24px;height:24px;background:blue"></label>
+</fieldset>
+<div id="modal" style="position:fixed;top:120px;left:420px;width:300px;height:120px;overflow:auto;background:white;z-index:2">
+  <div style="height:200px">Terms</div><label>Initials <input name="initials"></label><div style="height:400px"></div>
+</div>
+<div style="height:2000px"></div>`;
+
+test("a read scrolls boxes, frames and shadow roots to test a field, puts them all back, and counts what it left out", async (t) => {
+  const page = await open(t, scrolled);
+  await page.evaluate(() => {
+    // A slotted field shown inside a scroll box of the host's shadow root.
+    const box = document.getElementById("slotted")!.attachShadow({ mode: "open" });
+    box.innerHTML = `<div id="box" style="height:100px;overflow:auto"><div style="height:300px"></div><slot></slot></div>`;
+    // A web component's own fields, one of them under a cover inside the component.
+    document.getElementById("card")!.attachShadow({ mode: "open" }).innerHTML = `<label>Name on card <input name="cardName"></label>
+      <span style="position:relative;display:inline-block"><input name="coveredInCard"><span style="position:absolute;inset:0;background:white"></span></span>`;
+  });
+  const scrolls = () => page.evaluate(() => [scrollY, document.getElementById("modal")!.scrollTop,
+    document.getElementById("slotted")!.shadowRoot!.getElementById("box")!.scrollTop]);
+  // The first field is now under the banner.
+  await page.evaluate(() => scrollTo(0, 360));
+  assert.deepEqual(await scrolls(), [360, 0, 0]);
+  const read = await run(page, "read");
+  const byName = Object.fromEntries(read.fields.map((field: any) => [field.name, field]));
+  assert.deepEqual(Object.keys(byName), ["under", "slotted", "colour", "initials", "cardName"]);
+  assert.deepEqual(byName.colour.options, [{ value: "c1", label: "Red" }, { value: "c2", label: "Blue" }]);
+  assert.equal(byName.cardName.label, "Name on card");
+  assert.equal(read.notShown, 1, "the covered field in the component");
+  assert.deepEqual(await scrolls(), [360, 0, 0], "every scroll is put back, inside the shadow root too");
+
+  const filled = await run(page, "fill", { token: read.token, fields: [{ id: byName.cardName.id, value: "Ada" }, { id: byName.colour.id, value: "Blue" }] });
+  assert.equal(filled.filled, 2);
+  assert.deepEqual(await page.evaluate(() => {
+    const input = document.getElementById("card")!.shadowRoot!.querySelector("input")!;
+    return [input.value, getComputedStyle(input).outlineStyle, (document.getElementById("c2") as HTMLInputElement).checked];
+  }), ["Ada", "solid", true], "a field inside a component is filled and outlined");
+
+  // A component's own form that submits when a field changes.
+  await page.evaluate(() => {
+    const root = document.getElementById("card")!.shadowRoot!;
+    root.innerHTML = `<form><label>Coupon <input name="coupon"></label></form>`;
+    const form = root.querySelector("form")!;
+    form.addEventListener("submit", (event) => event.preventDefault());
+    form.querySelector("input")!.addEventListener("change", () => form.requestSubmit());
+  });
+  const again = await run(page, "read");
+  const coupon = again.fields.find((field: any) => field.name === "coupon").id;
+  assert.equal((await run(page, "fill", { token: again.token, fields: [{ id: coupon, value: "SAVE" }] })).pageSubmitted, true);
 });

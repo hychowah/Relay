@@ -117,4 +117,52 @@ void main() {
       'error': 'The requested browser tab is closed.',
     });
   });
+
+  test(
+    'a fill sends values only to a page that still holds the read\'s token',
+    () async {
+      final calls = <String>[];
+      var pageToken = 'read-1';
+      Future<Json> forms(String action, [Json? request]) async {
+        calls.add(action);
+        return action == 'token'
+            ? {'token': pageToken}
+            : {'filled': (request!['fields'] as List).length};
+      }
+
+      final fields = [
+        {'id': 'f1', 'value': 'ada@example.com'},
+      ];
+      expect(await fillReadForm(forms, 'read-1', fields), {'filled': 1});
+      expect(calls, ['token', 'fill']);
+
+      // A page reached since the read, as by Back, holds no token or another.
+      calls.clear();
+      pageToken = 'read-2';
+      await expectLater(
+        fillReadForm(forms, 'read-1', fields),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'The page changed since browser.form; read the form again.',
+          ),
+        ),
+      );
+      expect(calls, ['token'], reason: 'the values never reach the page');
+
+      // The fill script's own refusal reaches the agent as an error.
+      Future<Json> refusing(String action, [Json? request]) async =>
+          action == 'token'
+          ? {'token': 'read-1'}
+          : {
+              'error':
+                  'The page changed since browser.form; read the form again.',
+            };
+      await expectLater(
+        fillReadForm(refusing, 'read-1', fields),
+        throwsA(isA<StateError>()),
+      );
+    },
+  );
 }

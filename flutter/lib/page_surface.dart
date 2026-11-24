@@ -85,6 +85,28 @@ abstract class PageSurface {
 
 const pdfZoomActions = ['zoomOut', 'zoomIn', 'zoomFit'];
 
+/// Runs assets/page_forms.js in a page with an action and its request.
+typedef PageForms = Future<Json> Function(String action, [Json? request]);
+
+/// Fills [fields] through [forms] only once the page shows it still holds the
+/// read's [token]: a page reached since then, as by Back, never gets the
+/// values. The fill script checks again, but by then the values are in the
+/// page's script.
+Future<Json> fillReadForm(
+  PageForms forms,
+  String token,
+  List<Object?> fields,
+) async {
+  if ((await forms('token'))['token'] != token) {
+    throw StateError(
+      'The page changed since browser.form; read the form again.',
+    );
+  }
+  final result = await forms('fill', {'token': token, 'fields': fields});
+  if (result['error'] case final String error) throw StateError(error);
+  return result;
+}
+
 mixin BrowserSurface {
   Future<Json> read();
 

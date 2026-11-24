@@ -1188,20 +1188,9 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   @override
   Future<Json> readForm() => _forms('read');
 
-  // The values go into the page only once it shows it still holds the read's
-  // token: a page reached since then, as by Back, never gets them. The fill
-  // script checks again, but by then the values are in the page's script.
   @override
-  Future<Json> fillForm(String token, List<Object?> fields) async {
-    if ((await _forms('token'))['token'] != token) {
-      throw StateError(
-        'The page changed since browser.form; read the form again.',
-      );
-    }
-    final result = await _forms('fill', {'token': token, 'fields': fields});
-    if (result['error'] case final String error) throw StateError(error);
-    return result;
-  }
+  Future<Json> fillForm(String token, List<Object?> fields) =>
+      fillReadForm(_forms, token, fields);
 
   Future<Json> _forms(String action, [Json? request]) async {
     if (!Platform.isMacOS && !Platform.isWindows) {

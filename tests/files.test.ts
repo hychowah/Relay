@@ -1,6 +1,6 @@
 import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createWorkspace, type AgentHarness } from "../server/app.ts";
@@ -8,15 +8,15 @@ import { createFiles } from "../server/files.ts";
 import { pdfText } from "../server/pdf-text.ts";
 import { Store } from "../server/store.ts";
 
-/** A PDF with one line of Helvetica text per page. */
-function pdf(pages: string[]) {
+/** A PDF with one line of Helvetica text per page, at [size] points. */
+function pdf(pages: string[], size = 12) {
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     `<< /Type /Pages /Kids [${pages.map((_, i) => `${4 + i * 2} 0 R`).join(" ")}] /Count ${pages.length} >>`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
   ];
   pages.forEach((line, i) => {
-    const stream = `BT /F1 12 Tf 72 720 Td (${line}) Tj ET`;
+    const stream = `BT /F1 ${size} Tf 1 720 Td (${line}) Tj ET`;
     objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5 + i * 2} 0 R >>`,
       `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
   });
@@ -113,11 +113,20 @@ test("shared folders are added as existing absolute folders, kept on disk, remov
   assert.deepEqual(await (await f.request("GET", "/api/settings/folders")).json(), { folders: [] });
 });
 
-test("a damaged folders file shares nothing instead of stopping the service", async (t) => {
+test("a damaged folders file shares nothing, is kept aside, and a saved list keeps each folder once", async (t) => {
   const f = fixture(t);
   writeFileSync(join(f.dataDir, "folders.json"), "{");
   assert.deepEqual((await createFiles(f.dataDir, {}).app.integration.call!("files.list", {}, {})).data,
     { folders: [], note: "No folders are shared. The user can add them in Workspace menu → Shared folders." });
+  const aside = readdirSync(f.dataDir).filter((name) => name.startsWith("folders.json.damaged-"));
+  assert.equal(aside.length, 1);
+  assert.equal(readFileSync(join(f.dataDir, aside[0]), "utf8"), "{", "the user's list is not lost");
+  assert.equal(existsSync(join(f.dataDir, "folders.json")), false);
+
+  // A list saved before folders were kept once.
+  symlinkSync(f.shared, join(f.base, "shared-link"));
+  writeFileSync(join(f.dataDir, "folders.json"), JSON.stringify([f.shared, join(f.base, "shared-link"), f.shared]));
+  assert.deepEqual((await createFiles(f.dataDir, {}).app.integration.call!("files.list", {}, {})).data, { folders: [f.shared] });
 });
 
 test("listing, search and reading stay inside shared folders and skip hidden names and Relay's records", async (t) => {
@@ -208,18 +217,37 @@ test("a bot without the Files app cannot call it; normal chat can", async (t) =>
 test("PDF text is parsed off the service's thread and ends at the deadline or on Stop", async (t) => {
   const f = fixture(t);
   const file = join(f.base, "large.pdf");
-  writeFileSync(file, pdf(Array.from({ length: 3000 }, (_, i) => `Line ${i}`)));
-  let longest = 0, last = Date.now(), finished = false;
-  const tick = setInterval(() => { longest = Math.max(longest, Date.now() - last); last = Date.now(); }, 5);
-  const reading = pdfText(file, Date.now() + 200).finally(() => { finished = true; });
+  writeFileSync(file, pdf(Array.from({ length: 6000 }, (_, i) => `Line ${i}`)));
+  // A first read starts the worker code once, so the timed read below has time to parse pages.
+  await pdfText(join(f.shared, "paper.pdf"), Date.now() + 30_000);
+  // pdf.js on this thread would yield only to promises and starve its timers
+  // for the whole read; in the worker they keep running, however busy the machine.
+  let ticks = 0, finished = false;
+  const tick = setInterval(() => ticks++, 10);
+  const reading = pdfText(file, Date.now() + 1500).finally(() => { finished = true; });
   assert.equal((await f.request("GET", "/api/settings/folders")).status, 200);
   assert.equal(finished, false, "the service answered while the PDF was parsed");
   const partial = await reading;
   clearInterval(tick);
   assert.equal(partial.complete, false);
-  assert.ok(partial.read < 3000);
-  assert.ok(longest < 250, `the service stalled for ${longest} ms`);
+  assert.ok(partial.read > 0 && partial.read < 6000, `${partial.read} pages were read`);
+  assert.ok(ticks >= 20, `the service's timers ran only ${ticks} times in 1.5 seconds`);
   const stop = new AbortController();
   setTimeout(() => stop.abort(), 50);
   await assert.rejects(pdfText(file, Date.now() + 30_000, stop.signal), /cancelled/);
+});
+
+test("a PDF's text stops at 5 million characters, for reading and for search", async (t) => {
+  const f = fixture(t);
+  await f.request("POST", "/api/settings/folders", { path: f.shared });
+  // Six pages of a million characters each, in type small enough to stay on the page.
+  writeFileSync(join(f.shared, "huge.pdf"), pdf(Array.from({ length: 6 }, () => "a".repeat(1_000_000)), 0.001));
+  const document = await pdfText(join(f.shared, "huge.pdf"), Date.now() + 30_000);
+  assert.deepEqual([document.pages, document.read, document.complete, document.capped], [6, 5, false, true]);
+  assert.ok(document.text.length < 5_000_100, `${document.text.length} characters were kept`);
+  const read = await f.call("files.read", { path: join(f.shared, "huge.pdf") });
+  assert.equal(read.note, "Only the first 5 million characters of this PDF's text were read, through page 5 of 6.");
+  const found = await f.call("files.search", { query: "aaaa" });
+  assert.deepEqual(found.matches.map((match: { path: string }) => match.path), [join(f.shared, "huge.pdf")]);
+  assert.equal(found.note, "Only the first 5 million characters of text were searched in 1 large PDF.");
 });

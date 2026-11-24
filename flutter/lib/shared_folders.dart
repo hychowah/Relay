@@ -66,9 +66,9 @@ class _SharedFoldersDialogState extends State<SharedFoldersDialog> {
         const Text(
           'The agent can read and search these folders on the computer '
           'that runs Relay, but not change them. It reads plain text files '
-          'and PDFs; '
-          'other files show by name only. Hidden files are left out. Text '
-          'it reads is sent to your model provider. A bot uses them only '
+          'and PDFs; other files show by name only. Hidden files inside a '
+          'folder are left out. Text it reads is sent to your model '
+          'provider. A bot uses them only '
           'when Files is one of its apps.',
         ),
         Row(
