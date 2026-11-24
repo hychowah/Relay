@@ -28,7 +28,7 @@ dependencies:
   package_info_plus: ^10.2.2
   markdown: ^7.3.1
 
-# Adds a named website data store for Browser VPN tabs and a macOS file chooser; see README.md.
+# Adds a named website data store for Browser VPN tabs and a macOS file chooser; see docs/development.md.
 dependency_overrides:
   webview_flutter_wkwebview:
     path: packages/webview_flutter_wkwebview

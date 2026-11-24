@@ -20,47 +20,7 @@ v1 bridge. Preserve device/window/view-token/generation checks and manual
 interruption. Browser connects to Relay via an outbound WebSocket.
 The client registers its app-control channel on hosted app views. Tabs retain views until closed.
 
-The implemented workflows include the following.
-
-- Conversation creation, search, bot filtering, switching, Trash and restore.
-- Provider/model discovery and settings, with conversation thinking effort.
-- Bots and app scopes, shared/bot memories, source conversations and forwarding.
-- Markdown, citations, saved revisions/highlights, activity, checkpoints and app search.
-- Browser back/forward/reload, context inclusion, desktop width persistence,
-  phone progress/Stop controls and chat-only mode. On desktop the agent can
-  read a YouTube video's transcript from a Browser tab (`browser.transcript`),
-  and a collapsible pane above the conversation shows it; selected transcript
-  text becomes the question's selection. The pane highlights and scrolls to
-  the paragraph being played until the user scrolls or selects there.
-- Background update downloads with progress, verified caches and manual
-  install/restart. Flutter has its own release channel.
-- Every start restores the previous tabs and views, the draft, the chat panel
-  state and the Mac window frame. Tabs are saved as they change.
-- Split view (desktop only): dropping a tab on a page opens a split tab; the
-  nearest edge places it, and panes nest both ways. Clicking an app's tab
-  shows it full screen; closing the split tab keeps its apps open. Split tabs
-  and divider positions are restored with the tabs. The clicked pane is the
-  selected tab for context and agent navigation. The Flutter README has the
-  details.
-- Video fullscreen (desktop only): a page's fullscreen fills its split pane,
-  or the whole screen when its tab shows alone (see the Flutter README).
-- PDF viewer (desktop only): a PDF in a Browser tab gets zoom, and its
-  selection and text reach the agent (see the Flutter README).
-- Highlights (desktop only): text marked on web pages and PDFs in Browser
-  tabs in five colours, kept on the server by address and quoted text.
-- Stored data: a Workspace menu screen lists what the server keeps (browsing
-  history, highlights), with sizes, clear and auto-clean by age.
-- Night mode: Workspace menu → Appearance offers System, Light and Dark,
-  saved per device. Relay's own screens follow it; app and website pages keep
-  their own look, and the Mac title bar follows macOS.
-- Newest tab first: a Workspace menu setting, off by default and saved per
-  device. When on, a tab the user clicks or opens, or the agent opens, slides
-  to the left end of the strip. Restoring, closing and split changes keep the
-  order; reduced motion skips the slide.
-- Development recording: actions, server exchanges, errors, tabs and a
-  whole-window screenshot are saved on the service as a bug, feature or update
-  request and read in the Reports viewer, filtered by category, where each is
-  marked solved or deleted (see the root README).
+The [Flutter README](../../../flutter/README.md) describes what the client does.
 
 `server/runtime.ts` shares the existing harness/provider lifecycle between the
 web and Flutter deployments. Provider settings are imported once into Flutter's
@@ -83,7 +43,7 @@ app. The backend entry is `tools/flutter-experiment.ts`; it listens on 3250.
 Research is registered at its own server with
 `trustedNative: true` for PDF embedding, and its launcher allows the Flutter
 origin. SDK locations, the Mac build setup, services and addresses are in the
-local machine notes named in AGENTS.md. The Flutter README holds build, test
+local machine notes named in AGENTS.md. The [development guide](../../development.md) holds build, test
 and publication commands.
 
 ## Evidence and remaining checks
@@ -113,7 +73,7 @@ In an isolated Mac install, two worktrees published separate 0.0.6 previews;
 installing the first and returning to equal-version Stable preserved a synthetic
 draft. Source tests also cover returning to a lower Stable version, keeping a
 verified download during a feed outage and checking backend activity before
-restart. For setup and publishing, see [Mac updates](../../../flutter/README.md#mac-updates).
+restart. For setup and publishing, see [Publish the Flutter app](../../development.md#publish-the-flutter-app).
 
 Public-page guards cover top-level navigation. webview_flutter 4.14.1 lacks
 subresource interception, a download API and separate data stores. JavaScript
@@ -145,7 +105,7 @@ Updates download only changed files, about 7.3 MB instead of the 20.4 MB ZIP.
 On 2026-11-19 the Mac updated one `small-updates` build to the next through its
 file list: it passed the signature check, restarted and left no downloads.
 
-On 2026-11-19 the [UI smoothness suite](../../../flutter/README.md#measure-performance)
+On 2026-11-19 the [UI smoothness suite](../../development.md#measure-the-clients-performance)
 held 57–60 fps on the MacBook Neo (60 Hz), with waits up to 117 ms on tab
 switches; WebKit presentation is unmeasured. After the transcript pane fix, its
 median frame build fell from 3.15 to 0.88 ms (one run before and one after).
@@ -255,7 +215,7 @@ real WKWebViews.
    selection), and open **Stored data**. Unverified: a password-protected
    PDF. Why 0.0.16 lost the selection is unknown; embedded PDFs still use
    that path. Rerun `highlight_clicks_test.dart` (not run since its last
-   edits); in Stable 0.0.18, make the README's by-hand highlight checks and
+   edits); in Stable 0.0.18, make the development guide's by-hand highlight checks and
    check drag smoothness, then mark the 2026-11-23 report solved.
 21. Check **Updates** build times on Mac.
 

@@ -47,7 +47,7 @@ export async function withMacCopy<T>(root: string, bundleId: string,
   use: (ssh: string, remote: string) => Promise<T>) {
   let ssh: string;
   try { ssh = execFileSync("git", ["config", "--get", "relay.macSSH"], { cwd: root, encoding: "utf8" }).trim(); }
-  catch { throw new Error("Set relay.macSSH in local git config (see flutter/README.md)."); }
+  catch { throw new Error("Set relay.macSSH in local git config (see docs/development.md)."); }
   const remote = (await mac(ssh, "mktemp -d /tmp/relay-mac-run.XXXXXXXX")).trim();
   if (!/^\/tmp\/relay-mac-run\.[A-Za-z0-9]+$/.test(remote)) throw new Error(`Unexpected Mac folder: ${remote}`);
   let cleaning: Promise<unknown> | undefined;

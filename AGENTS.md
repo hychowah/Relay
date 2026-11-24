@@ -17,6 +17,9 @@ status, assumptions, and the next step. Update its Next section at handoff.
 - Keep documentation current and concise. Add comments only when they explain
   a decision that future development needs; test important behavior without
   duplicating implementation details or covering speculative cases.
+- READMEs show outsiders what Relay does. Put building, testing, checks,
+  measuring and publishing in the [development guide](docs/development.md),
+  and plans in `docs/plans/`, never in a README.
 - Keep application-specific behavior in each app's own project, never in this
   repository. Relay holds only the generic protocol, its Browser and the Room
   example. Changes to another repository must follow that repository's
