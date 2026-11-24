@@ -236,26 +236,30 @@ registered by address. See [Setup](../README.md#setup) for registration.
 The Flutter backend registers `files`, beside Browser, for read-only access to
 the folders listed in Settings (`GET`, `POST {path}` and
 `DELETE ?path=` on `/api/settings/folders`, saved as `folders.json` in
-`RELAY_DATA_DIR`). Like App servers, these routes answer only requests whose
-Host is one of Relay's own addresses, so a page rebound to Relay's address
-cannot use them. Changes that carry another site's Origin are refused too. A
-folder must be an existing directory given as an absolute WSL path. Its
-operations are `files.list`, `files.search` (names, plus words
-in the first 1 MB of each text file and in the text of each PDF, stopping at
-50 matches or after 10 seconds, with a note when it stops early) and
-`files.read` (pages with `nextOffset`; a PDF gets 30 seconds to extract).
-Readable files are plain text by extension and PDFs up to 20 MB (text through
-`unpdf`); others are listed by name only. It has no view, so the app picker
-leaves it out (`hasView: false` in `/api/config`); bots reach it only through
-their allowed apps.
+`RELAY_DATA_DIR`; a damaged file shares nothing and is logged). A folder
+reached by several paths is kept once. Like App servers, these routes answer
+only requests whose Host is one of Relay's own addresses, so a page rebound to
+Relay's address cannot use them. Changes that carry another site's Origin are
+refused too. A folder must be an existing directory given as an absolute WSL
+path. Its operations are `files.list`, `files.search` (names, plus words in the
+first 1 MB of each text file and in the text of each PDF, stopping at 50
+matches or after 10 seconds, with a note when it stops early) and `files.read`
+(pages with `nextOffset`; a PDF gets 30 seconds). Readable files are plain text
+by extension and PDFs up to 20 MB. PDF text comes from `unpdf` in a worker
+thread, one per search or read, ended at the deadline or on Stop, so a large
+PDF does not stall the service. Other files are listed by name only. It has no
+view, so the app picker leaves it out (`hasView: false` in `/api/config`). A
+chat with no bot can use every registered app, Files included; a bot can use
+Files only when it is among the bot's allowed apps.
 
 The service enforces the rules, not the model instructions: a path counts only
 when its real location, after symlinks, is inside a shared folder; names that
-start with a dot below a shared folder are refused; and `RELAY_DATA_DIR`,
-`RELAY_PROVIDER_DIR`, any `*_API_KEY_FILE` and every folder holding a
-`relay.sqlite` (another Relay's records) stay out even inside a shared folder.
-Nothing is written or run. Shell and code tools still need the separate
-executor boundary.
+start with a dot below a shared folder are refused; and `RELAY_DATA_DIR`
+(which holds the provider settings), `RELAY_PROVIDER_DIR`, any
+`*_API_KEY_FILE` and every folder holding a `relay.sqlite` (another Relay's
+records) stay out even inside a shared folder, and are not listed. A refused
+path gets the same answer as a missing one. Nothing is written or run. Shell
+and code tools still need the separate executor boundary.
 
 ## Standard fit
 

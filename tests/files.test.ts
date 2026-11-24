@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Hono } from "hono";
 import { createWorkspace, type AgentHarness } from "../server/app.ts";
 import { createFiles } from "../server/files.ts";
+import { pdfText } from "../server/pdf-text.ts";
 import { Store } from "../server/store.ts";
 
 /** A PDF with one line of Helvetica text per page. */
@@ -46,6 +46,9 @@ function fixture(t: TestContext) {
   write(join(shared, "data", "report.csv"), "item,cost\nlamp,40\n");
   write(join(shared, "sub", "deep", "plan.txt"), "Plan for the move.\n");
   write(join(shared, "paper.pdf"), pdf(["Photosynthesis in leaves", "Second page about chlorophyll"]));
+  // One search reads every PDF in one worker, past a damaged one.
+  write(join(shared, "a-broken.pdf"), "%PDF-1.4 junk");
+  write(join(shared, "memo.pdf"), pdf(["Walrus notes on leaves"]));
   write(join(shared, "image.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0]));
   write(join(shared, ".env"), "TOKEN=zebra\n");
   write(join(shared, ".git", "config"), "zebra\n");
@@ -58,10 +61,23 @@ function fixture(t: TestContext) {
   const dataDir = join(shared, "relay-data");
   write(join(dataDir, "provider.json"), "{\"zebra\":true}\n");
   const files = createFiles(dataDir, {});
-  const server = new Hono();
-  files.addRoutes(server, ["relay.test:3250"]);
+  // The real workspace, whose own checks (such as JSON-only POST) run first.
+  const store = new Store(":memory:");
+  const notes = { id: "notes", name: "Notes", description: "Synthetic app", integration: {} };
+  const workspace = createWorkspace(store, () => [files.app, notes], { mode: "fixture", model: "fixture", configured: true });
+  let sessions = 0;
+  const harness: AgentHarness = {
+    async createSession() { return `session-${++sessions}`; },
+    async deleteSession() {},
+    async prompt() {},
+    async inspect() { return { messages: [], status: "running" }; },
+    async interrupt() {},
+  };
+  workspace.setHarness(harness);
+  t.after(async () => { await workspace.close(); store.close(); });
+  files.addRoutes(workspace.app, ["relay.test:3250"]);
   const request = (method: string, path: string, body?: unknown, host = "relay.test:3250", headers: Record<string, string> = {}) =>
-    server.request(`http://${host}${path}`, {
+    workspace.app.request(`http://${host}${path}`, {
       method, headers: { "Content-Type": "application/json", Host: host, ...headers },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
@@ -69,7 +85,7 @@ function fixture(t: TestContext) {
     (await files.app.integration.call!(operation, args, {})).data as Record<string, any>;
   const failure = (operation: string, args: Record<string, unknown>) =>
     call(operation, args).then(() => assert.fail("expected a refusal"), (error: Error) => error.message);
-  return { base, shared, dataDir, files, request, call, failure };
+  return { base, shared, dataDir, files, workspace, request, call, failure };
 }
 
 test("shared folders are added as existing absolute folders, kept on disk, removed, and changed only through Relay's own address", async (t) => {
@@ -77,6 +93,9 @@ test("shared folders are added as existing absolute folders, kept on disk, remov
   for (const path of ["shared", join(f.base, "missing"), join(f.shared, "notes.md"), f.dataDir, join(f.shared, "old-relay")])
     assert.equal((await f.request("POST", "/api/settings/folders", { path })).status, 400, path);
   assert.equal((await f.request("POST", "/api/settings/folders", { path: f.shared + "/" })).status, 200);
+  // The same folder by another path is kept once.
+  symlinkSync(f.shared, join(f.base, "shared-link"));
+  assert.equal((await f.request("POST", "/api/settings/folders", { path: join(f.base, "shared-link") })).status, 200);
   assert.deepEqual(await (await f.request("GET", "/api/settings/folders")).json(), { folders: [f.shared] });
   assert.deepEqual(await createFiles(f.dataDir, {}).app.integration.call!("files.list", {}, {}), { data: { folders: [f.shared] } });
   const removed = await f.request("DELETE", `/api/settings/folders?path=${encodeURIComponent(f.shared)}`);
@@ -85,11 +104,20 @@ test("shared folders are added as existing absolute folders, kept on disk, remov
   for (const [method, path, body] of [["GET", "/api/settings/folders"], ["POST", "/api/settings/folders", { path: f.shared }],
     ["DELETE", `/api/settings/folders?path=${encodeURIComponent(f.shared)}`]] as const)
     assert.equal((await f.request(method, path, body, "evil.test:3250")).status, 403, method);
-  // Another site's plain-text form post reaches Relay's real address with no preflight.
-  const crossSite = { Origin: "https://evil.example", "Content-Type": "text/plain" };
-  assert.equal((await f.request("POST", "/api/settings/folders", { path: f.shared }, undefined, crossSite)).status, 403);
-  assert.equal((await f.request("DELETE", "/api/settings/folders?path=x", undefined, undefined, { Origin: "https://evil.example" })).status, 403);
+  // Another site's page reaches Relay's real address with its own Origin; a
+  // plain-text form post needs no preflight.
+  const evil = { Origin: "https://evil.example" };
+  assert.equal((await f.request("POST", "/api/settings/folders", { path: f.shared }, undefined, evil)).status, 403);
+  assert.equal((await f.request("POST", "/api/settings/folders", { path: f.shared }, undefined, { ...evil, "Content-Type": "text/plain" })).status, 415);
+  assert.equal((await f.request("DELETE", "/api/settings/folders?path=x", undefined, undefined, evil)).status, 403);
   assert.deepEqual(await (await f.request("GET", "/api/settings/folders")).json(), { folders: [] });
+});
+
+test("a damaged folders file shares nothing instead of stopping the service", async (t) => {
+  const f = fixture(t);
+  writeFileSync(join(f.dataDir, "folders.json"), "{");
+  assert.deepEqual((await createFiles(f.dataDir, {}).app.integration.call!("files.list", {}, {})).data,
+    { folders: [], note: "No folders are shared. The user can add them in Workspace menu → Shared folders." });
 });
 
 test("listing, search and reading stay inside shared folders and skip hidden names and Relay's records", async (t) => {
@@ -98,10 +126,9 @@ test("listing, search and reading stay inside shared folders and skip hidden nam
 
   const listed = await f.call("files.list", { path: f.shared });
   assert.deepEqual(listed.entries.map((entry: { name: string }) => entry.name),
-    ["data", "image.png", "linked-data", "long.txt", "notes.md", "old-relay", "paper.pdf", "sub"]);
+    ["a-broken.pdf", "data", "image.png", "linked-data", "long.txt", "memo.pdf", "notes.md", "paper.pdf", "sub"]);
   assert.deepEqual(listed.entries.find((entry: { name: string }) => entry.name === "image.png"),
     { name: "image.png", path: join(f.shared, "image.png"), kind: "file", size: 8, readable: false });
-  assert.match(await f.failure("files.list", { path: join(f.shared, "old-relay") }), /Relay's own records/);
 
   assert.deepEqual((await f.call("files.search", { query: "PLAN" })).matches, [{ path: join(f.shared, "sub", "deep", "plan.txt"), match: "name" }]);
   const budget = (await f.call("files.search", { query: "budget quarterly" })).matches;
@@ -110,6 +137,11 @@ test("listing, search and reading stay inside shared folders and skip hidden nam
   assert.match(budget[0].snippet, /quarterly budget review/);
   assert.deepEqual((await f.call("files.search", { query: "chlorophyll" })).matches.map((match: { path: string }) => match.path),
     [join(f.shared, "paper.pdf")]);
+  assert.deepEqual((await f.call("files.search", { query: "leaves" })).matches.map((match: { path: string; snippet: string }) =>
+    [match.path, match.snippet]), [[join(f.shared, "memo.pdf"), "Walrus notes on leaves"], [join(f.shared, "paper.pdf"),
+    "Photosynthesis in leaves Second page about chlorophyll"]]);
+  // The [Page N] lines that files.read shows are not searched.
+  assert.deepEqual((await f.call("files.search", { query: "page 1" })).matches, []);
   assert.deepEqual((await f.call("files.search", { query: "zebra" })).matches, []);
 
   assert.match((await f.call("files.read", { path: join(f.shared, "notes.md") })).text, /quarterly budget/);
@@ -118,13 +150,15 @@ test("listing, search and reading stay inside shared folders and skip hidden nam
   assert.match(paper.text, /\[Page 1\]\nPhotosynthesis in leaves[\s\S]*\[Page 2\]\nSecond page about chlorophyll/);
   assert.equal((await f.call("files.read", { path: join(f.shared, "linked-data", "report.csv") })).text, "item,cost\nlamp,40\n");
 
-  for (const path of [join(f.shared, "..", "outside", "secret.txt"), join(f.shared, "escape", "secret.txt"), "/etc/hostname", "notes.md"])
-    assert.match(await f.failure("files.read", { path }), /not in a shared folder|absolute path/, path);
-  assert.deepEqual((await f.call("files.list", { path: f.shared })).entries.some((entry: { name: string }) => entry.name === "escape"), false);
-  for (const path of [join(f.shared, ".env"), join(f.shared, ".git", "config")])
-    assert.match(await f.failure("files.read", { path }), /Hidden/);
-  for (const path of [join(f.dataDir, "provider.json"), join(f.shared, "old-relay", "chat.txt")])
-    assert.match(await f.failure("files.read", { path }), /Relay's own records/);
+  // Outside, escaping, hidden, Relay's records and missing paths all get one
+  // answer, so a guessed path cannot be told apart from a missing one.
+  const refusals = new Set<string>();
+  for (const path of [join(f.shared, "..", "outside", "secret.txt"), join(f.shared, "escape", "secret.txt"), "/etc/hostname",
+    join(f.shared, ".env"), join(f.shared, ".git", "config"), join(f.shared, ".missing"), join(f.shared, "missing.txt"),
+    join(f.dataDir, "provider.json"), join(f.shared, "old-relay", "chat.txt"), join(f.shared, "old-relay")])
+    refusals.add(await f.failure("files.read", { path }));
+  assert.deepEqual([...refusals], ["This path does not exist in the shared folders."]);
+  assert.match(await f.failure("files.read", { path: "notes.md" }), /absolute path/);
   assert.match(await f.failure("files.read", { path: join(f.shared, "image.png") }), /listed by name only/);
 });
 
@@ -153,20 +187,8 @@ test("a search stops at 50 matches and says so", async (t) => {
 
 test("a bot without the Files app cannot call it; normal chat can", async (t) => {
   const f = fixture(t);
+  const { workspace } = f;
   await f.request("POST", "/api/settings/folders", { path: f.shared });
-  const store = new Store(":memory:");
-  const notes = { id: "notes", name: "Notes", description: "Synthetic app", integration: {} };
-  const workspace = createWorkspace(store, () => [f.files.app, notes], { mode: "fixture", model: "fixture", configured: true });
-  let sessions = 0;
-  const harness: AgentHarness = {
-    async createSession() { return `session-${++sessions}`; },
-    async deleteSession() {},
-    async prompt() {},
-    async inspect() { return { messages: [], status: "running" }; },
-    async interrupt() {},
-  };
-  workspace.setHarness(harness);
-  t.after(async () => { await workspace.close(); store.close(); });
   const post = async (path: string, body: unknown) => (await workspace.app.request(path, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   })).json();
@@ -181,4 +203,23 @@ test("a bot without the Files app cannot call it; normal chat can", async (t) =>
   }
   const config = await (await workspace.app.request("/api/config")).json();
   assert.equal(config.apps.find((app: { id: string }) => app.id === "files").hasView, false);
+});
+
+test("PDF text is parsed off the service's thread and ends at the deadline or on Stop", async (t) => {
+  const f = fixture(t);
+  const file = join(f.base, "large.pdf");
+  writeFileSync(file, pdf(Array.from({ length: 3000 }, (_, i) => `Line ${i}`)));
+  let longest = 0, last = Date.now(), finished = false;
+  const tick = setInterval(() => { longest = Math.max(longest, Date.now() - last); last = Date.now(); }, 5);
+  const reading = pdfText(file, Date.now() + 200).finally(() => { finished = true; });
+  assert.equal((await f.request("GET", "/api/settings/folders")).status, 200);
+  assert.equal(finished, false, "the service answered while the PDF was parsed");
+  const partial = await reading;
+  clearInterval(tick);
+  assert.equal(partial.complete, false);
+  assert.ok(partial.read < 3000);
+  assert.ok(longest < 250, `the service stalled for ${longest} ms`);
+  const stop = new AbortController();
+  setTimeout(() => stop.abort(), 50);
+  await assert.rejects(pdfText(file, Date.now() + 30_000, stop.signal), /cancelled/);
 });

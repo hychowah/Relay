@@ -1,11 +1,11 @@
 import { existsSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { open, readFile, readdir, realpath, stat } from "node:fs/promises";
+import { open, readdir, realpath, stat } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { getDocumentProxy } from "unpdf";
 import type { RegisteredApp } from "./app.ts";
 import { onlyRelayHosts } from "./app-servers.ts";
+import { pdfReader, pdfText } from "./pdf-text.ts";
 
 // Relay's built-in Files app: read-only access to the folders the user shares
 // in Settings. The rules live here, not in the model's instructions: a path
@@ -62,23 +62,19 @@ async function textStart(path: string, bytes: number) {
   } finally { await file.close(); }
 }
 
-/** A PDF's text with a [Page N] line before each page, stopping at the deadline. */
-async function pdfText(path: string, deadline: number) {
-  const document = await getDocumentProxy(new Uint8Array(await readFile(path)));
-  try {
-    const parts: string[] = [];
-    for (let number = 1; number <= document.numPages && Date.now() < deadline; number++) {
-      const content = await (await document.getPage(number)).getTextContent();
-      parts.push(`[Page ${number}]\n` + content.items.map((item) => "str" in item ? item.str + (item.hasEOL ? "\n" : "") : "").join(""));
-    }
-    return { text: parts.join("\n\n"), pages: document.numPages, read: parts.length };
-  } finally { await document.loadingTask.destroy(); }
-}
-
 export function createFiles(dataDir: string, env: NodeJS.ProcessEnv = process.env) {
   const file = join(dataDir, "folders.json");
-  let folders: string[] = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : [];
-  // The service's records, imported provider settings and key files.
+  let folders: string[] = [];
+  try {
+    const saved: unknown = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : [];
+    if (!Array.isArray(saved) || saved.some((folder) => typeof folder !== "string")) throw new Error("not a list of paths");
+    folders = saved;
+  } catch {
+    console.warn("The shared folders file is damaged, so no folders are shared until the list is changed in Settings.");
+  }
+  // The service's records, imported provider settings and key files. Provider
+  // settings are saved in the data directory; RELAY_PROVIDER_DIR is where the
+  // Flutter backend imports them from once.
   const guarded = [dataDir, env.RELAY_PROVIDER_DIR,
     ...Object.entries(env).filter(([name]) => name.endsWith("_API_KEY_FILE")).map(([, value]) => value)]
     .filter((path): path is string => Boolean(path)).map((path) => realOrSelf(resolve(path)));
@@ -96,17 +92,15 @@ export function createFiles(dataDir: string, env: NodeJS.ProcessEnv = process.en
   const roots = () => folders.flatMap((folder) => { try { return [realpathSync(folder)]; } catch { return []; } });
   // Inside a shared folder without passing through a hidden name below it.
   const shared = (real: string, current: string[]) => current.some((root) => inside(real, root) && !hidden(real, root));
-  const allowed = (real: string, current: string[]) => shared(real, current) && !guarded.some((root) => inside(real, root));
 
   async function target(path: unknown) {
     if (typeof path !== "string" || !isAbsolute(path))
       throw new Error("Give an absolute path from files.list or files.search.");
-    const refused = new Error("This path is not in a shared folder or does not exist.");
+    // One answer for every refusal, so a guessed hidden or protected path
+    // cannot be told apart from a missing one.
+    const refused = new Error("This path does not exist in the shared folders.");
     const real = await realpath(path).catch(() => { throw refused; });
-    const current = roots();
-    if (!current.some((root) => inside(real, root))) throw refused;
-    if (!shared(real, current)) throw new Error("Hidden files and folders are not shared.");
-    if (relayData(real)) throw new Error("Relay's own records are not shared.");
+    if (!shared(real, roots()) || relayData(real)) throw refused;
     return { real, shown: resolve(path) };
   }
 
@@ -122,7 +116,7 @@ export function createFiles(dataDir: string, env: NodeJS.ProcessEnv = process.en
     for (const name of names.slice(start, start + limits.listPage)) {
       try {
         const entryReal = await realpath(join(real, name));
-        if (!allowed(entryReal, current)) continue;
+        if (!shared(entryReal, current) || relayData(entryReal)) continue;
         const info = await stat(entryReal);
         const path = join(shown, name);
         if (info.isDirectory()) entries.push({ name, path, kind: "folder" });
@@ -152,57 +146,62 @@ export function createFiles(dataDir: string, env: NodeJS.ProcessEnv = process.en
     const deadline = Date.now() + limits.searchMs;
     const matches: Array<{ path: string; match: "name" | "content"; snippet?: string }> = [];
     let stopped = "";
-    walk: while (queue.length) {
-      const { real, shown } = queue.shift()!;
-      const items = await readdir(real, { withFileTypes: true }).catch(() => []);
-      if (items.some((item) => item.name === storeFile)) continue;
-      for (const item of items.filter(({ name }) => !name.startsWith(".")).sort((a, b) => a.name < b.name ? -1 : 1)) {
-        if (signal?.aborted) throw new Error("The search was cancelled.");
-        if (Date.now() > deadline) {
-          stopped = `Stopped after ${limits.searchMs / 1000} seconds`;
-          break walk;
-        }
-        const path = join(shown, item.name);
-        let entryReal = join(real, item.name), directory = item.isDirectory(), regular = item.isFile();
-        if (item.isSymbolicLink()) {
-          try {
-            entryReal = await realpath(entryReal);
-            const info = await stat(entryReal);
-            [directory, regular] = [info.isDirectory(), info.isFile()];
-          } catch { continue; }
-          if (!allowed(entryReal, current) || relayData(entryReal)) continue;
-        }
-        if (guarded.some((root) => inside(entryReal, root))) continue;
-        if (directory) {
-          if (!seen.has(entryReal)) { seen.add(entryReal); queue.push({ real: entryReal, shown: path }); }
-          continue;
-        }
-        if (!regular) continue;
-        const type = kind(entryReal);
-        if (words.every((word) => item.name.toLowerCase().includes(word))) matches.push({ path, match: "name" });
-        else if (type) {
-          let content: string | undefined;
-          try {
-            const { size } = await stat(entryReal);
-            if (type === "text") content = await textStart(entryReal, Math.min(size, limits.fileBytes));
-            else if (size <= limits.pdfBytes) content = (await pdfText(entryReal, deadline)).text;
-          } catch { /* An unreadable file is not a match. */ }
-          const lower = content?.toLowerCase();
-          if (lower && words.every((word) => lower.includes(word))) {
-            const at = lower.indexOf(words[0]);
-            matches.push({ path, match: "content", snippet: content!.slice(Math.max(0, at - 100), at + 150).replace(/\s+/g, " ").trim() });
+    // One worker reads every PDF of this search; it ends with the search.
+    const pdfs = pdfReader(deadline, signal);
+    try {
+      walk: while (queue.length) {
+        const { real, shown } = queue.shift()!;
+        const items = await readdir(real, { withFileTypes: true }).catch(() => []);
+        if (items.some((item) => item.name === storeFile)) continue;
+        for (const item of items.filter(({ name }) => !name.startsWith(".")).sort((a, b) => a.name < b.name ? -1 : 1)) {
+          if (signal?.aborted) throw new Error("The search was cancelled.");
+          if (Date.now() > deadline) {
+            stopped = `Stopped after ${limits.searchMs / 1000} seconds`;
+            break walk;
+          }
+          const path = join(shown, item.name);
+          let entryReal = join(real, item.name), directory = item.isDirectory(), regular = item.isFile();
+          if (item.isSymbolicLink()) {
+            try {
+              entryReal = await realpath(entryReal);
+              const info = await stat(entryReal);
+              [directory, regular] = [info.isDirectory(), info.isFile()];
+            } catch { continue; }
+            if (!shared(entryReal, current) || relayData(entryReal)) continue;
+          }
+          if (guarded.some((root) => inside(entryReal, root))) continue;
+          if (directory) {
+            if (!seen.has(entryReal)) { seen.add(entryReal); queue.push({ real: entryReal, shown: path }); }
+            continue;
+          }
+          if (!regular) continue;
+          const type = kind(entryReal);
+          if (words.every((word) => item.name.toLowerCase().includes(word))) matches.push({ path, match: "name" });
+          else if (type) {
+            let content: string | undefined;
+            try {
+              const { size } = await stat(entryReal);
+              if (type === "text") content = await textStart(entryReal, Math.min(size, limits.fileBytes));
+              // Without the [Page N] lines, which every PDF has.
+            else if (size <= limits.pdfBytes) content = (await pdfs.text(entryReal)).text.replace(/^\[Page \d+\]$/gm, "");
+            } catch { /* An unreadable file is not a match. */ }
+            const lower = content?.toLowerCase();
+            if (lower && words.every((word) => lower.includes(word))) {
+              const at = lower.indexOf(words[0]);
+              matches.push({ path, match: "content", snippet: content!.slice(Math.max(0, at - 100), at + 150).replace(/\s+/g, " ").trim() });
+            }
+          }
+          if (matches.length >= limits.matches) {
+            stopped = `Stopped at ${limits.matches} matches`;
+            break walk;
           }
         }
-        if (matches.length >= limits.matches) {
-          stopped = `Stopped at ${limits.matches} matches`;
-          break walk;
-        }
       }
-    }
+    } finally { pdfs.close(); }
     return { matches, ...(stopped ? { note: `${stopped}; there may be more. Narrow the search with path or more words.` } : {}) };
   }
 
-  async function read(args: Record<string, unknown>) {
+  async function read(args: Record<string, unknown>, signal?: AbortSignal) {
     const { real, shown } = await target(args.path);
     const info = await stat(real);
     if (!info.isFile()) throw new Error("This is a folder; use files.list.");
@@ -212,12 +211,13 @@ export function createFiles(dataDir: string, env: NodeJS.ProcessEnv = process.en
     if (type === "pdf") {
       if (info.size > limits.pdfBytes) throw new Error(`This PDF is larger than ${limits.pdfBytes >> 20} MB.`);
       const key = `${real}:${info.size}:${info.mtimeMs}`;
-      const document = pdfCache?.key === key ? pdfCache.document : await pdfText(real, Date.now() + limits.pdfMs);
+      const document = pdfCache?.key === key ? pdfCache.document : await pdfText(real, Date.now() + limits.pdfMs, signal);
+      if (!document.complete && !document.read) throw new Error(`This PDF could not be read in ${limits.pdfMs / 1000} seconds.`);
       pdfCache = { key, document };
       const end = start + limits.pdfChars;
       return { path: shown, text: document.text.slice(start, end), offset: start, pages: document.pages,
         ...(end < document.text.length ? { nextOffset: end } : {}),
-        ...(document.read < document.pages ? { note: `Only the first ${document.read} of ${document.pages} pages were read.` } : {}) };
+        ...(document.complete ? {} : { note: `Only the first ${document.read} of ${document.pages} pages could be read in ${limits.pdfMs / 1000} seconds.` }) };
     }
     // Text pages by bytes, cut at character boundaries, so a file of any size reads in pieces.
     const handle = await open(real, "r");
@@ -237,7 +237,7 @@ export function createFiles(dataDir: string, env: NodeJS.ProcessEnv = process.en
   async function call(operation: string, args: Record<string, unknown>, options: { signal?: AbortSignal } = {}) {
     if (operation === "files.list") return { data: await list(args) };
     if (operation === "files.search") return { data: await search(args, options.signal) };
-    if (operation === "files.read") return { data: await read(args) };
+    if (operation === "files.read") return { data: await read(args, options.signal) };
     throw new Error("Unknown files operation.");
   }
 
@@ -253,8 +253,9 @@ export function createFiles(dataDir: string, env: NodeJS.ProcessEnv = process.en
   /** Adds the folder settings routes, answering only requests to Relay's own addresses (host:port). */
   function addRoutes(server: Hono, hosts: string[]) {
     onlyRelayHosts(server, ["/api/settings/folders"], hosts, "This address may not see or change shared folders.");
-    // Another site's page reaches Relay's real address with its own Origin, and
-    // a plain-text form post needs no preflight, so changes check the Origin too.
+    // Another site's page reaches Relay's real address with its own Origin. The
+    // workspace already refuses a non-JSON POST (a form post that needs no
+    // preflight); this check refuses any cross-site change that gets past it.
     const fromRelay = (request: Request) => {
       const origin = request.headers.get("origin");
       if (origin && origin !== new URL(request.url).origin)
@@ -271,7 +272,8 @@ export function createFiles(dataDir: string, env: NodeJS.ProcessEnv = process.en
       try { real = realpathSync(folder); } catch { throw new HTTPException(400, { message: "This folder does not exist." }); }
       if (!statSync(real).isDirectory()) throw new HTTPException(400, { message: "This is a file; enter a folder." });
       if (relayData(real)) throw new HTTPException(400, { message: "This folder holds Relay's own records and cannot be shared." });
-      if (!folders.includes(folder)) save([...folders, folder]);
+      // A folder added again, by any path that leads to it, is kept once.
+      if (!folders.some((saved) => realOrSelf(saved) === real)) save([...folders, folder]);
       return c.json({ folders });
     });
     server.delete("/api/settings/folders", (c) => {
