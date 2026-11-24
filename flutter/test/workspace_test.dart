@@ -1050,10 +1050,10 @@ void main() {
     await tester.pump();
     expect(reading.page, isNull);
     expect(reading.error, contains('No network'));
-    expect((reading.unloaded?.url, reading.title), (
-      'https://example.com/desk',
-      'Browser',
-    ));
+    expect(
+      (reading.unloaded?.url, reading.title),
+      ('https://example.com/desk', 'Browser'),
+    );
     expect(f.w.session()['tabs'][0]['url'], 'https://example.com/desk');
     await expectLater(
       f.w.browserTab(reading.id),
@@ -1634,9 +1634,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byTooltip('Zoom in'), findsNothing);
     // With nothing selected there is nothing to highlight.
-    IconButton highlight() => tester.widget(
-      find.widgetWithIcon(IconButton, Icons.border_color),
-    );
+    IconButton highlight() =>
+        tester.widget(find.widgetWithIcon(IconButton, Icons.border_color));
     pdf.selection = '';
     pdf.changed(false);
     await tester.pumpAndSettle();
@@ -1818,16 +1817,18 @@ void main() {
     }
 
     // The saved picture's width and its colours in the page and the chat.
-    Future<(int, List<int>, List<int>)> record() async {
-      await tester.tap(find.byTooltip('Record a bug'));
+    Future<(int, List<int>, List<int>)> record([String? category]) async {
+      await tester.tap(find.byTooltip('Record a bug or request'));
       await tester.pump();
       expect(f.w.recorder.recording, isTrue);
       // A second click during the capture must not start another one.
-      await tester.tap(find.byTooltip('Recording a bug. Stop and save'));
-      await tester.tap(find.byTooltip('Recording a bug. Stop and save'));
-      await settle(find.text('Save bug report'));
+      await tester.tap(find.byTooltip('Recording. Stop and save'));
+      await tester.tap(find.byTooltip('Recording. Stop and save'));
+      await settle(find.text('Save report'));
       await tester.pumpAndSettle();
-      expect(find.text('Save bug report'), findsOneWidget);
+      expect(find.text('Save report'), findsOneWidget);
+      if (category != null) await tester.tap(find.text(category));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Save on server'));
       await tester.pumpAndSettle();
       expect(f.w.recorder.recording, isFalse);
@@ -1858,20 +1859,22 @@ void main() {
     expect(width, 2000, reason: 'the longest side is capped');
     expect(inPage, [0x21, 0x96, 0xf3], reason: 'the page snapshot in place');
     expect(inChat, isNot(inPage), reason: 'the chat panel is in the picture');
+    expect(f.bugReport!['category'], 'bug');
 
     page.frame = null;
-    final (_, notCaptured, _) = await record();
+    final (_, notCaptured, _) = await record('Feature request');
+    expect(f.bugReport!['category'], 'feature');
     expect(notCaptured, [0xd4, 0xd4, 0xd4]);
     expect(find.text('Page not captured'), findsNothing, reason: 'cleared');
 
-    await tester.tap(find.byTooltip('Record a bug'));
+    await tester.tap(find.byTooltip('Record a bug or request'));
     await tester.pump();
-    await tester.tap(find.byTooltip('Recording a bug. Stop and save'));
-    await settle(find.text('Save bug report'));
+    await tester.tap(find.byTooltip('Recording. Stop and save'));
+    await settle(find.text('Save report'));
     await tester.tap(find.text('Discard'));
     await tester.pumpAndSettle();
     expect(f.w.recorder.recording, isFalse);
-    expect(find.byTooltip('Record a bug'), findsOneWidget);
+    expect(find.byTooltip('Record a bug or request'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets(

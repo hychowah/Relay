@@ -1047,6 +1047,7 @@ class Workspace extends ChangeNotifier {
   /// Stops the recording and saves it on the server; returns the report file.
   Future<String> saveBugReport(
     String description, {
+    String category = 'bug',
     Uint8List? screenshot,
     Json client = const {},
   }) async {
@@ -1054,6 +1055,7 @@ class Workspace extends ChangeNotifier {
     try {
       final saved = await api.saveBugReport({
         'description': description,
+        'category': category,
         ...recorder.report,
         'client': {
           ...client,

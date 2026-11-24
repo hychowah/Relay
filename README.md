@@ -126,8 +126,10 @@ npm run build
 python3 tools/check_records.py
 ```
 
-**Bug reports.** In the Flutter app, press the record button at the top right,
-reproduce the problem, then press the red record button again and describe it.
+**Bug reports and requests.** In the Flutter app, press the record button at
+the top right, reproduce the problem or show the screen in question, then press
+the red record button again. Choose **Bug**, **Feature request** (something new)
+or **Update request** (a change to something that exists) and describe it.
 The recording holds your actions, each server request and reply (a repeated
 poll reply is kept once; Browser history and highlight requests are left out), error
 messages, the open tabs and a screenshot of the whole window, at most 2,000
@@ -137,12 +139,17 @@ are not redacted, so the picture shows whatever was on screen. The service saves
 it as `bug-reports/<time>-<id>.json` (with a `.png`) in `RELAY_DATA_DIR`, adds
 its own record of the conversation and replaces API keys and other secret
 fields with `[redacted]`. Reports contain conversation text, so they stay with
-the runtime data, outside the repository. Choose **Bug reports** in the
+the runtime data, outside the repository. Choose **Reports** in the
 workspace menu to read them: each shows its description, screenshot (click it
 to open it full size) and a timeline of events that expand to their full
-details. Mark a report solved with the circle beside it (click again to reopen it); the header counts open and
-solved reports. The bin button deletes the report and its screenshot. The status
-is saved as `status` (`open` or `solved`) in the report file.
+details.
+
+The chips above the list show all reports or one category; the chip under a
+report's description moves it to another category. Mark a report solved with
+the circle beside it (click again to reopen it); the header counts open and
+solved reports. The bin button deletes the report and its screenshot. The
+report file saves `status` (`open` or `solved`) and `category` (`bug`,
+`feature` or `update`; older reports without one are bugs).
 
 ### Measure performance
 

@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'relay_records.dart';
 
 /// Development recording of user actions, server exchanges and errors, saved
-/// on the server as a bug report.
+/// on the server as a report: a bug, feature request or update request.
 class BugRecorder extends ChangeNotifier {
   static const maxEvents = 2000, maxText = 4000;
   final events = <Json>[];

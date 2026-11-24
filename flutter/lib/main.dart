@@ -509,6 +509,7 @@ class _RelayShellState extends State<RelayShell> {
       }
       final file = await w.saveBugReport(
         answer.description,
+        category: answer.category,
         screenshot: screenshot,
         client: {
           'app': widget.updates?.installedLabel,
@@ -520,7 +521,7 @@ class _RelayShellState extends State<RelayShell> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Bug report saved: $file')));
+            .showSnackBar(SnackBar(content: Text('Report saved: $file')));
       }
     } finally {
       reportingBug = false;
@@ -1487,8 +1488,8 @@ class _RelayShellState extends State<RelayShell> {
         const SizedBox(width: 8),
         IconButton(
           tooltip: w.recorder.recording
-              ? 'Recording a bug. Stop and save'
-              : 'Record a bug',
+              ? 'Recording. Stop and save'
+              : 'Record a bug or request',
           onPressed: () => _menu('record'),
           icon: w.recorder.recording
               ? const Icon(Icons.fiber_manual_record, color: Colors.red)
@@ -1577,7 +1578,7 @@ class _RelayShellState extends State<RelayShell> {
               child: Divider(),
             ),
             const MenuLabel('DEVELOPMENT'),
-            _menuItem('reports', 'Bug reports', Icons.bug_report_outlined),
+            _menuItem('reports', 'Reports', Icons.bug_report_outlined),
             if (Platform.isMacOS)
               CheckboxMenuButton(
                 value: tabMemory.on,

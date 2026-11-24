@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createWorkspace } from "../server/app.ts";
@@ -40,9 +40,10 @@ test("bug reports save the recording with the server's conversation and without 
     assert.equal(await readFile(join(dir, `${id}.png`), "utf8"), "png bytes");
 
     assert.equal((await post({ events: [] })).status, 400);
+    assert.equal((await post({ description: "x", category: "idea", events: [] })).status, 400);
 
     const list = await (await workspace.app.request("/api/bug-reports")).json();
-    assert.deepEqual(list, [{ id, savedAt: report.savedAt, description: "Stop did nothing", status: "open", events: 2, screenshot: true }]);
+    assert.deepEqual(list, [{ id, savedAt: report.savedAt, description: "Stop did nothing", category: "bug", status: "open", events: 2, screenshot: true }]);
     const saved = await workspace.app.request(`/api/bug-reports/${id}`);
     assert.equal((await saved.json()).events[1].body.apiKey, "[redacted]");
     const picture = await workspace.app.request(`/api/bug-reports/${id}/screenshot`);
@@ -50,19 +51,33 @@ test("bug reports save the recording with the server's conversation and without 
     assert.equal(await picture.text(), "png bytes");
     assert.equal((await workspace.app.request("/api/bug-reports/..%2Frelay")).status, 404);
 
-    const mark = (status: string) => workspace.app.request(`/api/bug-reports/${id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }),
+    const change = (body: unknown) => workspace.app.request(`/api/bug-reports/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     });
-    assert.equal((await mark("fixed")).status, 400);
-    assert.equal((await mark("solved")).status, 200);
+    assert.equal((await change({ status: "fixed" })).status, 400);
+    assert.equal((await change({ category: "idea" })).status, 400);
+    assert.equal((await change({ status: "solved" })).status, 200);
+    assert.equal((await change({ category: "feature" })).status, 200);
     const [solved] = await (await workspace.app.request("/api/bug-reports")).json();
     assert.equal(solved.status, "solved");
+    assert.equal(solved.category, "feature");
     const kept = JSON.parse(await readFile(join(dir, `${id}.json`), "utf8"));
     assert.equal(kept.events.length, 2);
 
     assert.equal((await workspace.app.request(`/api/bug-reports/${id}`, { method: "DELETE" })).status, 204);
     assert.deepEqual(await readdir(dir), []);
     assert.equal((await workspace.app.request(`/api/bug-reports/${id}`, { method: "DELETE" })).status, 404);
+
+    assert.equal((await post({ description: "Show tab sizes", category: "update", events: [] })).status, 201);
+    const [request] = await (await workspace.app.request("/api/bug-reports")).json();
+    assert.equal(request.category, "update");
+
+    // Reports saved before categories existed are listed as bugs.
+    const old = JSON.parse(await readFile(join(dir, `${request.id}.json`), "utf8"));
+    delete old.category;
+    await writeFile(join(dir, `${request.id}.json`), JSON.stringify(old));
+    const [listed] = await (await workspace.app.request("/api/bug-reports")).json();
+    assert.equal(listed.category, "bug");
   } finally {
     await workspace.close();
     store.close();

@@ -28,7 +28,7 @@ void main() {
     expect(failure.toString(), 'Relay did not answer in 20 seconds.');
   });
 
-  testWidgets('lists saved bug reports and opens their event timeline', (
+  testWidgets('lists saved reports and opens their event timeline', (
     tester,
   ) async {
     const id = '2026-11-19T01-00-00-000Z-1a2b3c4d';
@@ -119,18 +119,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(InteractiveViewer), findsNothing);
 
-    await tester.tap(find.byTooltip('All bug reports'));
+    await tester.tap(find.byTooltip('All reports'));
     await tester.pumpAndSettle();
-    expect(find.text('Bug reports'), findsOneWidget);
+    expect(find.text('Reports'), findsOneWidget);
   });
 
-  testWidgets('marks a bug report solved and deletes another', (tester) async {
+  testWidgets('marks a report solved and deletes another', (tester) async {
     final saved = {
       for (final id in ['a', 'b'])
         id: <String, Object?>{
           'id': id,
           'savedAt': '2026-11-19T01:00:00.000Z',
           'description': 'Bug $id',
+          'category': 'bug',
           'status': 'open',
           'events': 0,
           'screenshot': false,
@@ -143,8 +144,11 @@ void main() {
           return http.Response(jsonEncode(saved.values.toList()), 200);
         }
         final id = request.url.pathSegments.last;
+        if (request.method == 'GET') {
+          return http.Response(jsonEncode({...?saved[id], 'events': []}), 200);
+        }
         if (request.method == 'PATCH') {
-          saved[id]!['status'] = (jsonDecode(request.body) as Map)['status'];
+          saved[id]!.addAll((jsonDecode(request.body) as Map).cast());
           return http.Response(jsonEncode(saved[id]), 200);
         }
         saved.remove(id);
@@ -161,7 +165,29 @@ void main() {
     expect(find.text('1 open · 1 solved'), findsOneWidget);
     expect(find.byTooltip('Mark open'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Delete bug report').last);
+    // Moving b to feature requests leaves a alone under Bug.
+    await tester.tap(find.text('Bug b'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Change category'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Feature request').last);
+    await tester.pumpAndSettle();
+    expect(saved['b']!['category'], 'feature');
+    await tester.tap(find.byTooltip('All reports'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bug (1)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bug a'), findsOneWidget);
+    expect(find.text('Bug b'), findsNothing);
+    expect(find.text('0 open · 1 solved'), findsOneWidget);
+    await tester.tap(find.text('Feature request (1)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Bug a'), findsNothing);
+    expect(find.text('Bug b'), findsOneWidget);
+    await tester.tap(find.text('All (2)'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Delete report').last);
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text('Delete'));

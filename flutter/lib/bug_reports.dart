@@ -7,9 +7,22 @@ import 'package:material_ui/material_ui.dart';
 import 'relay_api.dart';
 import 'workspace_style.dart';
 
-/// Lists the bug reports saved on the service and shows one report's
-/// description, screenshot and recorded events. Each report can be marked
-/// solved or open again, or deleted.
+/// What a report is for, as the service saves it, with its label and icon.
+/// Reports saved before categories existed are bugs.
+const reportCategories = {
+  'bug': ('Bug', Icons.bug_report_outlined),
+  'feature': ('Feature request', Icons.lightbulb_outline),
+  'update': ('Update request', Icons.auto_fix_high_outlined),
+};
+
+String reportCategory(Json item) =>
+    reportCategories.containsKey(item['category'])
+    ? item['category'] as String
+    : 'bug';
+
+/// Lists the reports saved on the service, all or one category, and shows one
+/// report's description, screenshot and recorded events. Each report can be
+/// marked solved or open again, moved to another category, or deleted.
 class BugReportsDialog extends StatefulWidget {
   const BugReportsDialog({super.key, required this.api});
   final RelayApi api;
@@ -20,6 +33,8 @@ class BugReportsDialog extends StatefulWidget {
 class _BugReportsDialogState extends State<BugReportsDialog> {
   ColorScheme get colors => Theme.of(context).colorScheme;
   List<Json> reports = [];
+  // The category the list shows; null shows every report.
+  String? category;
   Json? report;
   Uint8List? screenshot;
   bool loading = true;
@@ -68,9 +83,17 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
   Future<void> toggleSolved(Json item) => _run(() async {
     final id = item['id'];
     final status = solved(item) ? 'open' : 'solved';
-    await widget.api.setBugReportStatus(id as String, status);
+    await widget.api.updateBugReport(id as String, {'status': status});
     for (final shown in [...reports, ?report]) {
       if (shown['id'] == id) shown['status'] = status;
+    }
+  });
+
+  Future<void> move(Json item, String to) => _run(() async {
+    final id = item['id'];
+    await widget.api.updateBugReport(id as String, {'category': to});
+    for (final shown in [...reports, ?report]) {
+      if (shown['id'] == id) shown['category'] = to;
     }
   });
 
@@ -95,10 +118,58 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
   );
 
   Widget _deleteButton(Json item) => ConfirmDeleteButton(
-    tooltip: 'Delete bug report',
+    tooltip: 'Delete report',
     label: 'Delete',
     onConfirmed: loading ? null : () => delete(item),
   );
+
+  Widget _categoryButton(Json item) {
+    final (label, icon) = reportCategories[reportCategory(item)]!;
+    return PopupMenuButton<String>(
+      tooltip: 'Change category',
+      enabled: !loading,
+      onSelected: (to) => move(item, to),
+      itemBuilder: (_) => [
+        for (final MapEntry(:key, value: (label, _))
+            in reportCategories.entries)
+          CheckedPopupMenuItem(
+            value: key,
+            checked: key == reportCategory(item),
+            child: Text(label),
+          ),
+      ],
+      child: Chip(avatar: Icon(icon, size: 16), label: Text(label)),
+    );
+  }
+
+  Widget _categoryFilter() {
+    Widget choice(String? key, String label, IconData? icon) {
+      final count = key == null
+          ? reports.length
+          : reports.where((item) => reportCategory(item) == key).length;
+      return ChoiceChip(
+        avatar: icon == null ? null : Icon(icon, size: 16),
+        label: Text('$label ($count)'),
+        selected: category == key,
+        onSelected: (_) => setState(() => category = key),
+      );
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: [
+        choice(null, 'All', null),
+        for (final MapEntry(:key, value: (label, icon))
+            in reportCategories.entries)
+          choice(key, label, icon),
+      ],
+    );
+  }
+
+  List<Json> get _shown => category == null
+      ? reports
+      : reports.where((item) => reportCategory(item) == category).toList();
 
   static String _time(Object? iso) {
     final time = DateTime.tryParse('${iso ?? ''}')?.toLocal();
@@ -212,6 +283,8 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
         style: Theme.of(context).textTheme.titleMedium,
       ),
       const SizedBox(height: 6),
+      Align(alignment: Alignment.centerLeft, child: _categoryButton(report)),
+      const SizedBox(height: 6),
       SelectableText(
         '${solved(report) ? 'Solved' : 'Open'} · '
         'File bug-reports/${report['id']}.json\n'
@@ -256,35 +329,45 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
     );
   }
 
-  Widget _list() => reports.isEmpty && !loading
-      ? const Center(child: Text('No bug reports saved yet'))
-      : ListView.builder(
-          itemCount: reports.length,
-          itemBuilder: (context, index) {
-            final item = reports[index];
-            final description = item['description'] as String? ?? '';
-            return ListTile(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              leading: _solvedButton(item),
-              title: Text(
-                description.isEmpty ? 'No description' : description,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: solved(item)
-                    ? TextStyle(color: colors.onSurfaceVariant)
-                    : null,
-              ),
-              subtitle: Text(
-                '${solved(item) ? 'Solved' : 'Open'} · '
-                '${_time(item['savedAt'])} · ${item['events']} events',
-              ),
-              trailing: _deleteButton(item),
-              onTap: loading ? null : () => open(item),
-            );
-          },
-        );
+  Widget _list() {
+    final shown = _shown;
+    return shown.isEmpty && !loading
+        ? Center(
+            child: Text(
+              reports.isEmpty
+                  ? 'No reports saved yet'
+                  : 'No reports in this category',
+            ),
+          )
+        : ListView.builder(
+            itemCount: shown.length,
+            itemBuilder: (context, index) {
+              final item = shown[index];
+              final description = item['description'] as String? ?? '';
+              return ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                leading: _solvedButton(item),
+                title: Text(
+                  description.isEmpty ? 'No description' : description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: solved(item)
+                      ? TextStyle(color: colors.onSurfaceVariant)
+                      : null,
+                ),
+                subtitle: Text(
+                  '${reportCategories[reportCategory(item)]!.$1} · '
+                  '${solved(item) ? 'Solved' : 'Open'} · '
+                  '${_time(item['savedAt'])} · ${item['events']} events',
+                ),
+                trailing: _deleteButton(item),
+                onTap: loading ? null : () => open(item),
+              );
+            },
+          );
+  }
 
   @override
   Widget build(BuildContext context) => Dialog(
@@ -300,7 +383,7 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
               children: [
                 if (report != null)
                   IconButton(
-                    tooltip: 'All bug reports',
+                    tooltip: 'All reports',
                     onPressed: () => setState(() {
                       report = null;
                       screenshot = null;
@@ -309,14 +392,14 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
                   ),
                 Expanded(
                   child: Text(
-                    report == null ? 'Bug reports' : 'Bug report',
+                    report == null ? 'Reports' : 'Report',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
-                if (report == null && reports.isNotEmpty)
+                if (report == null && _shown.isNotEmpty)
                   Text(
-                    '${reports.where((item) => !solved(item)).length} open · '
-                    '${reports.where(solved).length} solved',
+                    '${_shown.where((item) => !solved(item)).length} open · '
+                    '${_shown.where(solved).length} solved',
                     style: TextStyle(color: colors.onSurfaceVariant),
                   ),
                 if (report != null) ...[
@@ -330,7 +413,7 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
                     icon: const Icon(Icons.refresh),
                   ),
                 IconButton(
-                  tooltip: 'Close bug reports',
+                  tooltip: 'Close reports',
                   onPressed: () => Navigator.pop(context),
                   icon: const Icon(Icons.close),
                 ),
@@ -350,6 +433,7 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
                   TextButton(onPressed: load, child: const Text('Retry')),
                 ],
               ),
+            if (report == null && reports.isNotEmpty) _categoryFilter(),
             if (loading) const LinearProgressIndicator(),
             Expanded(child: report == null ? _list() : _report(report!)),
           ],
