@@ -1184,13 +1184,26 @@ class _BrowserPage extends _WebPage with BrowserSurface {
 
   static String? _formsScript;
 
-  // Desktop only. Relay never submits the form; see assets/page_forms.js.
+  // Desktop only; see assets/page_forms.js.
   @override
   Future<Json> readForm() => _forms('read');
-  @override
-  Future<Json> fillForm(List<Object?> fields) => _forms('fill', fields);
 
-  Future<Json> _forms(String action, [List<Object?>? fields]) async {
+  // The values go into the page only once it shows it still holds the read's
+  // token: a page reached since then, as by Back, never gets them. The fill
+  // script checks again, but by then the values are in the page's script.
+  @override
+  Future<Json> fillForm(String token, List<Object?> fields) async {
+    if ((await _forms('token'))['token'] != token) {
+      throw StateError(
+        'The page changed since browser.form; read the form again.',
+      );
+    }
+    final result = await _forms('fill', {'token': token, 'fields': fields});
+    if (result['error'] case final String error) throw StateError(error);
+    return result;
+  }
+
+  Future<Json> _forms(String action, [Json? request]) async {
     if (!Platform.isMacOS && !Platform.isWindows) {
       throw StateError('Only the desktop app fills forms.');
     }
@@ -1201,7 +1214,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     final raw = await controller
         .runJavaScriptReturningResult(
           'JSON.stringify(($_formsScript)'
-          '(${jsonEncode(action)}, ${jsonEncode(fields)}))',
+          '(${jsonEncode(action)}, ${jsonEncode(request)}))',
         )
         .timeout(const Duration(seconds: 6));
     dynamic data = raw is String ? jsonDecode(raw) : raw;

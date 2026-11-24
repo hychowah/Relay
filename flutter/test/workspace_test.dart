@@ -1052,6 +1052,10 @@ void main() {
     final other = f.w.active == hidden ? shown : hidden;
     expect(await refusal(other), contains('Open that tab'));
     expect(await refusal(f.w.active!), 'none');
+
+    // An expanded conversation covers every page.
+    f.w.pageShown = false;
+    expect(await refusal(f.w.active!), contains('expanded conversation'));
   });
   testWidgets('Reload, Go and an agent view load an unloaded tab first', (
     tester,
@@ -2813,11 +2817,14 @@ void main() {
       await tester.tap(find.text('Expand conversation'));
       await tester.pumpAndSettle();
       expect(find.text('[0:40] Second part'), findsOneWidget);
+      // It covers the page, so the page's form cannot be filled meanwhile.
+      expect(f.w.pageShown, isFalse);
       await tester.tap(find.byTooltip('Conversation options'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Show workspace'));
       await tester.pumpAndSettle();
       expect(find.text('[0:40] Second part'), findsOneWidget);
+      expect(f.w.pageShown, isTrue);
 
       page.url = 'https://www.youtube.com/';
       f.w.changed();

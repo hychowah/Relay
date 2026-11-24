@@ -24,9 +24,9 @@ class FakeBrowser with BrowserSurface {
     ],
   };
   @override
-  Future<Json> fillForm(List<Object?> fields) async => {
+  Future<Json> fillForm(String token, List<Object?> fields) async => {
+    'token': token,
     'filled': fields.length,
-    'submitted': false,
   };
   @override
   Future<double?> playbackTime() async => null;
@@ -94,11 +94,12 @@ void main() {
         'type': 'fill',
         'id': '5',
         'tabId': 'tab',
+        'token': 'read-1',
         'fields': [
           {'id': 'f1', 'value': 'ada@example.com'},
         ],
       }))['data'],
-      {'filled': 1, 'submitted': false},
+      {'token': 'read-1', 'filled': 1},
     );
     // A tab off screen is read, but its form is neither read nor filled.
     expect(

@@ -243,7 +243,8 @@ real WKWebViews.
 22. Form filling (`browser.form`, `browser.fill`; desktop only) has passed
    only Chromium and WSL tests. On the Mac, after a backend deploy, ask the
    real agent to fill a test form in WKWebView: the outlines show, the page
-   scrolls to the first field, a React form takes the values and nothing is
-   submitted. A fill aimed at a hidden tab must be refused.
+   scrolls to the first field, a React form takes the values and Relay does
+   not submit. A fill aimed at a hidden tab, or made while the conversation
+   is expanded, must be refused, and hidden fields must not be listed.
 
 Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).

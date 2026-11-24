@@ -61,14 +61,27 @@ class BrowserConnection {
             final data = switch (request['type']) {
               'read' => await tab.read(),
               'form' => await tab.readForm(),
-              'fill' => await tab.fillForm(request['fields'] as List? ?? []),
+              'fill' => await tab.fillForm(
+                request['token'] as String? ?? '',
+                request['fields'] as List? ?? [],
+              ),
               _ => transcriptPage(
                 await tab.loadTranscript(),
                 (request['offset'] as num?)?.toInt() ?? 0,
               ),
             };
+            final reply = jsonEncode({'id': request['id'], 'data': data});
+            // Relay's end takes 256 KB a message and closes the socket, and
+            // every request waiting on it, for a larger one.
             if (socket.readyState == WebSocket.open) {
-              socket.add(jsonEncode({'id': request['id'], 'data': data}));
+              socket.add(
+                utf8.encode(reply).length < 250 * 1024
+                    ? reply
+                    : jsonEncode({
+                        'id': request['id'],
+                        'error': 'The answer was too large to send.',
+                      }),
+              );
             }
           } catch (error) {
             if (socket.readyState == WebSocket.open) {
