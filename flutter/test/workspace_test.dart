@@ -538,18 +538,10 @@ void main() {
             .map((e) => e['name']),
         ['open app', 'send message'],
       );
-      final polls = events.where(
-        (e) => e['path'] == '/api/conversations/conversation',
-      );
       expect(
-        polls.where((e) => e['reply'] != null),
+        events.where((e) => e['path'] == '/api/conversations/conversation'),
         hasLength(1),
-        reason: 'an identical poll reply is kept once',
-      );
-      expect(
-        polls.skip(1).map((e) => e['unchanged']),
-        allOf(isNotEmpty, everyElement(isTrue)),
-        reason: 'and each repeat shows its time',
+        reason: 'identical poll replies are recorded once',
       );
       expect(
         events.where((e) => e['type'] == 'error').map((e) => e['message']),

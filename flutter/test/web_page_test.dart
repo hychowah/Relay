@@ -631,45 +631,88 @@ void main() {
     void send(List<Json> notes) => controller.channel.onMessageReceived(
       JavaScriptMessage(message: 'trace:${jsonEncode(notes)}'),
     );
-    final start = DateTime.now().millisecondsSinceEpoch;
+    int now() => DateTime.now().millisecondsSinceEpoch;
     send([
-      {'at': start, 'kind': 'hover'},
+      {'at': now(), 'kind': 'hover'},
     ]);
     expect(traced(), isFalse, reason: 'no trace without a recording');
+    expect(recorder.events, isEmpty);
+    // A finished load stops any trace left in the page.
+    expect(controller.scripts, contains('window.__relayTrace?.stop()'));
 
     recorder.start();
     await pumpEventQueue();
     expect(traced(), isTrue);
+    final hovered = now();
+    await Future<void>.delayed(const Duration(milliseconds: 5));
     recorder.action('later');
     // A batch arrives after the moment it describes; a note cannot pose as
-    // another kind of event.
+    // another kind of event, and only plain short fields are kept.
     send([
       {
-        'at': start + 1,
+        'at': hovered,
         'type': 'error',
         'kind': 'hover',
         'target': 'a "Provide URL"',
+        'nested': {'a': 1},
+        'long': 'x' * 600,
       },
     ]);
     expect(recorder.events.map((event) => event['type']), ['page', 'action']);
     expect(recorder.events.first, {
       'at': DateTime.fromMillisecondsSinceEpoch(
-        start + 1,
+        hovered,
         isUtc: true,
       ).toIso8601String(),
       'type': 'page',
       'tab': 'YouTube',
       'kind': 'hover',
       'target': 'a "Provide URL"',
+      'long': 'x' * 500,
     });
+
+    // A note of another kind is refused; one with a time outside the
+    // recording is held within it.
+    send([
+      {'at': now(), 'kind': 'made up'},
+      {'at': 0, 'kind': 'pointer'},
+    ]);
+    expect(recorder.refusedPageNotes, 1);
+    final pointer = recorder.events.firstWhere((e) => e['kind'] == 'pointer');
+    expect(
+      DateTime.parse(pointer['at'] as String).isBefore(recorder.startedAt!),
+      isFalse,
+    );
+    // A batch takes at most 200 notes, and a recording at most its limit;
+    // the rest are refused, apart from the oldest events let go.
+    List<Json> pointers(int count) => [
+      for (var i = 0; i < count; i++) {'at': now(), 'kind': 'pointer'},
+    ];
+    send(pointers(201));
+    expect(recorder.refusedPageNotes, 2);
+    final taken = recorder.events.where((e) => e['type'] == 'page').length;
+    for (var i = 0; i < 5; i++) {
+      send(pointers(200));
+    }
+    expect(
+      recorder.events.where((event) => event['type'] == 'page'),
+      hasLength(BugRecorder.maxPageNotes),
+    );
+    expect(
+      recorder.refusedPageNotes,
+      2 + 1000 - (BugRecorder.maxPageNotes - taken),
+    );
+    expect(recorder.dropped, 0);
+    expect(recorder.report['refusedPageNotes'], recorder.refusedPageNotes);
 
     recorder.stop();
     await pumpEventQueue();
     expect(controller.scripts.last, 'window.__relayTrace?.stop()');
+    final count = recorder.events.length;
     send([
-      {'at': start + 2, 'kind': 'hover'},
+      {'at': now(), 'kind': 'hover'},
     ]);
-    expect(recorder.events, hasLength(2));
+    expect(recorder.events, hasLength(count));
   });
 
   test('a Browser transcript arrives through the page channel', () async {

@@ -6,8 +6,9 @@
 // page's focus, size and visibility are noted too: a web view that the
 // window removes and adds back would change them.
 //
-// A note says which element was involved by its tag, id, role and first few
-// words. Key presses and the text in fields are never noted.
+// A note says which element was involved by its tag, id, role, label or
+// first few words. Key presses and the text in fields and editable elements
+// are never noted; see README.md for what a name can still contain.
 (() => {
   if (window.__relayTrace) return window.__relayTrace.start();
   const words = 40, jump = 40, sampleMs = 200, batchMs = 250;
@@ -15,35 +16,51 @@
   let moved = null, sampledAt = 0, hovered = null, wheel = null;
   const scrolled = new Set();
 
+  // A page's own properties can hide the DOM's: a form's input named "id"
+  // is the form's `id`. Elements are read through the DOM's own methods, and
+  // a name that still cannot be read is "?", so the trace never throws.
+  const dom = (owner, name) => Object.getOwnPropertyDescriptor(owner, name);
+  const nodeName = dom(Node.prototype, "nodeName").get, parentOf = dom(Node.prototype, "parentElement").get;
+  const { getAttribute, matches, closest } = Element.prototype;
+  const editable = "input, textarea, select, [contenteditable]:not([contenteditable=false]), [contenteditable]:not([contenteditable=false]) *";
+
   // The first few words of an element's text, read without layout.
   function text(element) {
-    if (element.isContentEditable || element.matches("input, textarea, select")) return "";
+    if (matches.call(element, editable)) return "";
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     let found = "";
     for (let node; found.length < words && (node = walker.nextNode());) {
       // A field or editor inside the element, such as a chat's draft, too.
-      const parent = node.parentElement;
-      if (!parent || parent.isContentEditable || parent.closest("script, style, noscript, textarea")) continue;
+      const parent = parentOf.call(node);
+      if (!parent || matches.call(parent, `script, style, noscript, ${editable}`)) continue;
       found = `${found} ${node.data}`.replace(/\s+/g, " ");
     }
     return found.trim().slice(0, words);
   }
 
   function describe(target) {
-    if (target === document || target === window) return "document";
-    const element = target?.nodeType === 1 ? target : target?.parentElement;
-    if (!element) return String(target?.nodeName ?? "");
-    const role = element.getAttribute("role");
-    const name = element.getAttribute("aria-label")?.slice(0, words) || text(element);
-    return element.tagName.toLowerCase() + (element.id ? `#${element.id.slice(0, words)}` : "")
-      + (role ? `[role=${role}]` : "") + (name ? ` "${name}"` : "");
+    try {
+      if (target === document || target === window) return "document";
+      const element = target?.nodeType === 1 ? target : target && parentOf.call(target);
+      if (!element) return "?";
+      const id = getAttribute.call(element, "id"), role = getAttribute.call(element, "role");
+      const name = getAttribute.call(element, "aria-label")?.slice(0, words) || text(element);
+      return nodeName.call(element).toLowerCase() + (id ? `#${id.slice(0, words)}` : "")
+        + (role ? `[role=${role.slice(0, words)}]` : "") + (name ? ` "${name}"` : "");
+    } catch (_) {
+      return "?";
+    }
   }
 
   // The control or item under the pointer rather than a span inside it, so
   // moving within one link or row notes nothing.
-  const item = (target) => (target?.nodeType === 1
-    ? target.closest("a, button, input, textarea, select, label, summary, li, [role], [tabindex], [contenteditable]")
-    : null) ?? target;
+  function item(target) {
+    try {
+      return closest.call(target, "a, button, input, textarea, select, label, summary, li, [role], [tabindex], [contenteditable]") ?? target;
+    } catch (_) {
+      return target;
+    }
+  }
 
   // An event a page's script made, not the user, is marked synthetic.
   const push = (kind, fields = {}, event) =>
@@ -59,13 +76,16 @@
     clearTimeout(timer);
     timer = null;
     // A scroll is noted once per batch, where it ended up.
-    for (const target of scrolled) {
-      const box = target === document ? document.scrollingElement : target;
-      if (box) push("scroll", {
-        target: describe(target), top: Math.round(box.scrollTop), left: Math.round(box.scrollLeft), height: box.scrollHeight,
-      });
-    }
+    const targets = [...scrolled];
     scrolled.clear();
+    for (const target of targets) {
+      try {
+        const box = target === document ? document.scrollingElement : target;
+        if (box) push("scroll", {
+          target: describe(target), top: Math.round(box.scrollTop), left: Math.round(box.scrollLeft), height: box.scrollHeight,
+        });
+      } catch (_) { /* That scroll goes unnoted. */ }
+    }
     if (wheel) push("wheel", wheel);
     wheel = null;
     if (!queue.length) return;
@@ -116,6 +136,8 @@
   addEventListener("focus", (event) => event.target === window && note("page focus"), true);
   addEventListener("blur", (event) => event.target === window && note("page blur"), true);
   addEventListener("resize", () => note("resize", { width: innerWidth, height: innerHeight }));
+  // The last notes before the page goes away.
+  addEventListener("pagehide", () => on && flush());
   document.addEventListener("visibilitychange", () => note("visibility", { state: document.visibilityState }));
 
   // The page's own code scrolling (or focusing, which can scroll) is noted

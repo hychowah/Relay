@@ -445,11 +445,12 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   );
 
   void _traceChanged() {
-    if (!_disposed && _ready.isCompleted) unawaited(_trace());
+    if (!_disposed) unawaited(_trace());
   }
 
-  /// Starts or stops the page trace to match the bug recording. A page
-  /// loaded while recording starts it when it finishes loading.
+  /// Starts or stops the page trace to match the bug recording. Each
+  /// finished load does this too: a page loaded during a recording starts
+  /// it, and one WebKit brings back from its back/forward cache stops it.
   Future<void> _trace() async {
     try {
       if (_recorder?.recording != true) {
@@ -463,27 +464,61 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     }
   }
 
-  /// Adds a batch of the page trace's notes to the bug recording. A page's
-  /// own scripts can send these too, but only while a bug is recorded.
+  // The kinds of note that assets/page_trace.js sends.
+  static const _traceKinds = {
+    'trace start',
+    'hover',
+    'hover lost',
+    'pointer',
+    'pointer jump',
+    'scroll',
+    'wheel',
+    'script scroll',
+    'page focus',
+    'page blur',
+    'resize',
+    'visibility',
+  };
+
+  /// Adds a batch of the page trace's notes to the bug recording. Any
+  /// script in the page or its frames can send these while a bug is
+  /// recorded, so only the trace's kinds of note are taken, at most 200 a
+  /// batch, each with a few short plain fields; the rest count as refused.
   void _noteTrace(String batch) {
     final recorder = _recorder;
     if (recorder == null || !recorder.recording) return;
+    // A real batch covers a quarter second; a huge one is not decoded.
+    if (batch.length > 200000) {
+      recorder.refusedPageNotes++;
+      return;
+    }
     try {
-      for (final note in (jsonDecode(batch) as List).take(200)) {
-        // The note cannot pose as another kind of event or tab.
-        final details = {...note as Map<String, dynamic>}
-          ..remove('type')
-          ..remove('tab');
-        final at = details.remove('at') as int;
-        recorder.add('page', {
+      final notes = jsonDecode(batch) as List;
+      for (final (index, note) in notes.indexed) {
+        if (index >= 200 ||
+            note is! Map ||
+            note['at'] is! int ||
+            !_traceKinds.contains(note['kind'])) {
+          recorder.refusedPageNotes++;
+          continue;
+        }
+        recorder.pageNote({
           'tab': title,
-          ...details,
-        }, at: DateTime.fromMillisecondsSinceEpoch(at, isUtc: true));
+          for (final MapEntry(:key, :value) in note.entries.take(12))
+            if (key is String && key.length <= 20 && !_ownKeys.contains(key))
+              if (value is String)
+                key: value.length > 500 ? value.substring(0, 500) : value
+              else if (value is num || value is bool)
+                key: value,
+        }, note['at'] as int);
       }
     } catch (_) {
-      // Not from the trace script.
+      recorder.refusedPageNotes++;
     }
   }
+
+  // Keys that Relay sets on a page note itself.
+  static const _ownKeys = {'at', 'type', 'tab'};
 
   void _dismissComment() {
     if (_comment == null) return;
@@ -563,7 +598,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
           if (_disposed) return;
           try {
             await controller.runJavaScript(_observePage);
-            if (_recorder?.recording == true) unawaited(_trace());
+            unawaited(_trace());
             // The page is ready without waiting for the PDF viewer or the
             // highlights. A viewer still open belonged to the page before.
             _newDocument();

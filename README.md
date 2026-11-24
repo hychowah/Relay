@@ -131,8 +131,7 @@ the top right, reproduce the problem or show the screen in question, then press
 the red record button again. Choose **Bug**, **Feature request** (something new)
 or **Update request** (a change to something that exists) and describe it.
 The recording holds your actions, each server request and reply (a repeated
-reply, such as the one-second poll, is noted with its time but not its body;
-Browser history and highlight requests are left out), error
+poll reply is kept once; Browser history and highlight requests are left out), error
 messages, the open tabs and a screenshot of the whole window, at most 2,000
 pixels on its longest side, with each shown page's own snapshot in place (a page
 that cannot be captured shows as a grey area marked "Page not captured"). Pixels
@@ -143,12 +142,19 @@ leaves the page, the mouse position about five times a second and every jump
 over 40 pixels, scrolling with the content's height, wheel input, the page's
 focus, size and visibility, and each time the page's own code scrolls or
 focuses an element (at most every 100 ms per element), with the value and
-where in its code the call came from. Elements are named by tag, id, role
-and first 40 characters of text; key presses and the text in fields and
-editors are not recorded. A **stop pressed** action marks the end of the
-reproduction. A recording keeps its latest 2,000 events, a few minutes with
-the mouse moving over a page; the report counts any older ones it dropped.
-The service saves
+where in its code the call came from. Elements are named by tag, id, role,
+label (`aria-label`) or first 40 characters of text. Key presses are not
+recorded, nor text inside input fields, text areas and editable elements, but
+a name can still hold text the page shows elsewhere: an editor drawn from
+plain elements, a preview, a suggestion or a sent message. The trace's first
+note keeps the page's full address, query included, and stack lines keep the
+addresses of the page's scripts; the service's redaction goes by field name,
+so tokens in an address stay. A page's own scripts can send notes too: Relay
+takes only the trace's kinds of note with short plain fields, at most 1,000 a
+recording, and the report counts the rest as refused. A **stop pressed** action marks the
+end of the reproduction. A recording keeps its latest 2,000 events, a few
+minutes with the mouse moving over a page; the report counts any older ones
+it dropped. The service saves
 it as `bug-reports/<time>-<id>.json` (with a `.png`) in `RELAY_DATA_DIR`, adds
 its own record of the conversation and replaces API keys and other secret
 fields with `[redacted]`. Reports contain conversation text, so they stay with

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
@@ -8,6 +9,15 @@ import 'relay_records.dart';
 /// on the server as a report: a bug, feature request or update request.
 class BugRecorder extends ChangeNotifier {
   static const maxEvents = 2000, maxText = 4000;
+
+  /// The most notes web pages may add to one recording, so that a page
+  /// cannot push Relay's own events out; further ones count as refused.
+  static const maxPageNotes = 1000;
+  int _pageNotes = 0;
+
+  /// Page notes not taken: past [maxPageNotes], or not ones the page trace
+  /// sends. Apart from [dropped], which counts the oldest events let go.
+  int refusedPageNotes = 0;
   final events = <Json>[];
   final _lastReply = <String, String>{};
   DateTime? startedAt, endedAt;
@@ -18,6 +28,8 @@ class BugRecorder extends ChangeNotifier {
     events.clear();
     _lastReply.clear();
     dropped = 0;
+    _pageNotes = 0;
+    refusedPageNotes = 0;
     startedAt = DateTime.now().toUtc();
     endedAt = null;
     recording = true;
@@ -40,11 +52,34 @@ class BugRecorder extends ChangeNotifier {
     'startedAt': startedAt?.toIso8601String(),
     'endedAt': endedAt?.toIso8601String(),
     'droppedEvents': dropped,
+    if (refusedPageNotes > 0) 'refusedPageNotes': refusedPageNotes,
     'events': List.of(events),
   };
 
-  /// [at] is when an event noted elsewhere and sent later, such as in a web
-  /// page, happened; the event goes in time order among the others.
+  /// Adds a note that a web page sent about itself a moment after it
+  /// happened, at [atMs] on the page's clock. Any script in the page can
+  /// send these, so the time is kept within the recording's last two
+  /// seconds, which also keeps each insert near the end of the list.
+  void pageNote(Json details, int atMs) {
+    if (!recording) return;
+    if (_pageNotes >= maxPageNotes) {
+      refusedPageNotes++;
+      return;
+    }
+    _pageNotes++;
+    final now = DateTime.now().microsecondsSinceEpoch;
+    final earliest = max(startedAt!.microsecondsSinceEpoch, now - 2000000);
+    add(
+      'page',
+      details,
+      at: DateTime.fromMicrosecondsSinceEpoch(
+        (atMs * 1000).clamp(earliest, now),
+        isUtc: true,
+      ),
+    );
+  }
+
+  /// [at] places an event that happened earlier in time order.
   void add(String type, Json details, {DateTime? at}) {
     if (!recording) return;
     if (events.length >= maxEvents) {
@@ -77,18 +112,17 @@ class BugRecorder extends ChangeNotifier {
     required Duration elapsed,
   }) {
     if (!recording) return;
-    // The workspace polls every second; a reply that has not changed is
-    // noted without its body, so its time still shows (each poll redraws
-    // the window, which a page trace may need to line up with).
-    final unchanged =
-        method == 'GET' && reply != null && _lastReply[path] == reply;
-    if (method == 'GET' && reply != null) _lastReply[path] = reply;
+    // The workspace polls every second; keep only replies that changed.
+    if (method == 'GET' && reply != null) {
+      if (_lastReply[path] == reply) return;
+      _lastReply[path] = reply;
+    }
     add('request', {
       'method': method,
       'path': path,
       'body': ?_decode(body),
       'status': ?status,
-      if (unchanged) 'unchanged': true else 'reply': ?_decode(reply),
+      'reply': ?_decode(reply),
       'failure': ?failure?.toString(),
       'ms': elapsed.inMilliseconds,
     });

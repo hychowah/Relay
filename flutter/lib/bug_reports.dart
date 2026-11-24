@@ -298,7 +298,8 @@ class _BugReportsDialogState extends State<BugReportsDialog> {
         'Recorded ${_time(report['startedAt'])} to ${_time(report['endedAt'])}'
         '${client['app'] == null ? '' : ' · ${client['app']}'}\n'
         'Model ${client['provider']?['mode'] ?? '?'} ${client['provider']?['model'] ?? ''}'
-        '${(report['droppedEvents'] ?? 0) > 0 ? '\nOldest ${report['droppedEvents']} events were dropped.' : ''}',
+        '${(report['droppedEvents'] ?? 0) > 0 ? '\nOldest ${report['droppedEvents']} events were dropped.' : ''}'
+        '${(report['refusedPageNotes'] ?? 0) > 0 ? '\n${report['refusedPageNotes']} page notes were refused.' : ''}',
         style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
       ),
       if (screenshot != null)

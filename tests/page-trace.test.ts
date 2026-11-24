@@ -139,3 +139,28 @@ test("the trace notes the page's own scrolling and where in its code it came fro
     window.scrollBy === (window as any).pageScrollBy,
   ]), [true, true, true, true]);
 });
+
+test("a page whose properties hide the DOM's neither breaks nor stops the trace", async (t) => {
+  const page = await open(t);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  // A form's fields named like DOM properties are the form's properties.
+  await page.evaluate(() => {
+    document.body.insertAdjacentHTML("beforeend", `<form id="f" style="height:60px;overflow:auto">
+      <input name="id"><input name="nodeName"><input name="closest"><div style="height:400px"></div></form>`);
+  });
+  await notes(page);
+  // Playwright's own locators read the hidden properties too.
+  const form = await page.evaluate(() => {
+    const box = Element.prototype.getBoundingClientRect.call(document.getElementById("f"));
+    return { x: box.x, y: box.y };
+  });
+  await page.mouse.move(form.x + 150, form.y + 50);
+  await page.evaluate(() => { document.getElementById("f")!.scrollTop = 40; });
+  const first = await notes(page);
+  await page.evaluate(() => { document.getElementById("f")!.scrollTop = 80; });
+  const second = await notes(page);
+  assert.deepEqual(errors, []);
+  assert.ok(first.some((note) => note.kind === "scroll" && note.target === "form#f" && note.top === 40));
+  assert.ok(second.some((note) => note.kind === "scroll" && note.top === 80), "later batches still go");
+});
