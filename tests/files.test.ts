@@ -60,9 +60,11 @@ function fixture(t: TestContext) {
   const files = createFiles(dataDir, {});
   const server = new Hono();
   files.addRoutes(server, ["relay.test:3250"]);
-  const request = (method: string, path: string, body?: unknown, host = "relay.test:3250") => server.request(path, {
-    method, headers: { "Content-Type": "application/json", Host: host }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+  const request = (method: string, path: string, body?: unknown, host = "relay.test:3250", headers: Record<string, string> = {}) =>
+    server.request(`http://${host}${path}`, {
+      method, headers: { "Content-Type": "application/json", Host: host, ...headers },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
   const call = async (operation: string, args: Record<string, unknown>) =>
     (await files.app.integration.call!(operation, args, {})).data as Record<string, any>;
   const failure = (operation: string, args: Record<string, unknown>) =>
@@ -83,6 +85,10 @@ test("shared folders are added as existing absolute folders, kept on disk, remov
   for (const [method, path, body] of [["GET", "/api/settings/folders"], ["POST", "/api/settings/folders", { path: f.shared }],
     ["DELETE", `/api/settings/folders?path=${encodeURIComponent(f.shared)}`]] as const)
     assert.equal((await f.request(method, path, body, "evil.test:3250")).status, 403, method);
+  // Another site's plain-text form post reaches Relay's real address with no preflight.
+  const crossSite = { Origin: "https://evil.example", "Content-Type": "text/plain" };
+  assert.equal((await f.request("POST", "/api/settings/folders", { path: f.shared }, undefined, crossSite)).status, 403);
+  assert.equal((await f.request("DELETE", "/api/settings/folders?path=x", undefined, undefined, { Origin: "https://evil.example" })).status, 403);
   assert.deepEqual(await (await f.request("GET", "/api/settings/folders")).json(), { folders: [] });
 });
 

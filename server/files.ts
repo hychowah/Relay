@@ -253,8 +253,16 @@ export function createFiles(dataDir: string, env: NodeJS.ProcessEnv = process.en
   /** Adds the folder settings routes, answering only requests to Relay's own addresses (host:port). */
   function addRoutes(server: Hono, hosts: string[]) {
     onlyRelayHosts(server, ["/api/settings/folders"], hosts, "This address may not see or change shared folders.");
+    // Another site's page reaches Relay's real address with its own Origin, and
+    // a plain-text form post needs no preflight, so changes check the Origin too.
+    const fromRelay = (request: Request) => {
+      const origin = request.headers.get("origin");
+      if (origin && origin !== new URL(request.url).origin)
+        throw new HTTPException(403, { message: "Open settings from Relay to change shared folders." });
+    };
     server.get("/api/settings/folders", (c) => c.json({ folders }));
     server.post("/api/settings/folders", async (c) => {
+      fromRelay(c.req.raw);
       const path = (await c.req.json() as Record<string, unknown> | null)?.path;
       if (typeof path !== "string" || !isAbsolute(path.trim()))
         throw new HTTPException(400, { message: "Enter the folder's full WSL path, such as /home/you/notes or /mnt/c/Users/you/Documents." });
@@ -267,6 +275,7 @@ export function createFiles(dataDir: string, env: NodeJS.ProcessEnv = process.en
       return c.json({ folders });
     });
     server.delete("/api/settings/folders", (c) => {
+      fromRelay(c.req.raw);
       save(folders.filter((folder) => folder !== c.req.query("path")));
       return c.json({ folders });
     });

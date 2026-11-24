@@ -238,8 +238,9 @@ the folders listed in Settings (`GET`, `POST {path}` and
 `DELETE ?path=` on `/api/settings/folders`, saved as `folders.json` in
 `RELAY_DATA_DIR`). Like App servers, these routes answer only requests whose
 Host is one of Relay's own addresses, so a page rebound to Relay's address
-cannot use them. A folder must be an existing directory given as an absolute
-WSL path. Its operations are `files.list`, `files.search` (names, plus words
+cannot use them. Changes that carry another site's Origin are refused too. A
+folder must be an existing directory given as an absolute WSL path. Its
+operations are `files.list`, `files.search` (names, plus words
 in the first 1 MB of each text file and in the text of each PDF, stopping at
 50 matches or after 10 seconds, with a note when it stops early) and
 `files.read` (pages with `nextOffset`; a PDF gets 30 seconds to extract).
