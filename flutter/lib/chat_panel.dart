@@ -17,10 +17,11 @@ import 'workspace_style.dart';
 /// What the next message is made of, kept while the panel is closed
 /// (closing unmounts it): the draft, saved 300 ms after each change and on
 /// dispose; the transcript selection, dropped by [follow] once its pane hides
-/// or the page has a newer selection; the messages' scroll. Does nothing once
-/// disposed. A new transcript selection and a refreshed page selection notify
-/// its listeners, as the shell's `setState` did, so the shell redraws as
-/// before; [follow] runs during the shell's build and never notifies.
+/// or the page has a newer selection; the messages' scroll. [follow] also
+/// decides whether the transcript shows and which pane is open. Does nothing
+/// once disposed. A new transcript selection and a refreshed page selection
+/// notify its listeners, as the shell's `setState` did, so the shell redraws
+/// as before; [follow] runs during the shell's build and never notifies.
 class ChatInput extends ChangeNotifier {
   ChatInput(
     this.workspace,
@@ -39,6 +40,7 @@ class ChatInput extends ChangeNotifier {
   final _messagesScroll = ScrollController();
   Timer? _saveTimer;
   ({String pane, String text, String page})? _transcriptSelection;
+  bool _transcriptShown = false;
   String? _transcriptPane;
   String _onPage = '';
   bool _disposed = false;
@@ -50,15 +52,22 @@ class ChatInput extends ChangeNotifier {
   /// The conversation's messages; a sent message scrolls them to the newest.
   ScrollController get messages => _messagesScroll;
 
+  /// Desktop only. The transcript shows: on a desktop, for a YouTube video
+  /// in the selected Browser tab.
+  bool get transcriptShown => _transcriptShown;
+
   /// Desktop only. The open transcript pane's key, for its tab and video;
   /// null while no transcript pane shows.
   String? get transcriptPane => _transcriptPane;
 
   /// Desktop only. The text the user selected in the transcript, sent as the
-  /// next message's selection; setting it ties it to the pane and the page's
-  /// selection [follow] last saw.
+  /// next message's selection.
   String? get transcriptSelection => _transcriptSelection?.text;
-  set transcriptSelection(String? text) {
+
+  /// Desktop only. The user selected [text] in the transcript, or pressed in
+  /// it to start over (null). The selection is tied to the pane and the page's selection
+  /// [follow] last saw.
+  void transcriptSelected(String? text) {
     _transcriptSelection = text == null
         ? null
         : (pane: _transcriptPane!, text: text, page: _onPage);
@@ -80,14 +89,16 @@ class ChatInput extends ChangeNotifier {
   }
 
   /// Follows the selected [tab] on every shell build, before the panel reads
-  /// the transcript selection: works out the transcript pane, shown on a
-  /// [desktop] for a YouTube video in a Browser tab, and drops a transcript
-  /// selection that applies no longer, even while chat is closed.
+  /// the transcript selection: works out whether the transcript shows (on a
+  /// [desktop], for a YouTube video in a Browser tab) and which pane is open,
+  /// and drops a transcript selection that applies no longer, even while chat
+  /// is closed.
   void follow(WorkspaceTab? tab, {required bool desktop}) {
     final browser = tab?.page?.browser;
     final video = desktop && browser != null
         ? youtubeVideoId(tab!.page!.url)
         : null;
+    _transcriptShown = video != null;
     _transcriptPane = video != null && _layout.transcriptOpen
         ? '${tab!.id} $video'
         : null;
@@ -154,7 +165,6 @@ class ChatInput extends ChangeNotifier {
 class ChatPanel extends StatelessWidget {
   const ChatPanel(
     this.workspace,
-    this.desktop,
     this.input,
     this.layout,
     this.capture,
@@ -164,7 +174,6 @@ class ChatPanel extends StatelessWidget {
     super.key,
   });
   final Workspace workspace;
-  final bool desktop;
   final ChatInput input;
   final ChatLayout layout;
   final AreaCapture capture;
@@ -331,13 +340,9 @@ class ChatPanel extends StatelessWidget {
   /// tab opens above the conversation, which keeps the lower half.
   List<Widget> _transcript(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final tab = w.active;
-    final browser = tab?.page?.browser;
-    final video = desktop && browser != null
-        ? youtubeVideoId(tab!.page!.url)
-        : null;
+    final browser = w.active?.page?.browser;
     final pane = input.transcriptPane;
-    if (video == null) return const [];
+    if (!input.transcriptShown) return const [];
     // The bar and pane form one inset card with a gap below and an accent
     // border, so the transcript reads as apart from the conversation's text;
     // the theme's line colour was too faint to show the edge.
@@ -360,7 +365,7 @@ class ChatPanel extends StatelessWidget {
               child: TranscriptPane(
                 key: ValueKey(pane),
                 browser: browser!,
-                onSelected: (text) => input.transcriptSelection = text,
+                onSelected: input.transcriptSelected,
               ),
             ),
         ],

@@ -430,7 +430,6 @@ class _RelayShellState extends State<RelayShell> {
                     page,
                     ChatPanel(
                       w,
-                      desktop,
                       chat,
                       layout,
                       capture,

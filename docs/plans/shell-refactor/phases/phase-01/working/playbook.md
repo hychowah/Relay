@@ -341,8 +341,8 @@ npm run build
 - **Values a view callback captured in the build.** When an old closure
   used locals worked out in the build (the transcript's pane and the page's
   selection), let `follow` keep them on the owner and give the view a
-  setter that uses them; `follow` runs in the same build that rebuilds the
-  view, so they match.
+  method that uses them (`transcriptSelected`); `follow` runs in the same
+  build that rebuilds the view, so they match.
 - **A sweep that dies mid-run** leaves its broken condition in `main.dart`.
   Start it detached (`setsid nohup`), and check `git diff` before going on.
 

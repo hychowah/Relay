@@ -116,7 +116,7 @@ pass unmodified; 1,025 lines.
 `chat.follow(...)` before building the dock. Eight new tests pin the chat
 rules that had none, four of them in `chat_input_test.dart`; the baseline
 has 168 names. Exit: done measures 1–7; the `main.dart` structure entry and
-Known debt row removed; 552 lines.
+Known debt row removed; 551 lines.
 
 **9. Close-out.** After slice 8, one Mac check of about 20 minutes, with the
 user told first: `npm run test:mac -- hover_redraw_test.dart` and
@@ -176,6 +176,6 @@ which means a prerequisite is missing and goes back to the planner.
 ## Next
 
 Slice 8 is done: the chat panel moved into `chat_panel.dart` and `main.dart`
-has 552 lines; its `tools/structure.json` entry and Known debt row are gone.
+has 551 lines; its `tools/structure.json` entry and Known debt row are gone.
 The close-out, slice 9, is next. It starts with the Mac check, which needs
 the user's OK first.
