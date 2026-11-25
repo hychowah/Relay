@@ -82,14 +82,14 @@ pushes the selected tab into those objects. Regions never pass their own
 
 | File | Public interface | Owns |
 |---|---|---|
-| `address_bar.dart` | `AddressInput(workspace, {history})` with `follow(String? url)`, `dispose()`; `BrowserBar(workspace, tab, input)`, `static const height = 46.0`; `inlineCompletion(typed, url)` | Fill-in, suggestions, Esc and paste rules, Go target, `browserTyped`; VPN switch (`/// Desktop only (macOS).`), PDF zoom and Highlight (`/// Desktop only.`) |
+| `address_bar.dart` | `AddressInput(workspace, {history})` with `follow(WorkspaceTab? tab)`, `dispose()`; `BrowserBar(workspace, tab, input)`, `static const height = 46.0`; `inlineCompletion(typed, url)` | Fill-in, suggestions, Esc and paste rules, Go target, `browserTyped`; VPN switch (`/// Desktop only (macOS).`), PDF zoom and Highlight (`/// Desktop only.`) |
 | `new_tab_page.dart` | `NewTabPage`, unchanged | App search, other devices' tabs |
 | `page_stack.dart` | `PageStack(workspace, desktop, address, capture, onChoose, onServers, onSplit, onResized)` | Keyed slots, split geometry, frames, tints, overlays, dividers, drop zones and hover |
 | `chat_dock.dart` | `ChatLayout(open, width, saveOpen, saveWidth)` with `open`, `only`, `width`, `transcriptOpen`, `showPage({closeChat})`, `toggle()`, `toggleOnly()`, `chatOnly()`, `saveWidth()`; `ChatDock(layout, workspace, size, screen, page, panel)` | Dock, phone sheet, compact bar, expand animation, width clamp |
 | `area_capture.dart` | `AreaCapture(shellContext, workspace, layout)` with `start()`, `finish(region?)`, `follow(activeTab)`, `remove()`, `sent(attachment)`, `attachment`, `selecting`, `busy`, `flying`, `slot` | Snapshot, area picking, flight overlay, the phone sheet stepping aside |
 | `workspace_menu.dart` | `enum WorkspaceAction` (names are the recorded names); `ShellActions(shellContext, workspace, updates, layout, saveDraftNow, onConversationChosen)` with `run(action)`; `WorkspaceMenu(actions, workspace, updates, themeMode, onThemeMode, tabMemory)`; `actionItem(...)` for chat's Forward | Every dialog, recording and saving a bug report with its guard, update install, banner on error |
 | `chat_panel.dart` | `ChatInput(workspace, layout, capture, draft, save)` with `draft`, `messages`, `follow(tab, {desktop})`, `transcriptPane`, `transcriptSelection`, `send()`, `clear()`, `flush()`, `refreshSelection()`; `ChatPanel(...)`, stateless | Header, transcript card, messages, status, composer, effort menu |
-| `main.dart` (kept, about 570 lines) | `main()`, `RelayApp`, `RelayShell`, constructors unchanged | Creates and disposes the owners; listeners, lifecycle, fullscreen, banner, toolbar, `_choose`, `_conversationChosen`, `_newConversation`; calls `address.follow(url)` in build, `chat.follow(...)` in the `LayoutBuilder`, `capture.follow(active)` in `_changed` |
+| `main.dart` (kept, about 570 lines) | `main()`, `RelayApp`, `RelayShell`, constructors unchanged | Creates and disposes the owners; listeners, lifecycle, fullscreen, banner, toolbar, `_choose`, `_conversationChosen`, `_newConversation`; calls `address.follow(w.active)` in build, `chat.follow(...)` in the `LayoutBuilder`, `capture.follow(active)` in `_changed` |
 | `workspace_style.dart` (edit) | `const wideWorkspace = 900.0` | The breakpoint value only |
 
 Interface comments are deliverables. Drafts:

@@ -51,7 +51,7 @@ is discarded; a merged one is reverted by a new slice.
 | 1a | Test homes: fakes and shell tests moved unchanged | done |
 | 1b | Safety net: tests for the untested shell behavior | done |
 | 1c | Fix: an unloaded Browser tab's address | done |
-| 2 | Pilot: `address_bar.dart` | to do |
+| 2 | Pilot: `address_bar.dart` | done |
 | 3 | `new_tab_page.dart` | to do |
 | 4 | `chat_dock.dart` and `wideWorkspace` | to do |
 | 5 | `area_capture.dart` | to do |
@@ -84,8 +84,9 @@ typed; an unselected split pane with such a tab shows its address too. Two
 new tests in `address_bar_test.dart`; the baseline has 135 names.
 
 **2. Pilot, `address_bar.dart`.** `AddressInput`, `BrowserBar`,
-`inlineCompletion`; the shell's build calls `address.follow(url)`. Writes the
-playbook. Exit: baseline passes unmodified; `main.dart` near 2,050 lines.
+`inlineCompletion`; the shell's build calls `address.follow(w.active)`, so
+1c's address rule stays in the module. Writes the playbook. Exit: baseline
+passes unmodified; `main.dart` near 2,050 lines.
 
 **3. `new_tab_page.dart`.** A verbatim move. Exit: baseline passes; near
 1,765 lines.
@@ -158,5 +159,8 @@ which means a prerequisite is missing and goes back to the planner.
 
 ## Next
 
-Slice 1c is done: the unloaded Browser tab's address is fixed. Slice 2, the
-pilot `address_bar.dart`, is next; the user said to go on with it.
+Slice 2, the pilot, is done: the address bar is in `address_bar.dart`, and
+the [playbook](phases/phase-01/working/playbook.md) holds the method later
+slices repeat. Second pause point: the user looks at the pilot's diff and the
+playbook. Slice 3, `new_tab_page.dart`, starts only after the user says to go
+on.
