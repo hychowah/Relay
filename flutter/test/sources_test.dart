@@ -8,7 +8,7 @@ import 'package:relay_flutter/relay_api.dart';
 import 'package:relay_flutter/page_surface.dart';
 import 'package:relay_flutter/workspace.dart';
 
-import 'workspace_test.dart' show FakePage;
+import 'support/fake_page.dart';
 
 void main() {
   const source = {
