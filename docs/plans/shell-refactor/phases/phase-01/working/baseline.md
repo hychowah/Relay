@@ -4,7 +4,8 @@ Behavior unchanged means every test below still passes after every slice.
 A slice that moves or replaces a test updates its name here in the same
 slice.
 
-- Taken at: the commit that pins slice 6's workspace-menu rules.
+- Taken at: `7092fd5` (slice 6's tests that pin the workspace-menu and
+  shell-action rules).
 - Command: `flutter test --reporter json`, run in `flutter/`.
 - Result: 155 tests, all passed, none skipped.
 - Names are grouped by test file, from the runner's own output. A name ending

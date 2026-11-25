@@ -55,7 +55,7 @@ is discarded; a merged one is reverted by a new slice.
 | 3 | `new_tab_page.dart` | done |
 | 4 | `chat_dock.dart` and `wideWorkspace` | done |
 | 5 | `area_capture.dart` | done |
-| 6 | `workspace_menu.dart` | to do |
+| 6 | `workspace_menu.dart` | done |
 | 7 | `page_stack.dart` | to do |
 | 8 | `chat_panel.dart` | to do |
 | 9 | Close-out: Mac check, then an upkeep slice | to do |
@@ -102,8 +102,10 @@ had none; the baseline has 143 names. Exit: baseline passes; 1,620 lines.
 had none; the baseline has 149 names. Exit: baseline passes; 1,544 lines.
 
 **6. `workspace_menu.dart`.** `WorkspaceAction`, `ShellActions`,
-`WorkspaceMenu`; action names stay the recorded names. Exit: baseline passes;
-no action strings left; near 1,340 lines.
+`WorkspaceMenu`; action names stay the recorded names. Six new tests pin the
+menu and action rules that had none, five of them in
+`shell_actions_test.dart`; the baseline has 155 names. Exit: baseline passes;
+no action strings left; 1,332 lines.
 
 **7. `page_stack.dart`.** `PageStack`. Exit: the element-identity and
 nothing-over-the-page tests pass unmodified; near 1,050 lines.
@@ -165,7 +167,7 @@ which means a prerequisite is missing and goes back to the planner.
 
 ## Next
 
-Slice 5 is done: `AreaCapture` moved into `area_capture.dart` and
-`main.dart` has 1,544 lines. The user said at the second pause point to go on
-with slices 3-8 with no further planned pauses. Slice 6,
-`workspace_menu.dart`, is next.
+Slice 6 is done: the workspace menu and every shell action moved into
+`workspace_menu.dart` and `main.dart` has 1,332 lines. The user said at the
+second pause point to go on with slices 3-8 with no further planned pauses.
+Slice 7, `page_stack.dart`, is next.

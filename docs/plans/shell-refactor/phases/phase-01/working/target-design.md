@@ -87,7 +87,7 @@ pushes the selected tab into those objects. Regions never pass their own
 | `page_stack.dart` | `PageStack(workspace, desktop, address, capture, onChoose, onServers, onSplit, onResized)` | Keyed slots, split geometry, frames, tints, overlays, dividers, drop zones and hover |
 | `chat_dock.dart` | `ChatLayout(open, width, saveOpen, saveWidth)`, a `ChangeNotifier` the shell redraws on, with `open`, `only`, `width`, `transcriptOpen`, `saveOpenIfChanged()` (the shell's build), `showPage({closeChat})`, `openChat()`, `closeChat()`, `toggle()`, `toggleOnly()`, `showChatOnly()`, `toggleTranscript()`, `resize(width)`, `resizeEnded()`; `ChatDock(layout, workspace, size, screen, page, panel)` | Dock, phone sheet, compact bar, expand animation, width clamp |
 | `area_capture.dart` | `AreaCapture(shellContext, workspace, layout)`, a `ChangeNotifier` the shell redraws on, with `start()`, `finish(region?)`, `follow(activeTab)`, `remove()`, `sent(attachment)`, `attachment`, `busy`, `flying`, `slot` and `pickingOn(tab)`, the frame being picked on when that tab is the one | Snapshot, area picking, flight overlay, the phone sheet stepping aside |
-| `workspace_menu.dart` | `enum WorkspaceAction` (names are the recorded names); `ShellActions(shellContext, workspace, updates, layout, saveDraftNow, onConversationChosen)` with `run(action)`; `WorkspaceMenu(actions, workspace, updates, themeMode, onThemeMode, tabMemory)`; `actionItem(...)` for chat's Forward | Every dialog, recording and saving a bug report with its guard, update install, banner on error |
+| `workspace_menu.dart` | `enum WorkspaceAction` (names are the recorded names); `ShellActions(shellContext, workspace, updates, layout, saveDraftNow, onConversationChosen)` with `run(action)`; `WorkspaceMenu(actions, workspace, updates, themeMode, onThemeMode, tabMemory)`, stateful only so Show tab memory redraws its check; `actionItem(actions, action, label, icon, {enabled})` for the menu and chat's Forward | Every dialog, recording and saving a bug report with its guard, update install, banner on error |
 | `chat_panel.dart` | `ChatInput(workspace, layout, capture, draft, save)` with `draft`, `messages`, `follow(tab, {desktop})`, `transcriptPane`, `transcriptSelection`, `send()`, `clear()`, `flush()`, `refreshSelection()`; `ChatPanel(...)`, stateless | Header, transcript card, messages, status, composer, effort menu |
 | `main.dart` (kept, about 570 lines) | `main()`, `RelayApp`, `RelayShell`, constructors unchanged | Creates and disposes the owners; listeners, lifecycle, fullscreen, banner, toolbar, `_choose`, `_conversationChosen`, `_newConversation`; calls `address.follow(w.active)` in build, `chat.follow(...)` in the `LayoutBuilder`, `capture.follow(active)` in `_changed` |
 | `workspace_style.dart` (edit) | `const wideWorkspace = 900.0` | The breakpoint value only |
@@ -235,7 +235,8 @@ Each removed in the slice that replaces it:
   (a tab change ends an area selection on a phone while an agent
   presentation closes chat), so the shell's build still saves it once.
 - U4. macOS-only controls cannot render on WSL: `--color-moved` must show
-  them moved verbatim in slices 2 and 6; the Mac check confirms.
+  them moved verbatim in slices 2 and 6 (it did for Show tab memory in slice
+  6); the Mac check confirms.
 - U5. Splitting the test file gives each file its own isolate, so statics such
   as `FakePage.navigateError` reset per file. Slice 1a compares per-test
   results from `flutter test --reporter json` before and after, in ignored
@@ -244,7 +245,9 @@ Each removed in the slice that replaces it:
   Slice 1b adds missing routes to `support/fixture.dart` only.
 - U7. Can the update-install closure be driven on WSL? Slice 1b reads
   `AppUpdates.install`; if it fakes without product changes, pin "draft and
-  session saved before restart"; otherwise slice 6 moves it verbatim.
+  session saved before restart"; otherwise slice 6 moves it verbatim. Yes:
+  slice 1b pinned it, and slice 6 pinned the idle check and its offline rule
+  through the fixture's busy route.
 - U8. Is the suspected unloaded-tab address bug real? Yes: slice 1b confirmed
   it, and slice 1c fixed it.
 

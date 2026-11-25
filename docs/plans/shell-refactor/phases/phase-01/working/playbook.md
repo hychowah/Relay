@@ -40,7 +40,10 @@ The pilot in practice:
   `pointerDown`, `tapped`, `submitted`, `go` and `edited`. The view draws
   and wires its widgets to those methods (`onSelected: input.picked`). A
   view calls owner methods and passes in, or acts on, what needs its
-  context; an owner never takes a region's `BuildContext`. Enter passes the
+  context; an owner never takes a region's `BuildContext`. An owner the
+  shell creates and disposes may store the shell's own context, guarded by
+  `context.mounted` exactly where the shell checked `mounted`
+  (`AreaCapture`, `ShellActions`). Enter passes the
   field's `submit` callback in, as `input.submitted(submit)`. `edited`
   returns `now` itself unless the fill-in stays, and the view's formatter
   invokes `AutocompleteFirstOptionIntent` with its own context exactly when
@@ -135,10 +138,9 @@ The pilot in practice:
     `python3 tools/check_records.py --staged` before each commit.
 16. **Clean up.** Delete your own files in `tmp/`, then send the hand-back.
 
-Splitting the move into "add the copy" and "delete the original" commits
-would make each commit compile, but neither commit's diff would show a move.
-One move commit keeps the `--color-moved` evidence in one diff, and it
-compiles and passes on its own.
+Do not split the move into "add the copy" and "delete the original": neither
+diff would show a move. One move commit keeps the `--color-moved` evidence
+in one diff.
 
 ## Check commands
 
@@ -265,10 +267,9 @@ npm run build
   temporary commit.
 - **Seeing a test fail on old code.** Put the old file in place with
   `git show <commit>:<path> > <path>`, run the test, then restore yours.
-- **Subagents and worktrees.** A subagent cannot call EnterWorktree. The
-  main agent creates the worktree under a readable name; the subagent works
-  there by absolute path and starts every shell command with `cd <worktree>
-  &&`, since the shell does not keep `cd`.
+- **Subagents and worktrees.** A subagent cannot call EnterWorktree; it
+  works in the worktree its starter made, by absolute path, with `cd
+  <worktree> &&` before every shell command.
 - **Private types in a public API.** `flutter_lints` reports a public field
   or method whose type names a private type (the pilot's private
   `_Suggestion` typedef). The owner's fields are library-private, so they
@@ -292,10 +293,8 @@ npm run build
 - **`late final` owners.** An owner created by `late final` is built on its
   first use, which is the shell's first build. That is fine for the shell:
   build always runs before `dispose`.
-- **Reviewers need the full Flutter path.** An auditor or bug reviewer
-  that /smart-commit starts does not find `flutter` on `PATH`. Give it the
-  SDK's path from the machine notes in its prompt, or it skips
-  `flutter analyze` and the tests.
+- **Reviewers need the full Flutter path.** Give /smart-commit's
+  reviewers the SDK's path, or they skip `flutter analyze` and the tests.
 - **Recorded size versus file length.** The recorded size can be lower than
   the file's length before the slice (slice 1c grew `main.dart` past it).
   `--update` sets it to the new length; the Known debt row takes the same
@@ -346,11 +345,19 @@ npm run build
   allows (`start`'s check that no capture is running, behind a disabled
   button) cannot fail a test through `RelayApp`. Say so in the hand-back and
   move it as it is.
+- **A view that calls the shell's `setState`.** Make it a
+  `StatefulWidget` with no fields, so the line moves verbatim (Show tab
+  memory), and check that nothing else needed the shell's redraw.
+- **Field promotion.** After the first `_updates!`, a private final field
+  is promoted; drop the later `!` the analyzer flags.
+- **An enum-first step.** Wrapped calls can pass the 50-line allowance; put
+  the new type in the new module from the start.
+- **A test file at its limit.** Pins that would pass 800 lines go in a new
+  file named for their owner (`shell_actions_test.dart`).
+- **Fixture routes.** A route or flag a pin adds to `support/fixture.dart`
+  defaults to the old answer.
 
 ## Hand-back contents
 
-Besides /deliver-change's format: the new module's public interface
-comments as committed; `main.dart` lines before and after and the
-`structure.json` diff; test totals and the name comparison; the
-`--color-moved` summary with every non-move edit listed; bugs noticed but
-not fixed; whether a Mac run is needed.
+As the [target design](target-design.md)'s Worker hand-back says, plus the
+test name comparison.
