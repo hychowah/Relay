@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:relay_flutter/main.dart';
+import 'package:relay_flutter/split_layout.dart';
 
 import 'support/fake_page.dart';
 import 'support/fixture.dart';
@@ -515,6 +516,45 @@ void main() {
       expect(f.history.where((call) => call.startsWith('POST')), [
         'POST /api/browser-history/typed {"url":"https://example.com/desk"}',
       ]);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'an unselected split pane whose Browser tab could not load again shows '
+    'its address',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final f = Fixture(unloadAfter: const Duration(minutes: 30));
+      await f.w.start();
+      final browser = await f.w.openApp(f.w.apps[0]);
+      final room = await f.w.openApp(f.w.apps[1]);
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, saveDraft: (_) async {}),
+      );
+      await tester.pump(const Duration(minutes: 31));
+      expect(browser.page, isNull);
+
+      // Shown beside the selected room, its reload fails.
+      FakePage.navigateError = StateError('No network');
+      addTearDown(() => FakePage.navigateError = null);
+      f.w.dropInSplit(room, browser, SplitSide.left);
+      await tester.pumpAndSettle();
+      expect((f.w.active, browser.page, browser.unloaded?.url), (
+        room,
+        null,
+        'https://example.com/desk',
+      ));
+      expect(
+        find.descendant(
+          of: find.byKey(ValueKey('bar-${browser.id}')),
+          matching: find.text('https://example.com/desk'),
+        ),
+        findsOneWidget,
+      );
       await tester.pumpWidget(const SizedBox());
     },
   );

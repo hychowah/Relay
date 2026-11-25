@@ -629,8 +629,7 @@ class _RelayShellState extends State<RelayShell> {
 
   @override
   Widget build(BuildContext context) {
-    // The active tab's address; an unloaded Browser tab keeps its own.
-    final url = w.active?.unloaded?.url ?? w.active?.page?.url;
+    final url = _addressOf(w.active);
     if (url != lastPageUrl) {
       lastPageUrl = url;
       fill = null;
@@ -742,7 +741,7 @@ class _RelayShellState extends State<RelayShell> {
 
   /// Another pane's address, drawn as the address field draws it.
   Widget _addressShown(WorkspaceTab tab) {
-    final url = tab.page?.url;
+    final url = _addressOf(tab);
     final text = url == null || url == 'about:blank' ? '' : url;
     return InputDecorator(
       decoration: _addressDecoration,
@@ -2418,6 +2417,9 @@ String? inlineCompletion(String typed, String url) {
   }
   return typed + address.substring(start.length);
 }
+
+/// A tab's address; an unloaded Browser tab keeps its own until it loads.
+String? _addressOf(WorkspaceTab? tab) => tab?.unloaded?.url ?? tab?.page?.url;
 
 /// The height of a Browser tab's bar above its page. It is fixed, so a page
 /// keeps its size whichever pane is selected.
