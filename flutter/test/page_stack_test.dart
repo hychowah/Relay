@@ -436,4 +436,203 @@ void main() {
     expect(f.stored, hasLength(saves + 1));
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets("what shows in place of a Browser tab's page starts below its "
+      'bar, and its saved report offers no App servers', (tester) async {
+    final f = Fixture();
+    await f.w.start();
+    final browser = await f.w.openApp(f.w.apps[0]);
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    browser.error = 'The page failed.';
+    f.w.changed();
+    await tester.pumpAndSettle();
+    final bar = tester.getRect(find.byKey(const ValueKey('address-bar')));
+    expect(
+      tester.getRect(find.byKey(ValueKey('error-${browser.id}'))).top,
+      bar.bottom,
+    );
+
+    // A source cited from the Browser opens in its tab, whose page then fails.
+    await f.w.openSource({...deskReport, 'appId': 'browser'});
+    browser.error = 'The page failed.';
+    f.w.changed();
+    await tester.pumpAndSettle();
+    final report = find.byKey(ValueKey('report-${browser.id}'));
+    expect(report, findsOneWidget);
+    expect(tester.getRect(report).top, bar.bottom);
+    expect(find.textContaining('Its app view could not open'), findsOneWidget);
+    expect(find.text('App servers'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a dragged tab highlights the half of a pane it would take, '
+      'and nothing over its own page', (tester) async {
+    final f = Fixture();
+    await f.w.start();
+    await f.w.openApp(f.w.apps[1]);
+    final browser = await f.w.openApp(f.w.apps[0]);
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    final page = tester.getRect(find.byKey(ValueKey('page-${browser.id}')));
+    final bar = tester.getRect(find.byKey(const ValueKey('address-bar')));
+    final pane = Rect.fromLTRB(page.left, bar.top, page.right, page.bottom);
+    Finder chip(String title) => find.descendant(
+      of: find.byType(WorkspaceTabs),
+      matching: find.text(title),
+    );
+    final highlights = find.byWidgetPredicate(
+      (w) =>
+          w.key is ValueKey<String> &&
+          (w.key! as ValueKey<String>).value.startsWith('drop-'),
+    );
+
+    final own = await tester.startGesture(
+      tester.getCenter(chip('Browser')),
+      kind: PointerDeviceKind.mouse,
+    );
+    await own.moveBy(const Offset(0, 40));
+    await own.moveTo(Offset(pane.left + 40, pane.center.dy));
+    await tester.pump();
+    expect(highlights, findsNothing);
+    await own.up();
+    await tester.pumpAndSettle();
+    expect(f.w.shownSplit, isNull);
+
+    final drag = await tester.startGesture(
+      tester.getCenter(chip('Room layout')),
+      kind: PointerDeviceKind.mouse,
+    );
+    await drag.moveBy(const Offset(0, 40));
+    await drag.moveTo(Offset(pane.left + 40, pane.center.dy));
+    await tester.pump();
+    expect(
+      tester.getRect(find.byKey(const ValueKey('drop-left'))),
+      Rect.fromLTWH(pane.left, pane.top, pane.width / 2, pane.height),
+    );
+    await drag.moveTo(Offset(pane.center.dx, pane.bottom - 30));
+    await tester.pump();
+    expect(
+      tester.getRect(find.byKey(const ValueKey('drop-bottom'))),
+      Rect.fromLTWH(
+        pane.left,
+        pane.top + pane.height / 2,
+        pane.width,
+        pane.height / 2,
+      ),
+    );
+    await drag.up();
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a saved report shows again when its loaded app view fails', (
+    tester,
+  ) async {
+    final f = Fixture();
+    await f.w.start();
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    final tab = await f.w.openSource(deskReport);
+    await tester.pumpAndSettle();
+    final report = find.byKey(ValueKey('report-${tab.id}'));
+    expect(report, findsNothing);
+    tab.error = 'The view stopped.';
+    f.w.changed();
+    await tester.pumpAndSettle();
+    expect(report, findsOneWidget);
+    expect(
+      find.textContaining('could not open: The view stopped.'),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets("a split Browser pane's bar fits inside its frame, and a click "
+      'that selects a dimmed pane is recorded', (tester) async {
+    final f = Fixture();
+    await f.w.start();
+    final room = await f.w.openApp(f.w.apps[1]);
+    final browser = await f.w.openApp(f.w.apps[0]);
+    f.w.dropInSplit(room, browser, SplitSide.left);
+    f.w.select(browser);
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    Rect page(WorkspaceTab tab) =>
+        tester.getRect(find.byKey(ValueKey('page-${tab.id}')));
+    final bar = tester.getRect(find.byKey(const ValueKey('address-bar')));
+    expect((bar.left, bar.right), (page(browser).left, page(browser).right));
+
+    f.w.recorder.start();
+    await tester.tapAt(page(room).center);
+    await tester.pump();
+    expect(f.w.active, room);
+    expect(
+      f.w.recorder.events
+          .where((e) => e['type'] == 'action')
+          .map((e) => (e['name'], e['tab'])),
+      [('select tab', 'Room layout')],
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('split dividers show resize cursors, and a stacked one saves '
+      "at its drag's end", (tester) async {
+    final f = Fixture();
+    await f.w.start();
+    final room = await f.w.openApp(f.w.apps[1]);
+    final browser = await f.w.openApp(f.w.apps[0]);
+    final second = await f.w.openApp(f.w.apps[0]);
+    f.w.dropInSplit(room, second, SplitSide.left);
+    f.w.dropInSplit(browser, second, SplitSide.top);
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    Finder divider(int index) => find.byKey(ValueKey('split-divider-$index'));
+    MouseCursor cursor(int index) => tester
+        .widget<MouseRegion>(
+          find
+              .descendant(
+                of: divider(index),
+                matching: find.byType(MouseRegion),
+              )
+              .first,
+        )
+        .cursor;
+    expect(cursor(0), SystemMouseCursors.resizeColumn);
+    expect(cursor(1), SystemMouseCursors.resizeRow);
+
+    final saves = f.stored.length;
+    final drag = await tester.startGesture(
+      tester.getCenter(divider(1)),
+      kind: PointerDeviceKind.mouse,
+    );
+    await drag.moveBy(const Offset(0, 2));
+    await drag.moveBy(const Offset(0, 100));
+    await tester.pump();
+    expect(f.stored, hasLength(saves));
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(f.stored, hasLength(saves + 1));
+    await tester.pumpWidget(const SizedBox());
+  });
 }

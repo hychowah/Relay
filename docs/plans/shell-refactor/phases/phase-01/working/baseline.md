@@ -7,7 +7,7 @@ slice.
 - Taken at: `7092fd5` (slice 6's tests that pin the workspace-menu and
   shell-action rules).
 - Command: `flutter test --reporter json`, run in `flutter/`.
-- Result: 155 tests, all passed, none skipped.
+- Result: 160 tests, all passed, none skipped.
 - Names are grouped by test file, from the runner's own output. A name ending
   in a variant note is one test run on that platform.
 
@@ -118,13 +118,18 @@ slice.
 - search filters the apps and hides other devices, and Enter opens the first match
 - choosing an app closes chat on a phone and keeps it on the desktop
 
-## test/page_stack_test.dart (5)
+## test/page_stack_test.dart (10)
 
 - dragging tabs splits the page without recreating either view
 - split dividers resize side by side and stacked, and reset
 - an app tab that cannot load opens the App servers screen
 - a loading app tab shows a spinner, and a Browser tab error offers no App servers
 - dragging a split divider moves the tab's split map with it; the workspace hears only the end
+- what shows in place of a Browser tab's page starts below its bar, and its saved report offers no App servers
+- a dragged tab highlights the half of a pane it would take, and nothing over its own page
+- a saved report shows again when its loaded app view fails
+- a split Browser pane's bar fits inside its frame, and a click that selects a dimmed pane is recorded
+- split dividers show resize cursors, and a stacked one saves at its drag's end
 
 ## test/region_capture_test.dart (2)
 
