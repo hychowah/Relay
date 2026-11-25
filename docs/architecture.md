@@ -68,7 +68,7 @@ The service has two entry points: `server/index.ts` serves the web page, and
 | File | Lines | Where its code should go |
 |---|---|---|
 | `flutter/test/workspace_test.dart` | 1,062 | Split with `workspace.dart` |
-| `flutter/lib/main.dart` | 1,332 | `page_stack.dart`, `chat_panel.dart`; `main.dart` keeps startup, the shell's state owners and the toolbar |
+| `flutter/lib/main.dart` | 1,025 | `chat_panel.dart`; `main.dart` keeps startup, the shell's state owners and the toolbar |
 | `flutter/lib/web_page.dart`, `flutter/test/web_page_test.dart` | 1,535, 840 | `browser_address.dart`, `mac_browser.dart` (macOS), `page_trace.dart`, `page_highlights.dart`, `hosted_page.dart`; the test's fake to `flutter/test/support/` |
 | `flutter/lib/workspace.dart` | 1,340 | `conversation_state.dart`, `workspace_session.dart` (save, restore, device tabs) |
 | `server/store.ts` | 877 | Keeps the database and schema; `store-browser.ts`, `store-runs.ts`, `store-memory.ts` |

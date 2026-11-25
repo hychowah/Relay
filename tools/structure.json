@@ -78,7 +78,7 @@
     }
   ],
   "sizes": {
-    "flutter/lib/main.dart": 1332,
+    "flutter/lib/main.dart": 1025,
     "flutter/lib/web_page.dart": 1535,
     "flutter/lib/workspace.dart": 1340,
     "flutter/test/web_page_test.dart": 840,
