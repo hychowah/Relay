@@ -52,7 +52,7 @@ is discarded; a merged one is reverted by a new slice.
 | 1b | Safety net: tests for the untested shell behavior | done |
 | 1c | Fix: an unloaded Browser tab's address | done |
 | 2 | Pilot: `address_bar.dart` | done |
-| 3 | `new_tab_page.dart` | to do |
+| 3 | `new_tab_page.dart` | done |
 | 4 | `chat_dock.dart` and `wideWorkspace` | to do |
 | 5 | `area_capture.dart` | to do |
 | 6 | `workspace_menu.dart` | to do |
@@ -157,11 +157,14 @@ which means a prerequisite is missing and goes back to the planner.
   setter: for the workspace.dart refactor.
 - A settings object replacing `RelayApp`'s parameters.
 - A `useWindow(tester, size)` test helper for the 20 repeated window setups.
+- `AddressInput.edited` could return a plain flag instead of signalling the
+  kept fill-in through object identity.
+- A public `Suggestion` type name instead of the spelled-out record type in
+  `AddressInput`'s public methods.
 
 ## Next
 
-Slice 2, the pilot, is done: the address bar is in `address_bar.dart`, and
-the [playbook](phases/phase-01/working/playbook.md) holds the method later
-slices repeat. Second pause point: the user looks at the pilot's diff and the
-playbook. Slice 3, `new_tab_page.dart`, starts only after the user says to go
-on.
+Slice 3, `new_tab_page.dart`, is done: the page moved verbatim out of
+`main.dart`. The user said at the second pause point to go on with slices 3-8
+with no further planned pauses. Slice 4, `chat_dock.dart` and `wideWorkspace`,
+is next.

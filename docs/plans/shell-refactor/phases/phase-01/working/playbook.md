@@ -122,8 +122,9 @@ The pilot in practice:
     Anything else is a behavior change and does not belong in the slice.
 13. **Structure and map.** `python3 tools/check_structure.py --update` (it
     only lowers), then set the `Lines` cell of the `main.dart` Known debt
-    row in `docs/architecture.md` to the new count. Both go in the move
-    commit.
+    row in `docs/architecture.md` to the new count, and drop the module's
+    own name from that row's "Where its code should go" cell, since the
+    module exists now. All go in the move commit.
 14. **Other checks.** `npm test`, `npm run build`,
     `python3 tools/check_records.py`, `python3 tools/check_structure.py`.
 15. **Commits.** Any test-only pinning commit first (step 5). Then one
