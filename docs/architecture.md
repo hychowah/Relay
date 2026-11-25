@@ -67,10 +67,20 @@ The service has two entry points: `server/index.ts` serves the web page, and
 
 | File | Lines | Where its code should go |
 |---|---|---|
-| `flutter/test/workspace_test.dart` | 3,084 | Fakes to `flutter/test/support/`; tests split with `main.dart` and `workspace.dart` |
-| `flutter/lib/main.dart` | 2,429 | `address_bar.dart`, `page_stack.dart`, `new_tab_page.dart`, `chat_panels.dart`; `main.dart` keeps startup and the shell |
+| `flutter/test/workspace_test.dart` | 3,084 | Fakes to `flutter/test/support/`; shell tests beside the shell modules; the rest split with `workspace.dart` |
+| `flutter/lib/main.dart` | 2,429 | `address_bar.dart`, `new_tab_page.dart`, `chat_dock.dart`, `area_capture.dart`, `workspace_menu.dart`, `page_stack.dart`, `chat_panel.dart`; `main.dart` keeps startup, the shell's state owners and the toolbar |
 | `flutter/lib/web_page.dart`, `flutter/test/web_page_test.dart` | 1,535, 840 | `browser_address.dart`, `mac_browser.dart` (macOS), `page_trace.dart`, `page_highlights.dart`, `hosted_page.dart`; the test's fake to `flutter/test/support/` |
 | `flutter/lib/workspace.dart` | 1,340 | `conversation_state.dart`, `workspace_session.dart` (save, restore, device tabs) |
 | `server/store.ts` | 877 | Keeps the database and schema; `store-browser.ts`, `store-runs.ts`, `store-memory.ts` |
 | `server/app.ts` | 864 | `tool-handlers.ts`, `runs.ts`; bots and memories to `add*` route modules |
 | `web/App.tsx`, `web/style.css` | 1,877, 2,305 | Maintained fallback, not split |
+
+## Structure window
+
+The [Flutter shell refactor](plans/shell-refactor/master-plan.md) owns
+`flutter/lib/main.dart`, `flutter/test/workspace_test.dart`,
+`flutter/test/sources_test.dart`, `flutter/lib/workspace_style.dart`,
+`flutter/test/support/`, the new shell modules and their tests, and the
+`main.dart` and `workspace_test.dart` entries in `tools/structure.json` and
+Known debt. Do not edit them until the plan's structure window releases them;
+a shell feature waits or goes into a module that already exists.
