@@ -119,13 +119,21 @@ websites. The WSL backend owns all model calls and credentials.
 ### Toolchain and checks
 
 The client uses Flutter 3.50.0 / Dart 3.14.0; dependency versions are pinned in
-`pubspec.lock`. Use a Flutter SDK of that version. In `flutter/`:
+`pubspec.lock`. Use a Flutter SDK of that version. In `flutter/` on WSL (on
+a Mac, leave out the `systemd-run` prefix):
 
 ```sh
 flutter pub get
 flutter analyze
-flutter test
+systemd-run --user --scope -p MemoryMax=6G -p MemorySwapMax=0 flutter test
 ```
+
+On WSL, run every `flutter test`, whole suite or one file, under that memory
+cap. A test that never settles keeps pumping frames, and Flutter keeps each
+unmounted `TextField`'s subtree, so one test process can grow by gigabytes
+and restart WSL. The cap stops only the test run. A healthy full run, 8 test
+files at a time, peaks at about 4.6 GB; when the suite outgrows the cap,
+measure the peak again and raise the cap.
 
 The official WebView plugin does not support Linux, so WSL tests use fake page
 surfaces and separately exercise the real HTML app bridge. A Mac build needs
