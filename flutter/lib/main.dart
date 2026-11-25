@@ -20,23 +20,18 @@ import 'windows_web_view.dart';
 import 'workspace.dart';
 import 'conversation_history.dart';
 import 'provider_settings.dart';
-import 'workspace_dialogs.dart';
 import 'workspace_menu.dart';
 import 'app_library.dart';
-import 'app_servers.dart';
 import 'app_updates.dart';
 import 'conversation_view.dart';
 import 'workspace_style.dart';
 import 'workspace_tabs.dart';
 import 'page_surface.dart';
 import 'region_capture.dart';
-import 'shared_folders.dart';
 import 'split_layout.dart';
-import 'stored_data.dart';
 import 'tab_memory.dart';
 import 'tab_preview.dart';
 import 'window_capture.dart';
-import 'bug_reports.dart';
 import 'transcript_pane.dart';
 
 Future<void> main() async {
@@ -266,7 +261,6 @@ class _RelayShellState extends State<RelayShell> {
   late final address = AddressInput(w, history: widget.browserHistory);
   final messagesScroll = ScrollController();
   Timer? saveTimer;
-  bool reportingBug = false;
   late final layout = ChatLayout(
     widget.initialChatOpen,
     widget.initialChatWidth,
@@ -274,6 +268,14 @@ class _RelayShellState extends State<RelayShell> {
     widget.saveChatWidth,
   );
   late final capture = AreaCapture(context, w, layout);
+  late final actions = ShellActions(
+    context,
+    w,
+    widget.updates,
+    layout,
+    _saveDraftNow,
+    _selectedConversation,
+  );
 
   /// The pane a tab is being dragged over and the side it would take.
   (WorkspaceTab, SplitSide)? dropping;
@@ -312,6 +314,11 @@ class _RelayShellState extends State<RelayShell> {
       const Duration(milliseconds: 300),
       () => widget.saveDraft(draft.text),
     );
+  }
+
+  Future<void> _saveDraftNow() async {
+    saveTimer?.cancel();
+    await widget.saveDraft(draft.text);
   }
 
   void _changed() {
@@ -396,150 +403,6 @@ class _RelayShellState extends State<RelayShell> {
     try {
       await w.newConversation();
       if (mounted) _selectedConversation();
-    } catch (e) {
-      w.error = e.toString();
-      w.changed();
-    }
-  }
-
-  Future<void> _recordBug() async {
-    if (!w.recorder.recording) {
-      w.recorder.start();
-      return;
-    }
-    // Another click while a report is captured or asked about does nothing;
-    // a second capture would clear the first one's page pictures.
-    if (reportingBug) return;
-    reportingBug = true;
-    // The recording goes on while the user describes the bug; this marks
-    // where the reproduction ended.
-    w.recorder.action('stop pressed');
-    try {
-      // Capture before the dialog so the picture shows what the user saw.
-      Uint8List? screenshot;
-      try {
-        screenshot = await captureWindow(context);
-      } catch (_) {
-        /* The report is still useful without a picture. */
-      }
-      if (!mounted) return;
-      final size = MediaQuery.sizeOf(context);
-      // Release builds strip Size.toString, so write the numbers out.
-      final window = '${size.width.round()} × ${size.height.round()}';
-      final answer = await askBugReport(context, w.recorder.events.length);
-      if (answer == null) return;
-      if (!answer.save) {
-        w.recorder.stop();
-        return;
-      }
-      final file = await w.saveBugReport(
-        answer.description,
-        category: answer.category,
-        screenshot: screenshot,
-        client: {
-          'app': widget.updates?.installedLabel,
-          'window': window,
-          'chatOpen': layout.open,
-          'chatOnly': layout.only,
-          'chatWidth': layout.width,
-        },
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Report saved: $file')));
-      }
-    } finally {
-      reportingBug = false;
-    }
-  }
-
-  Future<void> _menu(WorkspaceAction action) async {
-    if (action != WorkspaceAction.record) {
-      w.recorder.action('menu', {'item': action.name});
-    }
-    try {
-      switch (action) {
-        case WorkspaceAction.record:
-          await _recordBug();
-        case WorkspaceAction.reports:
-          await showDialog<void>(
-            context: context,
-            builder: (_) => BugReportsDialog(api: w.api),
-          );
-        case WorkspaceAction.servers:
-          await showDialog<void>(
-            context: context,
-            builder: (_) => AppServersDialog(api: w.api),
-          );
-        case WorkspaceAction.stored:
-          await showDialog<void>(
-            context: context,
-            builder: (_) => StoredDataDialog(api: w.api),
-          );
-        case WorkspaceAction.folders:
-          await showDialog<void>(
-            context: context,
-            builder: (_) => SharedFoldersDialog(api: w.api),
-          );
-        case WorkspaceAction.provider:
-          await showDialog<void>(
-            context: context,
-            builder: (_) => ProviderSettings(workspace: w),
-          );
-        case WorkspaceAction.bots:
-          await showBots(context, w, _selectedConversation);
-        case WorkspaceAction.memory:
-          await showDialog<void>(
-            context: context,
-            builder: (_) =>
-                MemoryDialog(workspace: w, onSelected: _selectedConversation),
-          );
-        case WorkspaceAction.forward:
-          await showDialog<void>(
-            context: context,
-            builder: (_) =>
-                ForwardDialog(workspace: w, onSelected: _selectedConversation),
-          );
-        case WorkspaceAction.library:
-          await w.refreshApps();
-          if (!mounted) return;
-          await showDialog<void>(
-            context: context,
-            builder: (_) => AppLibrary(workspace: w),
-          );
-        case WorkspaceAction.updates:
-          unawaited(widget.updates!.loadPreviews());
-          await showDialog<void>(
-            barrierDismissible: false,
-            context: context,
-            builder: (_) => ListenableBuilder(
-              listenable: w,
-              builder: (_, _) => UpdateDialog(
-                updates: widget.updates!,
-                busy: () => w.busy,
-                install: () async {
-                  if (w.busy) return;
-                  await widget.updates!.install(() async {
-                    await w.api.checkIdleBeforeRestart(
-                      w.deviceId,
-                      w.windowId,
-                      allowOffline:
-                          widget.updates!.returningToStable &&
-                          w.api.origin != widget.updates!.origin,
-                    );
-                    saveTimer?.cancel();
-                    await widget.saveDraft(draft.text);
-                    await w.saveSession();
-                  });
-                },
-              ),
-            ),
-          );
-        case WorkspaceAction.reconnect:
-          await w.start();
-        case WorkspaceAction.chat:
-          layout.showChatOnly();
-      }
     } catch (e) {
       w.error = e.toString();
       w.changed();
@@ -810,7 +673,7 @@ class _RelayShellState extends State<RelayShell> {
                 error: tab.error,
                 onServers: tab.isBrowser
                     ? null
-                    : () => _menu(WorkspaceAction.servers),
+                    : () => actions.run(WorkspaceAction.servers),
               ),
             ),
           if (tab.error != null && tab.report == null)
@@ -826,7 +689,7 @@ class _RelayShellState extends State<RelayShell> {
                     // The app's server may be stopped.
                     if (!tab.isBrowser)
                       OutlinedButton.icon(
-                        onPressed: () => _menu(WorkspaceAction.servers),
+                        onPressed: () => actions.run(WorkspaceAction.servers),
                         icon: const Icon(Icons.dns_outlined),
                         label: const Text('App servers'),
                       ),
@@ -989,7 +852,7 @@ class _RelayShellState extends State<RelayShell> {
           tooltip: w.recorder.recording
               ? 'Recording. Stop and save'
               : 'Record a bug or request',
-          onPressed: () => _menu(WorkspaceAction.record),
+          onPressed: () => actions.run(WorkspaceAction.record),
           icon: w.recorder.recording
               ? const Icon(Icons.fiber_manual_record, color: Colors.red)
               : Icon(
@@ -1008,133 +871,16 @@ class _RelayShellState extends State<RelayShell> {
             color: layout.open ? colors.primary : colors.onSurfaceVariant,
           ),
         ),
-        MenuAnchor(
-          animated: !MediaQuery.disableAnimationsOf(context),
-          builder: (context, controller, child) => IconButton(
-            tooltip: 'Workspace menu',
-            onPressed: () =>
-                controller.isOpen ? controller.close() : controller.open(),
-            icon: Badge(
-              isLabelVisible: widget.updates?.ready ?? false,
-              child: const Icon(Icons.tune_rounded),
-            ),
-          ),
-          menuChildren: [
-            const MenuLabel('WORKSPACE'),
-            _menuItem(
-              WorkspaceAction.library,
-              'App library',
-              Icons.grid_view_rounded,
-            ),
-            _menuItem(WorkspaceAction.bots, 'Bots', Icons.smart_toy_outlined),
-            _menuItem(
-              WorkspaceAction.memory,
-              'Memory',
-              Icons.bookmarks_outlined,
-            ),
-            _menuItem(
-              WorkspaceAction.servers,
-              'App servers',
-              Icons.dns_outlined,
-            ),
-            _menuItem(
-              WorkspaceAction.folders,
-              'Shared folders',
-              Icons.folder_outlined,
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 5),
-              child: Divider(),
-            ),
-            const MenuLabel('CONNECTION'),
-            _menuItem(
-              WorkspaceAction.provider,
-              'Provider and model',
-              Icons.tune_rounded,
-            ),
-            _menuItem(
-              WorkspaceAction.reconnect,
-              'Reconnect',
-              Icons.refresh_rounded,
-            ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 5),
-              child: Divider(),
-            ),
-            _menuItem(
-              WorkspaceAction.chat,
-              'Chat only',
-              Icons.chat_bubble_outline_rounded,
-            ),
-            SubmenuButton(
-              leadingIcon: const Icon(Icons.contrast_rounded, size: 17),
-              menuChildren: [
-                for (final (mode, label) in const [
-                  (ThemeMode.system, 'System'),
-                  (ThemeMode.light, 'Light'),
-                  (ThemeMode.dark, 'Dark'),
-                ])
-                  MenuItemButton(
-                    leadingIcon: Icon(
-                      widget.themeMode == mode ? Icons.check : null,
-                      size: 16,
-                    ),
-                    onPressed: () => widget.onThemeMode(mode),
-                    child: Text(label),
-                  ),
-              ],
-              child: const Text('Appearance'),
-            ),
-            CheckboxMenuButton(
-              value: w.newestTabFirst,
-              onChanged: (value) => w.setNewestTabFirst(value!),
-              child: const Text('Newest tab first'),
-            ),
-            _menuItem(
-              WorkspaceAction.stored,
-              'Stored data',
-              Icons.storage_rounded,
-            ),
-            if (widget.updates case final updates?)
-              MenuItemButton(
-                leadingIcon: Badge(
-                  isLabelVisible: updates.ready,
-                  child: const Icon(Icons.system_update_alt_rounded, size: 17),
-                ),
-                onPressed: () => _menu(WorkspaceAction.updates),
-                child: Text(updates.ready ? 'Update ready' : 'Updates'),
-              ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 5),
-              child: Divider(),
-            ),
-            const MenuLabel('DEVELOPMENT'),
-            _menuItem(
-              WorkspaceAction.reports,
-              'Reports',
-              Icons.bug_report_outlined,
-            ),
-            if (Platform.isMacOS)
-              CheckboxMenuButton(
-                value: tabMemory.on,
-                onChanged: (value) => setState(() => tabMemory.show(value!)),
-                child: const Text('Show tab memory'),
-              ),
-          ],
+        WorkspaceMenu(
+          actions,
+          w,
+          widget.updates,
+          widget.themeMode,
+          widget.onThemeMode,
+          tabMemory,
         ),
       ],
     ),
-  );
-
-  Widget _menuItem(
-    WorkspaceAction action,
-    String label,
-    IconData icon, {
-    bool enabled = true,
-  }) => MenuItemButton(
-    leadingIcon: Icon(icon, size: 17),
-    onPressed: enabled ? () => _menu(action) : null,
-    child: Text(label),
   );
 
   Widget _chat(bool desktop) => Material(
@@ -1202,7 +948,8 @@ class _RelayShellState extends State<RelayShell> {
                   icon: const Icon(Icons.more_horiz),
                 ),
                 menuChildren: [
-                  _menuItem(
+                  actionItem(
+                    actions,
                     WorkspaceAction.forward,
                     'Forward conversation',
                     Icons.forward_to_inbox_outlined,
@@ -1488,7 +1235,7 @@ class _RelayShellState extends State<RelayShell> {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: TextButton(
-                      onPressed: () => _menu(WorkspaceAction.provider),
+                      onPressed: () => actions.run(WorkspaceAction.provider),
                       style: TextButton.styleFrom(
                         foregroundColor: colors.onSurfaceVariant,
                         padding: const EdgeInsets.symmetric(horizontal: 6),
