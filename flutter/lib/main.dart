@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import 'address_bar.dart';
+import 'chat_dock.dart';
 import 'new_tab_page.dart';
 import 'browser_connection.dart';
 import 'browser_transcript.dart';
@@ -271,14 +272,16 @@ class _RelayShellState extends State<RelayShell> {
   // The composer's thumbnail, and the captured picture on its way there.
   final captureSlot = GlobalKey();
   OverlayEntry? flight;
-  late bool chatOpen = widget.initialChatOpen, savedChatOpen = chatOpen;
-  bool chatOnly = false;
-  bool transcriptOpen = false;
+  late final layout = ChatLayout(
+    widget.initialChatOpen,
+    widget.initialChatWidth,
+    widget.saveChatOpen,
+    widget.saveChatWidth,
+  );
 
   /// The pane a tab is being dragged over and the side it would take.
   (WorkspaceTab, SplitSide)? dropping;
   ({String pane, String text, String page})? transcriptSelection;
-  late double chatWidth = widget.initialChatWidth;
   int lastPresentation = 0;
 
   /// The page shown on the whole screen.
@@ -300,6 +303,7 @@ class _RelayShellState extends State<RelayShell> {
     );
     draft = TextEditingController(text: widget.initialDraft);
     draft.addListener(_save);
+    layout.addListener(_layoutChanged);
     w.addListener(_changed);
     w.recorder.addListener(_changed);
     widget.updates?.addListener(_changed);
@@ -318,15 +322,16 @@ class _RelayShellState extends State<RelayShell> {
       if (selecting != null && w.active != selecting!.tab) _finishCapture(null);
       setState(() {
         if (lastPresentation != w.presentations) {
-          chatOnly = false;
-          if (MediaQuery.sizeOf(context).width < wideWorkspace) {
-            chatOpen = false;
-          }
+          layout.showPage(
+            closeChat: MediaQuery.sizeOf(context).width < wideWorkspace,
+          );
         }
         lastPresentation = w.presentations;
       });
     }
   }
+
+  void _layoutChanged() => setState(() {});
 
   @override
   void dispose() {
@@ -336,6 +341,7 @@ class _RelayShellState extends State<RelayShell> {
     unawaited(widget.saveDraft(draft.text));
     draft.dispose();
     address.dispose();
+    layout.dispose();
     messagesScroll.dispose();
     selecting?.image.dispose();
     flight
@@ -351,7 +357,7 @@ class _RelayShellState extends State<RelayShell> {
   }
 
   Future<void> _choose(WorkspaceApp app) async {
-    setState(() => chatOnly = false);
+    layout.showPage();
     try {
       await w.chooseApp(
         app,
@@ -361,7 +367,7 @@ class _RelayShellState extends State<RelayShell> {
         ),
       );
       if (mounted && MediaQuery.sizeOf(context).width < wideWorkspace) {
-        setState(() => chatOpen = false);
+        layout.closeChat();
       }
     } catch (_) {}
   }
@@ -382,9 +388,8 @@ class _RelayShellState extends State<RelayShell> {
       // A phone's chat sheet covers the page, so step it aside while selecting.
       final phone = MediaQuery.sizeOf(context).width < wideWorkspace;
       setState(() {
-        selecting = (tab: tab!, image: image, reopenChat: phone && chatOpen);
-        chatOnly = false;
-        if (phone) chatOpen = false;
+        selecting = (tab: tab!, image: image, reopenChat: phone && layout.open);
+        layout.showPage(closeChat: phone);
       });
     } catch (error) {
       w.error = error.toString();
@@ -400,7 +405,7 @@ class _RelayShellState extends State<RelayShell> {
     _land();
     setState(() {
       selecting = null;
-      if (current.reopenChat) chatOpen = true;
+      if (current.reopenChat) layout.openChat();
       if (region == null) return;
       capture = (appId: current.tab.appId!, bytes: region.png);
       if (MediaQuery.disableAnimationsOf(context)) return;
@@ -455,7 +460,7 @@ class _RelayShellState extends State<RelayShell> {
   void _selectedConversation() {
     draft.clear();
     setState(() {
-      chatOpen = true;
+      layout.openChat();
       capture = null;
     });
   }
@@ -507,9 +512,9 @@ class _RelayShellState extends State<RelayShell> {
         client: {
           'app': widget.updates?.installedLabel,
           'window': window,
-          'chatOpen': chatOpen,
-          'chatOnly': chatOnly,
-          'chatWidth': chatWidth,
+          'chatOpen': layout.open,
+          'chatOnly': layout.only,
+          'chatWidth': layout.width,
         },
       );
       if (mounted) {
@@ -604,10 +609,7 @@ class _RelayShellState extends State<RelayShell> {
         case 'reconnect':
           await w.start();
         case 'chat':
-          setState(() {
-            chatOnly = true;
-            chatOpen = true;
-          });
+          layout.showChatOnly();
       }
     } catch (e) {
       w.error = e.toString();
@@ -619,10 +621,7 @@ class _RelayShellState extends State<RelayShell> {
   Widget build(BuildContext context) {
     address.follow(w.active);
     // Several controls open or close chat; the panel reopens as it was left.
-    if (chatOpen != savedChatOpen) {
-      savedChatOpen = chatOpen;
-      widget.saveChatOpen?.call(chatOpen);
-    }
+    layout.saveOpenIfChanged();
     // A fullscreen page takes the whole screen when its tab shows alone; in
     // split view it fills only its own pane. Leaving the screen for any other
     // reason, such as another tab opening, also ends the page's fullscreen.
@@ -636,7 +635,7 @@ class _RelayShellState extends State<RelayShell> {
       onScreen = full;
     }
     final screen = full != null;
-    w.pageShown = !chatOnly || screen;
+    w.pageShown = !layout.only || screen;
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -659,11 +658,18 @@ class _RelayShellState extends State<RelayShell> {
             Expanded(
               child: LayoutBuilder(
                 builder: (context, size) {
+                  final desktop = size.maxWidth >= wideWorkspace;
                   final page = LayoutBuilder(
-                    builder: (context, area) =>
-                        _pages(area.biggest, size.maxWidth >= wideWorkspace),
+                    builder: (context, area) => _pages(area.biggest, desktop),
                   );
-                  return _panels(size, page, screen);
+                  return ChatDock(
+                    layout,
+                    w,
+                    size,
+                    screen,
+                    page,
+                    _chat(desktop),
+                  );
                 },
               ),
             ),
@@ -735,7 +741,7 @@ class _RelayShellState extends State<RelayShell> {
             onAcceptWithDetails: (details) {
               setState(() {
                 dropping = null;
-                chatOnly = false;
+                layout.showPage();
               });
               w.dropInSplit(details.data, target, side(details.offset));
             },
@@ -981,124 +987,6 @@ class _RelayShellState extends State<RelayShell> {
     );
   }
 
-  /// Chat stays built but hidden while a page fills the [screen].
-  Widget _panels(BoxConstraints size, Widget page, bool screen) {
-    final desktop = size.maxWidth >= wideWorkspace;
-    final minFraction = (320 / size.maxWidth).clamp(.2, .5);
-    final fraction = chatWidth.clamp(minFraction, .5);
-    final panelWidth = desktop ? size.maxWidth * fraction : size.maxWidth;
-    final target = chatOnly
-        ? 2.0
-        : chatOpen
-        ? 1.0
-        : 0.0;
-    final divider = MouseRegion(
-      cursor: SystemMouseCursors.resizeColumn,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onHorizontalDragUpdate: (details) => setState(() {
-          chatWidth = (fraction - details.delta.dx / size.maxWidth).clamp(
-            minFraction,
-            .5,
-          );
-        }),
-        onHorizontalDragEnd: (_) => widget.saveChatWidth?.call(chatWidth),
-        child: ColoredBox(color: colors.outline),
-      ),
-    );
-    return TweenAnimationBuilder<double>(
-      tween: Tween(end: target),
-      duration: workspaceMotion(context),
-      curve: Curves.easeOutCubic,
-      child: ExcludeFocus(excluding: !chatOpen, child: _chat(desktop)),
-      builder: (context, value, chat) {
-        // 0 is closed, 1 is docked (or a sheet), and 2 fills the workspace.
-        final reveal = value.clamp(0.0, 1.0);
-        final expand = (value - 1).clamp(0.0, 1.0);
-        final gutter = desktop ? 6 * (1 - expand) : 0.0;
-        final width = panelWidth + (size.maxWidth - panelWidth) * expand;
-        final height = size.maxHeight * (desktop ? 1 : .72 + .28 * expand);
-        return Stack(
-          children: [
-            Positioned.fill(
-              right: desktop && !screen ? (panelWidth + 6) * reveal : 0,
-              child: Offstage(
-                offstage: expand == 1 && !screen,
-                child: ExcludeFocus(excluding: chatOnly, child: page),
-              ),
-            ),
-            if (!desktop && reveal < 1 && !screen)
-              Positioned(
-                left: 12,
-                right: 12,
-                bottom: 12,
-                child: ExcludeFocus(
-                  excluding: chatOpen,
-                  child: IgnorePointer(
-                    ignoring: chatOpen,
-                    child: Opacity(opacity: 1 - reveal, child: _compactChat()),
-                  ),
-                ),
-              ),
-            if (value > 0)
-              Positioned(
-                key: const ValueKey('conversation-panel'),
-                right: desktop ? -(width + gutter) * (1 - reveal) : 0,
-                bottom: desktop ? 0 : -height * (1 - reveal),
-                width: width + gutter,
-                height: height,
-                child: Offstage(
-                  offstage: screen,
-                  child: IgnorePointer(
-                    ignoring: !chatOpen,
-                    child: Row(
-                      children: [
-                        if (desktop)
-                          SizedBox(
-                            width: gutter,
-                            height: height,
-                            child: divider,
-                          ),
-                        Expanded(
-                          child: Material(
-                            elevation: desktop ? 0 : 12 * (1 - expand),
-                            borderRadius: BorderRadius.vertical(
-                              top: Radius.circular(
-                                desktop ? 0 : 18 * (1 - expand),
-                              ),
-                            ),
-                            clipBehavior: Clip.antiAlias,
-                            child: chat,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _compactChat() => Card(
-    child: Row(
-      children: [
-        Expanded(
-          child: TextButton(
-            onPressed: () => setState(() => chatOpen = true),
-            child: Text(
-              w.status ??
-                  (w.messages.isEmpty ? 'Talk to Relay' : 'Open conversation'),
-            ),
-          ),
-        ),
-        if (w.busy) TextButton(onPressed: w.stop, child: const Text('Stop')),
-      ],
-    ),
-  );
-
   Widget _toolbar() => Container(
     height: 48,
     padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -1131,7 +1019,7 @@ class _RelayShellState extends State<RelayShell> {
                 valueListenable: tabMemory,
                 builder: (context, memory, _) => WorkspaceTabs(
                   tabs: List.of(w.tabs),
-                  selected: chatOnly ? null : split ?? w.active,
+                  selected: layout.only ? null : split ?? w.active,
                   split: split?.layout.tabs,
                   draggable: MediaQuery.sizeOf(context).width >= wideWorkspace,
                   memory: memory,
@@ -1145,7 +1033,7 @@ class _RelayShellState extends State<RelayShell> {
                       : null,
                   onSelect: (tab) {
                     w.recorder.action('select tab', {'tab': tab.title});
-                    setState(() => chatOnly = false);
+                    layout.showPage();
                     w.select(tab, alone: true, opened: true);
                   },
                   onClose: w.closeTab,
@@ -1157,10 +1045,10 @@ class _RelayShellState extends State<RelayShell> {
         IconButton(
           tooltip: 'New tab',
           onPressed: () {
-            setState(() => chatOnly = false);
+            layout.showPage();
             w.newTab();
             if (MediaQuery.sizeOf(context).width < wideWorkspace) {
-              setState(() => chatOpen = false);
+              layout.closeChat();
             }
           },
           icon: const Icon(Icons.add),
@@ -1180,14 +1068,13 @@ class _RelayShellState extends State<RelayShell> {
         ),
         IconButton(
           tooltip: 'Toggle chat',
-          onPressed: () => setState(() {
-            w.recorder.action(chatOpen ? 'close chat' : 'open chat');
-            chatOpen = !chatOpen;
-            chatOnly = false;
-          }),
+          onPressed: () {
+            w.recorder.action(layout.open ? 'close chat' : 'open chat');
+            layout.toggle();
+          },
           icon: Icon(
             Icons.view_sidebar_outlined,
-            color: chatOpen ? colors.primary : colors.onSurfaceVariant,
+            color: layout.open ? colors.primary : colors.onSurfaceVariant,
           ),
         ),
         MenuAnchor(
@@ -1359,12 +1246,9 @@ class _RelayShellState extends State<RelayShell> {
                   ),
                   MenuItemButton(
                     leadingIcon: const Icon(Icons.unfold_more, size: 17),
-                    onPressed: () => setState(() {
-                      chatOnly = !chatOnly;
-                      chatOpen = true;
-                    }),
+                    onPressed: layout.toggleOnly,
                     child: Text(
-                      chatOnly ? 'Show workspace' : 'Expand conversation',
+                      layout.only ? 'Show workspace' : 'Expand conversation',
                     ),
                   ),
                 ],
@@ -1443,7 +1327,9 @@ class _RelayShellState extends State<RelayShell> {
     final video = desktop && browser != null
         ? youtubeVideoId(tab!.page!.url)
         : null;
-    final pane = video != null && transcriptOpen ? '${tab!.id} $video' : null;
+    final pane = video != null && layout.transcriptOpen
+        ? '${tab!.id} $video'
+        : null;
     final onPage = tab?.page?.context?['selection'] as String? ?? '';
     // A transcript selection applies only while its pane is showing and until
     // the user selects something newer on the page; this runs before the
@@ -1467,8 +1353,8 @@ class _RelayShellState extends State<RelayShell> {
       child: Column(
         children: [
           TranscriptBar(
-            open: transcriptOpen,
-            onToggle: () => setState(() => transcriptOpen = !transcriptOpen),
+            open: layout.transcriptOpen,
+            onToggle: layout.toggleTranscript,
           ),
           if (pane != null)
             Expanded(
