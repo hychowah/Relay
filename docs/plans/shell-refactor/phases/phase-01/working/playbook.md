@@ -308,6 +308,11 @@ npm run build
   that leaves the value as it was, since the old `setState` always redrew.
   An owner call inside the shell's own `setState` callback nests a
   `setState`; Flutter allows it.
+- **No change during a build.** Never call a method of a notifying owner
+  that changes it (`ChatLayout`, `AreaCapture`) during a build: its notify
+  calls the shell's `setState`, which Flutter rejects during a build. Call
+  them from event handlers, async continuations or the workspace listener
+  (`_changed`); a build only reads the owner's getters.
 - **Pinning tests use only the old code's names.** A pinning test must
   pass before the move, so it cannot name the new module's widgets (such
   as `ChatDock`). Find regions by keys, tooltips, texts or fixed geometry.
@@ -322,6 +327,25 @@ npm run build
 - **Private constructor parameters.** `prefer_initializing_formals` flags a
   named parameter copied into a private field. Positional `this._field`
   parameters, as in `ChatLayout`, avoid it.
+- **A stored shell context.** `use_build_context_synchronously` follows a
+  context kept in a field: `AreaCapture` reads `MediaQuery` through
+  `_context` after an `await`, and the lint flags it unless
+  `_context.mounted` guards it. Put that guard exactly where the shell
+  checked `mounted`; after an `await` the two mean the same, and the owner
+  then never notifies after the shell disposes it.
+- **`Uint8List` in a new module.** `package:material_ui/material_ui.dart`
+  does not export it; import `package:flutter/services.dart`, as the shell
+  does.
+- **Early returns in an old `setState` callback.** Write the same steps as
+  if-blocks followed by one notify, and keep what followed the callback (as
+  `finish` keeps its post-frame image release) on every path it ran on.
+- **A record with a flag the view must not see.** When the old field is a
+  record that also holds owner-only state (`reopenChat`), give the view a
+  query method (`pickingOn(tab)`) rather than the record.
+- **A guard the UI already enforces.** A rule that only repeats what the UI
+  allows (`start`'s check that no capture is running, behind a disabled
+  button) cannot fail a test through `RelayApp`. Say so in the hand-back and
+  move it as it is.
 
 ## Hand-back contents
 

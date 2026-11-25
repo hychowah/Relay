@@ -4,7 +4,7 @@ Behavior unchanged means every test below still passes after every slice.
 A slice that moves or replaces a test updates its name here in the same
 slice.
 
-- Taken at: the commit that pins slice 5's area-capture rules.
+- Taken at: `4502852` (slice 5's tests that pin the area-capture rules).
 - Command: `flutter test --reporter json`, run in `flutter/`.
 - Result: 149 tests, all passed, none skipped.
 - Names are grouped by test file, from the runner's own output. A name ending
