@@ -4,9 +4,9 @@ Behavior unchanged means every test below still passes after every slice.
 A slice that moves or replaces a test updates its name here in the same
 slice.
 
-- Taken at: `3d30493` (slice 2's test that pins the highlight reset).
+- Taken at: slice 4's tests that pin the chat layout and dock.
 - Command: `flutter test --reporter json`, run in `flutter/`.
-- Result: 136 tests, all passed, none skipped.
+- Result: 143 tests, all passed, none skipped.
 - Names are grouped by test file, from the runner's own output. A name ending
   in a variant note is one test run on that platform.
 
@@ -32,10 +32,11 @@ slice.
 - a backend without app servers says so and stops asking
 - a refresh waits for the list read still running
 
-## test/area_capture_test.dart (2)
+## test/area_capture_test.dart (3)
 
 - screenshot selection opens inside the active tab beside chat
 - picking an area moves a phone's chat aside until done or the tab changes, and its attachment stays until a conversation is chosen
+- picking an area from chat only shows the page to pick on
 
 ## test/browser_connection_test.dart (2)
 
@@ -53,13 +54,18 @@ slice.
 - lists saved reports and opens their event timeline
 - marks a report solved and deletes another
 
-## test/chat_dock_test.dart (5)
+## test/chat_dock_test.dart (10)
 
 - chat can reverse mid-slide and reduced motion closes immediately
 - chat reopens closed when it was left closed
 - a phone's compact chat bar names the chat, stops a reply and opens chat
 - dragging the chat divider resizes chat as it moves and saves the width once
 - an agent presentation closes chat on a phone and ends chat only on the desktop
+- Chat only opens chat that was closed
+- chat stays between 320 px and half the window wide
+- chat only fills the workspace on a desktop and a phone, and a phone's sheet slides down as it closes
+- chat only keeps the keyboard out of the page
+- a page that fills the screen shows over chat only and hides a phone's compact chat bar
 
 ## test/chat_panel_test.dart (9)
 
@@ -127,7 +133,7 @@ slice.
 - shared folders are listed, added and removed on the server
 - memory editor keeps scope and saves an edited entry
 
-## test/shell_test.dart (7)
+## test/shell_test.dart (8)
 
 - a fullscreen video takes the whole screen alone and its pane in split
 - a click that moves a few pixels still selects the tab
@@ -136,6 +142,7 @@ slice.
 - deleting a tab during insertion keeps the next tab interactive
 - the toolbar names Relay from 600 px wide, records chat toggles, and New tab closes chat on a phone
 - returning to the app opens the conversation last opened on another device
+- the toolbar shows where chat is, and a tab or Toggle chat ends chat only
 
 ## test/sources_test.dart (3)
 

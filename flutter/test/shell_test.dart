@@ -300,4 +300,55 @@ void main() {
     expect(f.w.conversationId, 'elsewhere');
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('the toolbar shows where chat is, and a tab or Toggle chat ends '
+      'chat only', (tester) async {
+    final f = Fixture();
+    await f.w.start();
+    final room = await f.w.openApp(f.w.apps[1]);
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    final toggle = find.byTooltip('Toggle chat');
+    final panel = find.byKey(const ValueKey('conversation-panel'));
+    final colors = Theme.of(tester.element(toggle)).colorScheme;
+    Color? toggleColour() => tester
+        .widget<Icon>(find.descendant(of: toggle, matching: find.byType(Icon)))
+        .color;
+    Object? selected() =>
+        tester.widget<WorkspaceTabs>(find.byType(WorkspaceTabs)).selected;
+    Future<void> chatOnly() async {
+      await tester.tap(find.byTooltip('Workspace menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(MenuItemButton, 'Chat only'));
+      await tester.pumpAndSettle();
+      expect(f.w.pageShown, isFalse);
+    }
+
+    expect(toggleColour(), colors.primary);
+    expect(selected(), room);
+    await chatOnly();
+    expect(selected(), isNull);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(WorkspaceTabs),
+        matching: find.text('Room layout'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(f.w.pageShown, isTrue);
+    expect(selected(), room);
+    expect(panel, findsOneWidget);
+
+    await chatOnly();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(f.w.pageShown, isTrue);
+    expect(panel, findsNothing);
+    expect(toggleColour(), colors.onSurfaceVariant);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

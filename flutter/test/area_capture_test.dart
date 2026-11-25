@@ -207,4 +207,49 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('picking an area from chat only shows the page to pick on', (
+    tester,
+  ) async {
+    final f = Fixture();
+    await f.w.start();
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await f.w.openApp(f.w.apps[1]);
+    f.pages.last.frame = await tester.runAsync(() async {
+      final recorder = ui.PictureRecorder();
+      Canvas(recorder).drawColor(Colors.blue, BlendMode.src);
+      final image = await recorder.endRecording().toImage(80, 60);
+      final png = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      return png!.buffer.asUint8List();
+    });
+    await tester.pumpWidget(
+      RelayApp(workspace: f.w, initialDraft: '', saveDraft: (_) async {}),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Workspace menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, 'Chat only'));
+    await tester.pumpAndSettle();
+    expect(f.w.pageShown, isFalse);
+
+    await tester.tap(find.byTooltip('Capture an area'));
+    for (
+      var i = 0;
+      i < 30 && find.byType(RegionCapture).evaluate().isEmpty;
+      i++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    await tester.pumpAndSettle();
+    expect(f.w.pageShown, isTrue);
+    expect(find.byType(RegionCapture), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
 }
