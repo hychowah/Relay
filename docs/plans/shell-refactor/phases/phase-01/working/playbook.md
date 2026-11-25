@@ -14,50 +14,35 @@ widget is a view: it gets the workspace, the selected tab or other inputs,
 and the owner objects it reads, and it keeps no state of its own. The shell
 pushes the selected tab into each owner from its build.
 
-The pilot in practice:
-
-- **Owner object.** `AddressInput` is a plain Dart class, not a widget and
-  not a `ChangeNotifier`: the old code changed these fields without
-  `setState`, so nothing needs to listen. Its public
-  interface is the constructor (whose `workspace` and `history` stay
-  readable), `follow`, `dispose`, the `controller` and `focus` getters for
-  the field, and the rule methods below. Its state fields are
-  library-private (a leading `_`).
-- **The shell's side.** `main.dart` keeps one line per owner:
-  `late final address = AddressInput(w, history: widget.browserHistory);`
-  as a field, `address.follow(w.active);` in build where the old sync code
-  was, and `address.dispose();` in `dispose` where the old disposals were.
+- **Owner object.** A plain Dart class (`AddressInput`), or a
+  `ChangeNotifier` when the shell must redraw on its changes (see the
+  traps). Its state fields are library-private (a leading `_`); its public
+  interface is the constructor, `follow`, `dispose`, getters for what the
+  view draws, and rule methods named for what the user does (`picked`,
+  `submitted`, `go`).
+- **The shell's side.** One `late final` field per owner,
+  `owner.follow(...)` in build where the old sync code was, and
+  `owner.dispose()` in `dispose` where the old disposals were.
 - **`follow`.** It takes the selected tab, not a value worked out from it,
-  so the rule that decides the value (here `_addressOf`, an unloaded Browser
-  tab's own address) lives in the module with everything else that uses it.
-- **View.** `BrowserBar(workspace, tab, input)` is a `StatelessWidget`. The
-  shell builds it where it called `_browserBar(tab)`, under the same keyed
-  `Positioned`, so keys and the tree shape tests rely on stay the same.
-- **Logic placement.** The rules live on the owner, as public methods
-  named for what the user does: `suggestionsFor`, `picked`, `escape`,
-  `pointerDown`, `tapped`, `submitted`, `go` and `edited`. The view draws
-  and wires its widgets to those methods (`onSelected: input.picked`). A
-  view calls owner methods and passes in, or acts on, what needs its
+  so the rule that decides the value lives in the module with everything
+  else that uses it.
+- **View.** A `StatelessWidget` the shell builds where it called the old
+  builder, under the same key, so keys and the tree shape tests rely on
+  stay the same. It wires its widgets to owner methods
+  (`onSelected: input.picked`) and passes in, or acts on, what needs its own
   context; an owner never takes a region's `BuildContext`. An owner the
   shell creates and disposes may store the shell's own context, guarded by
   `context.mounted` exactly where the shell checked `mounted`
-  (`AreaCapture`, `ShellActions`). Enter passes the
-  field's `submit` callback in, as `input.submitted(submit)`. `edited`
-  returns `now` itself unless the fill-in stays, and the view's formatter
-  invokes `AutocompleteFirstOptionIntent` with its own context exactly when
-  the returned value is a new one, as the old code did on that branch.
+  (`AreaCapture`, `ShellActions`).
 - **No field access from the view.** A view never reads or writes an owner
-  field, even in the same file, where Dart would allow it. Later owners such
-  as `ChatLayout` and `AreaCapture` are used from several files, where
-  library-private access does not work, so the pilot does not teach it.
-  Check with `grep -n 'input\._' flutter/lib/<module>.dart` (with the view's
-  own name for its owner in place of `input`): expect nothing.
+  field, even in the same file, where Dart would allow it. Check with
+  `grep -n 'input\._' flutter/lib/<module>.dart` (with the view's own name
+  for its owner in place of `input`): expect nothing.
 - **Lifetime checks.** Where the shell checked `mounted` after an `await`,
   the owner checks its own `_disposed` flag, set first thing in `dispose`.
-- **Shared constants.** `_barHeight`, which the page geometry also reads,
-  became `BrowserBar.height`. A private item that code staying in
-  `main.dart` still uses becomes the smallest public piece of the new
-  module, and the hand-back lists it.
+- **Shared constants.** A private item that code staying in `main.dart`
+  still uses becomes the smallest public piece of the new module (as
+  `_barHeight` became `BrowserBar.height`), and the hand-back lists it.
 
 ## Steps, in order
 
@@ -123,7 +108,8 @@ The pilot in practice:
     only lowers), then set the `Lines` cell of the `main.dart` Known debt
     row in `docs/architecture.md` to the new count, and drop the module's
     own name from that row's "Where its code should go" cell. All go in
-    the move commit.
+    the move commit. Since slice 8 `main.dart` has neither entry nor row:
+    the default limit applies, and a fix slice never adds them back.
 14. **Other checks.** `npm test`, `npm run build`,
     `python3 tools/check_records.py`, `python3 tools/check_structure.py`.
 15. **Commits.** Any test-only pinning commit first (step 5). Then one
@@ -265,26 +251,23 @@ npm run build
   `git show <commit>:<path> > <path>`, run the test, then restore yours.
 - **Subagents and worktrees.** A subagent cannot call EnterWorktree; it
   works by absolute path in the worktree its starter made.
-- **Private types in a public API.** `flutter_lints` reports a public field
-  or method whose type names a private type (the pilot's private
-  `_Suggestion` typedef). The owner's fields are library-private, so they
-  may use it. Its public methods spell the record type out,
-  `({String url, String title})`, which is the same type, so no new public
-  name is needed.
+- **Private types in a public API.** `flutter_lints` reports a public
+  member whose type names a private typedef. Spell the record type out in
+  public methods, `({String url, String title})`; it is the same type.
 - **A rule split between owner and view.** When the view keeps one
-  context-bound step of a moved rule (the pilot's intent call after
-  `edited`), check whether a test pins it: replace the view's condition with
-  `false`, then with `true`, and run the module's test file. In the pilot
-  neither failed, so the merge review asked for a test that pins the
-  highlight reset; it came after the move. Later slices add such a test
-  before the move (step 5).
+  context-bound step of a moved rule, break the view's condition both ways
+  as step 5 says, and pin it before the move if nothing fails. The
+  address bar's view invokes `AutocompleteFirstOptionIntent` exactly when
+  `edited` returns a new value.
 - **No `context` in a stateless view.** A shell method that read
   `Theme.of(context)` or the shell's `colors` getter needs the context as a
   parameter in a `StatelessWidget`. In a builder callback that has its own
   `context`, read the theme there (one added line, such as
   `final colors = Theme.of(context).colorScheme;`). Check that no `Theme`
   widget sits between the shell and the view; in the shell there is none,
-  so the colours are the same.
+  so the colours are the same. A `MediaQuery` aspect read there (reduced
+  motion, pixel ratio) now redraws only the view, not the shell; say so in
+  the hand-back.
 - **`late final` owners.** An owner created by `late final` is built on its
   first use, which is the shell's first build. That is fine for the shell:
   build always runs before `dispose`.
@@ -355,6 +338,13 @@ npm run build
   file named for their owner (`shell_actions_test.dart`).
 - **Fixture routes.** A route or flag a pin adds to `support/fixture.dart`
   defaults to the old answer.
+- **Values a view callback captured in the build.** When an old closure
+  used locals worked out in the build (the transcript's pane and the page's
+  selection), let `follow` keep them on the owner and give the view a
+  setter that uses them; `follow` runs in the same build that rebuilds the
+  view, so they match.
+- **A sweep that dies mid-run** leaves its broken condition in `main.dart`.
+  Start it detached (`setsid nohup`), and check `git diff` before going on.
 
 ## Hand-back contents
 

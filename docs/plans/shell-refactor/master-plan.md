@@ -57,7 +57,7 @@ is discarded; a merged one is reverted by a new slice.
 | 5 | `area_capture.dart` | done |
 | 6 | `workspace_menu.dart` | done |
 | 7 | `page_stack.dart` | done |
-| 8 | `chat_panel.dart` | to do |
+| 8 | `chat_panel.dart` | done |
 | 9 | Close-out: Mac check, then an upkeep slice | to do |
 
 **1a. Test homes (tests only).** Move `FakePage` to
@@ -113,8 +113,10 @@ has 160 names. Exit: the element-identity and nothing-over-the-page tests
 pass unmodified; 1,025 lines.
 
 **8. `chat_panel.dart`.** `ChatInput` and `ChatPanel`; the shell calls
-`chat.follow(...)` before building the dock. Exit: done measures 1–7; the
-`main.dart` structure entry and Known debt row removed.
+`chat.follow(...)` before building the dock. Eight new tests pin the chat
+rules that had none, four of them in `chat_input_test.dart`; the baseline
+has 168 names. Exit: done measures 1–7; the `main.dart` structure entry and
+Known debt row removed; 552 lines.
 
 **9. Close-out.** After slice 8, one Mac check of about 20 minutes, with the
 user told first: `npm run test:mac -- hover_redraw_test.dart` and
@@ -127,18 +129,18 @@ map's window note, records what is left, and closes these records.
 
 ## Structure window
 
-These files belong to this refactor until the slice named merges. Other
-sessions do not edit them before then; a shell feature waits, or goes into a
-module that already exists.
+These files stay with this refactor until the close-out (slice 9) ends,
+because its Mac check may need a fix slice. Other sessions do not edit them
+before then; a shell feature waits.
 
-- `flutter/lib/main.dart`, the new `flutter/lib/` modules, and
-  `flutter/test/support/`: until slice 8.
-- The new shell test files (`address_bar_test.dart`, `new_tab_page_test.dart`,
+- `flutter/lib/main.dart` and the shell modules: `address_bar.dart`,
+  `new_tab_page.dart`, `chat_dock.dart`, `area_capture.dart`,
+  `workspace_menu.dart`, `page_stack.dart`, `chat_panel.dart`.
+- `flutter/test/support/`.
+- The shell test files: `address_bar_test.dart`, `new_tab_page_test.dart`,
   `page_stack_test.dart`, `chat_dock_test.dart`, `chat_panel_test.dart`,
-  `area_capture_test.dart`, `workspace_menu_test.dart`,
-  `shell_actions_test.dart`, `shell_test.dart`): until slice 8.
-- The `main.dart` entry of `tools/structure.json` and its row of the map's
-  Known debt: until slice 8.
+  `chat_input_test.dart`, `area_capture_test.dart`,
+  `workspace_menu_test.dart`, `shell_actions_test.dart`, `shell_test.dart`.
 
 ## Pause points
 
@@ -173,6 +175,7 @@ which means a prerequisite is missing and goes back to the planner.
 
 ## Next
 
-Slice 7 is done: the page stack moved into `page_stack.dart` and `main.dart`
-has 1,025 lines. The user said at the second pause point to go on with slices
-3-8 with no further planned pauses. Slice 8, `chat_panel.dart`, is next.
+Slice 8 is done: the chat panel moved into `chat_panel.dart` and `main.dart`
+has 552 lines; its `tools/structure.json` entry and Known debt row are gone.
+The close-out, slice 9, is next. It starts with the Mac check, which needs
+the user's OK first.
