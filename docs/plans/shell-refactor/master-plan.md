@@ -48,7 +48,7 @@ is discarded; a merged one is reverted by a new slice.
 
 | # | Slice | Status |
 |---|---|---|
-| 1a | Test homes: fakes and shell tests moved unchanged | to do |
+| 1a | Test homes: fakes and shell tests moved unchanged | done |
 | 1b | Safety net: tests for the untested shell behavior | to do |
 | 2 | Pilot: `address_bar.dart` | to do |
 | 3 | `new_tab_page.dart` | to do |
@@ -121,11 +121,9 @@ module that already exists.
   `page_stack_test.dart`, `chat_dock_test.dart`, `chat_panel_test.dart`,
   `area_capture_test.dart`, `workspace_menu_test.dart`, `shell_test.dart`):
   until slice 8.
-- `flutter/test/workspace_test.dart` and `flutter/test/sources_test.dart`:
-  until slice 1a.
 - `flutter/lib/workspace_style.dart`: until slice 4.
-- The `main.dart` and `workspace_test.dart` entries of `tools/structure.json`
-  and rows of the map's Known debt: until slice 8.
+- The `main.dart` entry of `tools/structure.json` and its row of the map's
+  Known debt: until slice 8.
 
 ## Pause points
 
@@ -154,5 +152,5 @@ which means a prerequisite is missing and goes back to the planner.
 
 ## Next
 
-The orchestrator merges this brief. Then start /finish-phase with this plan as
-its phase plan, and send slice 1a to a worker.
+Slice 1a is done and awaits the orchestrator's merge. Next is slice 1b, the
+safety-net tests; it adds their names to the baseline.
