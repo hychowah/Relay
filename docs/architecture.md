@@ -78,8 +78,7 @@ The service has two entry points: `server/index.ts` serves the web page, and
 ## Structure window
 
 The [Flutter shell refactor](plans/shell-refactor/master-plan.md) owns
-`flutter/lib/main.dart`, `flutter/lib/workspace_style.dart`,
-`flutter/test/support/`, the new shell modules and their tests, and the
-`main.dart` entry in `tools/structure.json` and Known debt. Do not edit them
-until the plan's structure window releases them; a shell feature waits or goes
-into a module that already exists.
+`flutter/lib/main.dart`, `flutter/test/support/`, the new shell modules and
+their tests, and the `main.dart` entry in `tools/structure.json` and Known
+debt. Do not edit them until the plan's structure window releases them; a
+shell feature waits or goes into a module that already exists.

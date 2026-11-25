@@ -85,7 +85,7 @@ pushes the selected tab into those objects. Regions never pass their own
 | `address_bar.dart` | `AddressInput(workspace, {history})` with `follow(WorkspaceTab? tab)`, `dispose()`, `controller`, `focus` and the rule methods `suggestionsFor`, `picked`, `escape`, `pointerDown`, `tapped`, `submitted`, `go`, `edited`; `BrowserBar(workspace, tab, input)`, `static const height = 46.0`; `inlineCompletion(typed, url)` | Fill-in, suggestions, Esc and paste rules, Go target, `browserTyped`; VPN switch (`/// Desktop only (macOS).`), PDF zoom and Highlight (`/// Desktop only.`) |
 | `new_tab_page.dart` | `NewTabPage`, unchanged | App search, other devices' tabs |
 | `page_stack.dart` | `PageStack(workspace, desktop, address, capture, onChoose, onServers, onSplit, onResized)` | Keyed slots, split geometry, frames, tints, overlays, dividers, drop zones and hover |
-| `chat_dock.dart` | `ChatLayout(open, width, saveOpen, saveWidth)` with `open`, `only`, `width`, `transcriptOpen`, `showPage({closeChat})`, `toggle()`, `toggleOnly()`, `chatOnly()`, `saveWidth()`; `ChatDock(layout, workspace, size, screen, page, panel)` | Dock, phone sheet, compact bar, expand animation, width clamp |
+| `chat_dock.dart` | `ChatLayout(open, width, saveOpen, saveWidth)`, a `ChangeNotifier` the shell redraws on, with `open`, `only`, `width`, `transcriptOpen`, `saveOpenIfChanged()` (the shell's build), `showPage({closeChat})`, `openChat()`, `closeChat()`, `toggle()`, `toggleOnly()`, `showChatOnly()`, `toggleTranscript()`, `resize(width)`, `resizeEnded()`; `ChatDock(layout, workspace, size, screen, page, panel)` | Dock, phone sheet, compact bar, expand animation, width clamp |
 | `area_capture.dart` | `AreaCapture(shellContext, workspace, layout)` with `start()`, `finish(region?)`, `follow(activeTab)`, `remove()`, `sent(attachment)`, `attachment`, `selecting`, `busy`, `flying`, `slot` | Snapshot, area picking, flight overlay, the phone sheet stepping aside |
 | `workspace_menu.dart` | `enum WorkspaceAction` (names are the recorded names); `ShellActions(shellContext, workspace, updates, layout, saveDraftNow, onConversationChosen)` with `run(action)`; `WorkspaceMenu(actions, workspace, updates, themeMode, onThemeMode, tabMemory)`; `actionItem(...)` for chat's Forward | Every dialog, recording and saving a bug report with its guard, update install, banner on error |
 | `chat_panel.dart` | `ChatInput(workspace, layout, capture, draft, save)` with `draft`, `messages`, `follow(tab, {desktop})`, `transcriptPane`, `transcriptSelection`, `send()`, `clear()`, `flush()`, `refreshSelection()`; `ChatPanel(...)`, stateless | Header, transcript card, messages, status, composer, effort menu |
@@ -229,8 +229,9 @@ Each removed in the slice that replaces it:
   Slice 5 runs analyze on its first draft; if flagged, add `context.mounted`
   exactly where the shell had `mounted`.
 - U3. Does saving `open` when it changes match today's once-per-build save?
-  Before slice 4, audit every `chatOpen` write in the slice's ignored `tmp/`;
-  report it in the hand-back and delete it.
+  No: slice 4's audit found that chat can close and reopen within one frame
+  (a tab change ends an area selection on a phone while an agent
+  presentation closes chat), so the shell's build still saves it once.
 - U4. macOS-only controls cannot render on WSL: `--color-moved` must show
   them moved verbatim in slices 2 and 6; the Mac check confirms.
 - U5. Splitting the test file gives each file its own isolate, so statics such

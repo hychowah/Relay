@@ -53,7 +53,7 @@ is discarded; a merged one is reverted by a new slice.
 | 1c | Fix: an unloaded Browser tab's address | done |
 | 2 | Pilot: `address_bar.dart` | done |
 | 3 | `new_tab_page.dart` | done |
-| 4 | `chat_dock.dart` and `wideWorkspace` | to do |
+| 4 | `chat_dock.dart` and `wideWorkspace` | done |
 | 5 | `area_capture.dart` | to do |
 | 6 | `workspace_menu.dart` | to do |
 | 7 | `page_stack.dart` | to do |
@@ -94,7 +94,8 @@ baseline passes unmodified; `main.dart` near 2,050 lines.
 
 **4. `chat_dock.dart`.** `ChatLayout` and `ChatDock`; `wideWorkspace` in
 `workspace_style.dart` replaces the 900 literals, each site keeping its own
-measure. Probe U3 first. Exit: baseline passes; near 1,620 lines.
+measure. Probe U3 first. Seven new tests pin the dock and layout rules that
+had none; the baseline has 143 names. Exit: baseline passes; 1,620 lines.
 
 **5. `area_capture.dart`.** `AreaCapture`; `_changed` calls
 `capture.follow(active)`. Probe U2. Exit: baseline passes; near 1,530 lines.
@@ -131,7 +132,6 @@ module that already exists.
   `page_stack_test.dart`, `chat_dock_test.dart`, `chat_panel_test.dart`,
   `area_capture_test.dart`, `workspace_menu_test.dart`, `shell_test.dart`):
   until slice 8.
-- `flutter/lib/workspace_style.dart`: until slice 4.
 - The `main.dart` entry of `tools/structure.json` and its row of the map's
   Known debt: until slice 8.
 
@@ -164,7 +164,8 @@ which means a prerequisite is missing and goes back to the planner.
 
 ## Next
 
-Slice 3, `new_tab_page.dart`, is done: the page moved verbatim out of
-`main.dart`. The user said at the second pause point to go on with slices 3-8
-with no further planned pauses. Slice 4, `chat_dock.dart` and `wideWorkspace`,
-is next.
+Slice 4 is done: `ChatLayout` and `ChatDock` moved into `chat_dock.dart`,
+the breakpoint is `wideWorkspace`, and `workspace_style.dart` left the
+structure window. The user said at the second pause point to go on with
+slices 3-8 with no further planned pauses. Slice 5, `area_capture.dart`, is
+next.

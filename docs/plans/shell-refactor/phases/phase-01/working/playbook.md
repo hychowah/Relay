@@ -301,6 +301,28 @@ npm run build
   `--update` sets it to the new length; the Known debt row takes the same
   number.
 
+- **An owner others change.** When the old fields were written inside the
+  shell's `setState` and later modules or a view change them too, make the
+  owner a `ChangeNotifier` that the shell listens to with
+  `setState(() {})`, as `ChatLayout` does. Notify on every change, even one
+  that leaves the value as it was, since the old `setState` always redrew.
+  An owner call inside the shell's own `setState` callback nests a
+  `setState`; Flutter allows it.
+- **Pinning tests use only the old code's names.** A pinning test must
+  pass before the move, so it cannot name the new module's widgets (such
+  as `ChatDock`). Find regions by keys, tooltips, texts or fixed geometry.
+- **A sweep of broken conditions.** To find untested rules, a small script
+  in `tmp/` can apply one exact replacement at a time to `main.dart`, run
+  the region's test files with the JSON reporter and restore the file. Pass
+  the test files rather than the whole suite: each run is a few seconds
+  instead of about a minute.
+- **The formatter and an existing test file.** `dart format` drops a test
+  file's leading blank line. Put it back, so the test diff is only the new
+  tests and import lines.
+- **Private constructor parameters.** `prefer_initializing_formals` flags a
+  named parameter copied into a private field. Positional `this._field`
+  parameters, as in `ChatLayout`, avoid it.
+
 ## Hand-back contents
 
 Besides /deliver-change's format: the new module's public interface

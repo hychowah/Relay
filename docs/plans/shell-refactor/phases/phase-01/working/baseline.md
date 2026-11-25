@@ -4,7 +4,7 @@ Behavior unchanged means every test below still passes after every slice.
 A slice that moves or replaces a test updates its name here in the same
 slice.
 
-- Taken at: slice 4's tests that pin the chat layout and dock.
+- Taken at: `f56ea9d` (slice 4's tests that pin the chat layout and dock).
 - Command: `flutter test --reporter json`, run in `flutter/`.
 - Result: 143 tests, all passed, none skipped.
 - Names are grouped by test file, from the runner's own output. A name ending
