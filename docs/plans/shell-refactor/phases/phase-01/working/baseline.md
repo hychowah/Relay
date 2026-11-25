@@ -4,9 +4,9 @@ Behavior unchanged means every test below still passes after every slice.
 A slice that moves or replaces a test updates its name here in the same
 slice.
 
-- Taken at: `f56ea9d` (slice 4's tests that pin the chat layout and dock).
+- Taken at: the commit that pins slice 5's area-capture rules.
 - Command: `flutter test --reporter json`, run in `flutter/`.
-- Result: 143 tests, all passed, none skipped.
+- Result: 149 tests, all passed, none skipped.
 - Names are grouped by test file, from the runner's own output. A name ending
   in a variant note is one test run on that platform.
 
@@ -32,11 +32,17 @@ slice.
 - a backend without app servers says so and stops asking
 - a refresh waits for the list read still running
 
-## test/area_capture_test.dart (3)
+## test/area_capture_test.dart (9)
 
 - screenshot selection opens inside the active tab beside chat
 - picking an area moves a phone's chat aside until done or the tab changes, and its attachment stays until a conversation is chosen
 - picking an area from chat only shows the page to pick on
+- Capture an area waits while a snapshot is taken, an area is picked or a reply runs
+- a snapshot that arrives after its tab was left shows nothing
+- a snapshot that cannot be read shows in the banner, and capturing can start again
+- a sent message takes its attached area along
+- picking again ends the last picture's flight at once
+- in a split, the area is picked on the selected pane's page only
 
 ## test/browser_connection_test.dart (2)
 

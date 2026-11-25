@@ -7,6 +7,7 @@ import 'package:relay_flutter/main.dart';
 import 'package:relay_flutter/relay_api.dart';
 import 'package:relay_flutter/capture_flight.dart';
 import 'package:relay_flutter/region_capture.dart';
+import 'package:relay_flutter/split_layout.dart';
 
 import 'support/fixture.dart';
 
@@ -252,4 +253,189 @@ void main() {
     expect(find.byType(RegionCapture), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets(
+    'Capture an area waits while a snapshot is taken, an area is picked or '
+    'a reply runs',
+    (tester) async {
+      final f = await _roomOnDesktop(tester);
+      bool enabled() =>
+          tester
+              .widget<IconButton>(
+                find.ancestor(
+                  of: find.byTooltip('Capture an area'),
+                  matching: find.byType(IconButton),
+                ),
+              )
+              .onPressed !=
+          null;
+      expect(enabled(), isTrue);
+      await tester.tap(find.byTooltip('Capture an area'));
+      await tester.pump();
+      expect(find.byType(RegionCapture), findsNothing);
+      expect(enabled(), isFalse);
+      await _settle(tester, find.byType(RegionCapture));
+      expect(enabled(), isFalse);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(enabled(), isTrue);
+
+      f.w.conversationId = 'conversation';
+      f.runs = [
+        {'id': 'run', 'status': 'running'},
+      ];
+      await f.w.refresh();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(enabled(), isFalse);
+      f.runs = [];
+      await f.w.refresh();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(enabled(), isTrue);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('a snapshot that arrives after its tab was left shows nothing', (
+    tester,
+  ) async {
+    final f = await _roomOnDesktop(tester, alsoBrowser: true);
+    final room = f.w.active!;
+    final browser = f.w.tabs.firstWhere((tab) => tab != room);
+    await tester.tap(find.byTooltip('Capture an area'));
+    await tester.pump();
+    f.w.select(browser);
+    await _settle(tester, find.byType(RegionCapture));
+    f.w.select(room);
+    await _settle(tester, find.byType(RegionCapture));
+    expect(find.byType(RegionCapture), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'a snapshot that cannot be read shows in the banner, and capturing can '
+    'start again',
+    (tester) async {
+      final f = await _roomOnDesktop(tester);
+      f.pages.last.frame = Uint8List.fromList([1, 2, 3]);
+      await tester.tap(find.byTooltip('Capture an area'));
+      await _settle(tester, find.text('Dismiss'));
+      expect(f.w.error, isNotNull);
+      expect(find.text('Dismiss'), findsOneWidget);
+      expect(find.byType(RegionCapture), findsNothing);
+      expect(
+        tester
+            .widget<IconButton>(
+              find.ancestor(
+                of: find.byTooltip('Capture an area'),
+                matching: find.byType(IconButton),
+              ),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('a sent message takes its attached area along', (tester) async {
+    final f = await _roomOnDesktop(tester);
+    final page = tester.getRect(find.text('View Room layout'));
+    await tester.tap(find.byTooltip('Capture an area'));
+    await _settle(tester, find.byType(RegionCapture));
+    await tester.dragFrom(
+      page.topLeft + const Offset(20, 20),
+      const Offset(200, 120),
+    );
+    await _settle(tester, find.byTooltip('Remove screenshot'));
+    await tester.pumpAndSettle();
+    expect(find.text('Screenshot · room-layout'), findsOneWidget);
+    f.w.provider = {'supportsImageInput': true};
+    await tester.enterText(find.byType(EditableText).first, 'What is this?');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect((f.sent!['capture'] as Json)['appId'], 'room-layout');
+    expect(find.text('Screenshot · room-layout'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets("picking again ends the last picture's flight at once", (
+    tester,
+  ) async {
+    await _roomOnDesktop(tester);
+    final page = tester.getRect(find.text('View Room layout'));
+    await tester.tap(find.byTooltip('Capture an area'));
+    await _settle(tester, find.byType(RegionCapture));
+    await tester.dragFrom(
+      page.topLeft + const Offset(20, 20),
+      const Offset(200, 120),
+    );
+    await _settle(tester, find.byTooltip('Remove screenshot'));
+    await tester.tap(find.byTooltip('Capture an area'));
+    await _settle(tester, find.byType(RegionCapture));
+    expect(find.byType(CaptureFlight), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(find.byType(CaptureFlight), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets("in a split, the area is picked on the selected pane's page "
+      'only', (tester) async {
+    final f = await _roomOnDesktop(tester, alsoBrowser: true, split: true);
+    expect(f.w.shownSplit, isNotNull);
+    final page = tester.getRect(find.text('View Room layout'));
+    await tester.tap(find.byTooltip('Capture an area'));
+    await _settle(tester, find.byType(RegionCapture));
+    expect(find.byType(RegionCapture), findsOneWidget);
+    expect(
+      tester.getRect(find.byType(RegionCapture)).contains(page.center),
+      isTrue,
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+}
+
+/// The Room app selected in a 1400 x 800 window, its page showing a blue
+/// frame to pick from; [alsoBrowser] opens a Browser tab first, and [split]
+/// puts the two side by side.
+Future<Fixture> _roomOnDesktop(
+  WidgetTester tester, {
+  bool alsoBrowser = false,
+  bool split = false,
+}) async {
+  final f = Fixture();
+  await f.w.start();
+  tester.view.physicalSize = const Size(1400, 800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  final browser = alsoBrowser ? await f.w.openApp(f.w.apps[0]) : null;
+  final room = await f.w.openApp(f.w.apps[1]);
+  if (split) {
+    f.w.dropInSplit(room, browser!, SplitSide.left);
+    f.w.select(room);
+  }
+  f.pages.last.frame = await tester.runAsync(() async {
+    final recorder = ui.PictureRecorder();
+    Canvas(recorder).drawColor(Colors.blue, BlendMode.src);
+    final image = await recorder.endRecording().toImage(80, 60);
+    final png = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    return png!.buffer.asUint8List();
+  });
+  await tester.pumpWidget(
+    RelayApp(workspace: f.w, initialDraft: '', saveDraft: (_) async {}),
+  );
+  await tester.pumpAndSettle();
+  return f;
+}
+
+/// Pumps until [until] shows, letting the engine decode the snapshot, which
+/// happens outside the test's clock.
+Future<void> _settle(WidgetTester tester, Finder until) async {
+  for (var i = 0; i < 30 && until.evaluate().isEmpty; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+  }
 }
