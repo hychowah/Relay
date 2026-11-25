@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show SocketException;
 
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -42,7 +43,7 @@ class Fixture {
           }
           if (path == '/api/app-servers') return reply([]);
           // The workspace menu's dialogs, each with nothing saved yet.
-          if (path == '/api/memories') return reply([]);
+          if (path == '/api/memories') return reply(memories);
           if (path == '/api/stored-data') return reply([]);
           if (path == '/api/settings/folders') return reply({'folders': []});
           if (path == '/api/settings/provider') {
@@ -105,6 +106,13 @@ class Fixture {
             return http.Response('', 204);
           }
           if (path == '/api/devices') return reply(devices);
+          if (path.endsWith('/forward')) return reply({'id': 'forwarded'});
+          if (path == '/api/desktop/busy') {
+            if (desktopUnreachable) {
+              throw const SocketException('Connection refused');
+            }
+            return reply({'busy': desktopBusy});
+          }
           if (path == '/api/bug-reports') {
             if (offline) return http.Response('Offline', 503);
             bugReport = jsonDecode(request.body) as Json;
@@ -147,6 +155,9 @@ class Fixture {
   List<Json> devices = [];
   bool offline = false, failRoomRestore = false, appDown = false;
   bool failSnapshot = false, failSend = false;
+  // The server's answer when an update asks whether a reply still runs.
+  bool desktopBusy = false, desktopUnreachable = false;
+  List<Json> memories = [];
   List<Json> configApps = [...apps];
   late Workspace w;
   final pages = <FakePage>[];

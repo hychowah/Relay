@@ -4,9 +4,9 @@ Behavior unchanged means every test below still passes after every slice.
 A slice that moves or replaces a test updates its name here in the same
 slice.
 
-- Taken at: `4502852` (slice 5's tests that pin the area-capture rules).
+- Taken at: the commit that pins slice 6's workspace-menu rules.
 - Command: `flutter test --reporter json`, run in `flutter/`.
-- Result: 149 tests, all passed, none skipped.
+- Result: 155 tests, all passed, none skipped.
 - Names are grouped by test file, from the runner's own output. A name ending
   in a variant note is one test run on that platform.
 
@@ -139,6 +139,14 @@ slice.
 - shared folders are listed, added and removed on the server
 - memory editor keeps scope and saves an edited entry
 
+## test/shell_actions_test.dart (5)
+
+- closing the report question goes on recording, Discard saves nothing, and a saved report says where it went
+- the App library lists the apps the server has now
+- the update dialog lists test builds, stays open on a click outside and waits for a running reply
+- an update restarts only once the server is idle, or unreachable when returning to stable from another server
+- a conversation opened from Memory or by forwarding opens chat with an empty draft
+
 ## test/shell_test.dart (8)
 
 - a fullscreen video takes the whole screen alone and its pane in split
@@ -189,7 +197,7 @@ slice.
 - a Browser transcript arrives through the page channel
 - page dialogs name the site and answer with the choice
 
-## test/workspace_menu_test.dart (8)
+## test/workspace_menu_test.dart (9)
 
 - a bug report pictures the whole window with its page in place
 - a dot marks the workspace menu while an update is ready
@@ -199,6 +207,7 @@ slice.
 - a bug report saves the window and chat state, and a failed save shows its error until dismissed
 - Reconnect restarts the workspace, and the banner hides in fullscreen
 - installing an update saves the draft and the open tabs first
+- the menu shows the chosen appearance and tab order
 
 ## test/workspace_style_test.dart (1)
 

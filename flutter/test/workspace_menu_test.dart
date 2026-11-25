@@ -529,6 +529,37 @@ void main() {
     expect(drafts, ['Unsent words']);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('the menu shows the chosen appearance and tab order', (
+    tester,
+  ) async {
+    final f = Fixture(newestTabFirst: true);
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      RelayApp(
+        workspace: f.w,
+        initialThemeMode: ThemeMode.dark,
+        saveDraft: (_) async {},
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Workspace menu'));
+    await tester.pumpAndSettle();
+    final newest = find.widgetWithText(CheckboxMenuButton, 'Newest tab first');
+    expect(tester.widget<CheckboxMenuButton>(newest).value, isTrue);
+    await tester.tap(find.text('Appearance'));
+    await tester.pumpAndSettle();
+    final checked = find.ancestor(
+      of: find.byIcon(Icons.check),
+      matching: find.byType(MenuItemButton),
+    );
+    expect(checked, findsOneWidget);
+    expect(find.descendant(of: checked, matching: find.text('Dark')), findsOne);
+    await tester.pumpWidget(const SizedBox());
+  });
 }
 
 /// Updates whose install runs only the shell's preparation, then [restart]
