@@ -192,7 +192,7 @@ class _RelayAppState extends State<RelayApp> {
     themeMode: themeMode,
     builder: (context, child) => WindowCapture(
       child: Theme(
-        data: MediaQuery.sizeOf(context).width < 900
+        data: MediaQuery.sizeOf(context).width < wideWorkspace
             ? Theme.of(context).copyWith(
                 visualDensity: VisualDensity.standard,
                 iconButtonTheme: IconButtonThemeData(
@@ -319,7 +319,9 @@ class _RelayShellState extends State<RelayShell> {
       setState(() {
         if (lastPresentation != w.presentations) {
           chatOnly = false;
-          if (MediaQuery.sizeOf(context).width < 900) chatOpen = false;
+          if (MediaQuery.sizeOf(context).width < wideWorkspace) {
+            chatOpen = false;
+          }
         }
         lastPresentation = w.presentations;
       });
@@ -358,7 +360,7 @@ class _RelayShellState extends State<RelayShell> {
           builder: (_) => AppLibrary(workspace: w, appId: id),
         ),
       );
-      if (mounted && MediaQuery.sizeOf(context).width < 900) {
+      if (mounted && MediaQuery.sizeOf(context).width < wideWorkspace) {
         setState(() => chatOpen = false);
       }
     } catch (_) {}
@@ -378,7 +380,7 @@ class _RelayShellState extends State<RelayShell> {
         return;
       }
       // A phone's chat sheet covers the page, so step it aside while selecting.
-      final phone = MediaQuery.sizeOf(context).width < 900;
+      final phone = MediaQuery.sizeOf(context).width < wideWorkspace;
       setState(() {
         selecting = (tab: tab!, image: image, reopenChat: phone && chatOpen);
         chatOnly = false;
@@ -624,7 +626,7 @@ class _RelayShellState extends State<RelayShell> {
     // A fullscreen page takes the whole screen when its tab shows alone; in
     // split view it fills only its own pane. Leaving the screen for any other
     // reason, such as another tab opening, also ends the page's fullscreen.
-    w.splitShown = MediaQuery.sizeOf(context).width >= 900;
+    w.splitShown = MediaQuery.sizeOf(context).width >= wideWorkspace;
     final inSplit = w.splitShown && w.shownSplit != null;
     final active = w.active?.page?.browser;
     final full = active?.fullScreen == true && !inSplit ? active : null;
@@ -659,7 +661,7 @@ class _RelayShellState extends State<RelayShell> {
                 builder: (context, size) {
                   final page = LayoutBuilder(
                     builder: (context, area) =>
-                        _pages(area.biggest, size.maxWidth >= 900),
+                        _pages(area.biggest, size.maxWidth >= wideWorkspace),
                   );
                   return _panels(size, page, screen);
                 },
@@ -981,7 +983,7 @@ class _RelayShellState extends State<RelayShell> {
 
   /// Chat stays built but hidden while a page fills the [screen].
   Widget _panels(BoxConstraints size, Widget page, bool screen) {
-    final desktop = size.maxWidth >= 900;
+    final desktop = size.maxWidth >= wideWorkspace;
     final minFraction = (320 / size.maxWidth).clamp(.2, .5);
     final fraction = chatWidth.clamp(minFraction, .5);
     final panelWidth = desktop ? size.maxWidth * fraction : size.maxWidth;
@@ -1122,7 +1124,7 @@ class _RelayShellState extends State<RelayShell> {
             onAcceptWithDetails: (details) => w.leaveSplit(details.data),
             builder: (context, _, _) {
               // Narrow windows show only the selected tab, never the split.
-              final split = MediaQuery.sizeOf(context).width >= 900
+              final split = MediaQuery.sizeOf(context).width >= wideWorkspace
                   ? w.shownSplit
                   : null;
               return ValueListenableBuilder(
@@ -1131,7 +1133,7 @@ class _RelayShellState extends State<RelayShell> {
                   tabs: List.of(w.tabs),
                   selected: chatOnly ? null : split ?? w.active,
                   split: split?.layout.tabs,
-                  draggable: MediaQuery.sizeOf(context).width >= 900,
+                  draggable: MediaQuery.sizeOf(context).width >= wideWorkspace,
                   memory: memory,
                   showVpn: Platform.isMacOS,
                   hoverCard: Platform.isMacOS
@@ -1157,7 +1159,7 @@ class _RelayShellState extends State<RelayShell> {
           onPressed: () {
             setState(() => chatOnly = false);
             w.newTab();
-            if (MediaQuery.sizeOf(context).width < 900) {
+            if (MediaQuery.sizeOf(context).width < wideWorkspace) {
               setState(() => chatOpen = false);
             }
           },

@@ -328,6 +328,11 @@ class MenuLabel extends StatelessWidget {
   );
 }
 
+/// From this width the workspace is a desktop's: chat docks beside the page,
+/// tabs split and drag, and controls keep their compact size. Narrower is a
+/// phone's.
+const wideWorkspace = 900.0;
+
 Duration workspaceMotion(BuildContext context) =>
     MediaQuery.disableAnimationsOf(context)
     ? Duration.zero
