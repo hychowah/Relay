@@ -31,7 +31,12 @@ class FakePage extends PageSurface with BrowserSurface {
   int transcriptLoads = 0, timeReads = 0;
   double? time;
   String selection = 'selected passage';
-  int generation = 5;
+  int generation = 5, selectionRefreshes = 0;
+  @override
+  Future<void> refreshSelection() async {
+    selectionRefreshes++;
+  }
+
   @override
   Json get context => {
     'viewId': spec.browser ? 'browser' : 'room',

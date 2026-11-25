@@ -592,6 +592,196 @@ void main() {
     expect(panel, findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('the chat header names the conversation and its bot, and the '
+      'status row shows the status, or works while a reply runs', (
+    tester,
+  ) async {
+    // No start, so no poll replaces the status set here.
+    final f = Fixture();
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    expect(find.text('Conversation'), findsOneWidget);
+    expect(find.text('Personal workspace'), findsOneWidget);
+    expect(find.text('Working…'), findsNothing);
+    expect(find.byIcon(Icons.check_circle_outline), findsNothing);
+
+    Json snapshot({bool running = false}) => {
+      'conversation': {'id': 'conversation', 'title': 'Desk plan'},
+      'messages': [],
+      'runs': [
+        if (running) {'id': 'run', 'status': 'running'},
+      ],
+    };
+    f.w
+      ..snapshot = ConversationSnapshot.fromJson(snapshot())
+      ..bots = [
+        {'id': 'desk', 'name': 'Desk helper', 'appIds': []},
+      ]
+      ..selectedBotId = 'desk'
+      ..status = 'Read the page'
+      ..changed();
+    await tester.pumpAndSettle();
+    expect(find.text('Desk plan'), findsOneWidget);
+    expect(find.text('Desk helper'), findsOneWidget);
+    final status = find.ancestor(
+      of: find.text('Read the page'),
+      matching: find.byType(Row),
+    );
+    expect(
+      find.descendant(
+        of: status.first,
+        matching: find.byIcon(Icons.check_circle_outline),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    // A running reply without a status of its own.
+    f.w
+      ..snapshot = ConversationSnapshot.fromJson(snapshot(running: true))
+      ..status = null
+      ..changed();
+    await tester.pump();
+    final working = find.ancestor(
+      of: find.text('Working…'),
+      matching: find.byType(Row),
+    );
+    expect(working, findsWidgets);
+    expect(
+      find.descendant(
+        of: working.first,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.check_circle_outline), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('the page chip and Capture an area show only for a page the '
+      'bot may use; the chip names the selection or the tab and follows '
+      'Include', (tester) async {
+    final f = Fixture();
+    await f.w.start();
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await f.w.openApp(f.w.apps[1]);
+    final page = f.pages.last;
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    final included = find.byTooltip('Current page included. Click to exclude.');
+    final excluded = find.byTooltip('Current page excluded. Click to include.');
+    final capture = find.byTooltip('Capture an area');
+    final colors = Theme.of(tester.element(included)).colorScheme;
+    Color? shade(Finder chip) =>
+        (tester
+                    .widget<Container>(
+                      find
+                          .descendant(
+                            of: chip,
+                            matching: find.byType(Container),
+                          )
+                          .first,
+                    )
+                    .decoration
+                as BoxDecoration)
+            .color;
+    Finder inChip(Finder chip, Finder child) =>
+        find.descendant(of: chip, matching: child);
+
+    expect(inChip(included, find.text('“selected passage”')), findsOneWidget);
+    expect(
+      inChip(included, find.byIcon(Icons.check_circle_outline)),
+      findsOneWidget,
+    );
+    expect(shade(included), colors.primaryContainer);
+    // The page cannot be captured yet.
+    expect(capture, findsNothing);
+
+    // With nothing selected, the chip names the tab.
+    page.selection = '';
+    f.w.changed();
+    await tester.pumpAndSettle();
+    expect(inChip(included, find.text('Room layout')), findsOneWidget);
+
+    await tester.tap(included);
+    await tester.pumpAndSettle();
+    expect(f.w.includeContext, isFalse);
+    expect(included, findsNothing);
+    expect(
+      inChip(excluded, find.byIcon(Icons.add_circle_outline)),
+      findsOneWidget,
+    );
+    expect(shade(excluded), Colors.transparent);
+    await tester.tap(excluded);
+    await tester.pumpAndSettle();
+    expect(included, findsOneWidget);
+
+    page.frame = Uint8List.fromList([1, 2, 3]);
+    f.w.changed();
+    await tester.pumpAndSettle();
+    expect(capture, findsOneWidget);
+
+    // A bot that may not use the Room app gets neither.
+    f.w
+      ..bots = [
+        {
+          'id': 'reader',
+          'name': 'Reader',
+          'appIds': ['browser'],
+        },
+      ]
+      ..selectedBotId = 'reader'
+      ..changed();
+    await tester.pumpAndSettle();
+    expect(included, findsNothing);
+    expect(excluded, findsNothing);
+    expect(capture, findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('the effort menu shows only for a model with thinking effort, '
+      'and holds its choices while a reply runs', (tester) async {
+    // No start, so no poll replaces the running reply set here.
+    final f = Fixture();
+    f.w.provider = {'model': 'DeepSeek'};
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    expect(find.text('Thinking'), findsNothing);
+
+    f.w
+      ..provider = {'model': 'DeepSeek', 'supportsReasoningEffort': true}
+      ..snapshot = ConversationSnapshot.fromJson({
+        'messages': [],
+        'runs': [
+          {'id': 'run', 'status': 'running'},
+        ],
+      })
+      ..changed();
+    // The spinner of a running reply never settles.
+    await tester.pump();
+    await tester.tap(find.text('Thinking'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(
+      tester
+          .widget<MenuItemButton>(find.widgetWithText(MenuItemButton, 'High'))
+          .onPressed,
+      isNull,
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
 }
 
 /// The chat's message field.

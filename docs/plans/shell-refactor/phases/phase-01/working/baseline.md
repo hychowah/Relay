@@ -4,9 +4,9 @@ Behavior unchanged means every test below still passes after every slice.
 A slice that moves or replaces a test updates its name here in the same
 slice.
 
-- Taken at: `06a1dff` (slice 7's tests that pin the page-stack rules).
+- Taken at: slice 8's tests that pin the chat rules.
 - Command: `flutter test --reporter json`, run in `flutter/`.
-- Result: 160 tests, all passed, none skipped.
+- Result: 168 tests, all passed, none skipped.
 - Names are grouped by test file, from the runner's own output. A name ending
   in a variant note is one test run on that platform.
 
@@ -32,7 +32,7 @@ slice.
 - a backend without app servers says so and stops asking
 - a refresh waits for the list read still running
 
-## test/area_capture_test.dart (9)
+## test/area_capture_test.dart (10)
 
 - screenshot selection opens inside the active tab beside chat
 - picking an area moves a phone's chat aside until done or the tab changes, and its attachment stays until a conversation is chosen
@@ -41,6 +41,7 @@ slice.
 - a snapshot that arrives after its tab was left shows nothing
 - a snapshot that cannot be read shows in the banner, and capturing can start again
 - a sent message takes its attached area along
+- an attached area asks for a model that takes images until one is chosen
 - picking again ends the last picture's flight at once
 - in a split, the area is picked on the selected pane's page only
 
@@ -73,7 +74,14 @@ slice.
 - chat only keeps the keyboard out of the page
 - a page that fills the screen shows over chat only and hides a phone's compact chat bar
 
-## test/chat_panel_test.dart (9)
+## test/chat_input_test.dart (4)
+
+- a transcript selection stays while the page selects nothing, and goes once its pane closes
+- a tap on the field reads an included page's selection again and shows it, unless the bot may not use the app
+- Enter does not send while the input method is composing
+- Send keeps a blank draft and an edit made while sending, and a sent draft clears and shows the newest message
+
+## test/chat_panel_test.dart (12)
 
 - forwarded chat shows the handoff before the first message
 - compact chat keeps context, keyboard sending and grouped menus usable
@@ -84,6 +92,9 @@ slice.
 - the draft is saved 300 ms after typing and when the window closes
 - closed chat keeps its draft and transcript, and drops a transcript selection that a newer page selection replaced
 - New conversation clears the draft, and a conversation chosen from the menu opens chat
+- the chat header names the conversation and its bot, and the status row shows the status, or works while a reply runs
+- the page chip and Capture an area show only for a page the bot may use; the chip names the selection or the tab and follows Include
+- the effort menu shows only for a model with thinking effort, and holds its choices while a reply runs
 
 ## test/confirm_delete_button_test.dart (1)
 

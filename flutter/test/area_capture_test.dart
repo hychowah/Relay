@@ -357,6 +357,27 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('an attached area asks for a model that takes images until '
+      'one is chosen', (tester) async {
+    final f = await _roomOnDesktop(tester);
+    final page = tester.getRect(find.text('View Room layout'));
+    await tester.tap(find.byTooltip('Capture an area'));
+    await _settle(tester, find.byType(RegionCapture));
+    await tester.dragFrom(
+      page.topLeft + const Offset(20, 20),
+      const Offset(200, 120),
+    );
+    await _settle(tester, find.byTooltip('Remove screenshot'));
+    await tester.pumpAndSettle();
+    final ask = find.text('Choose Claude or OpenAI to send this image.');
+    expect(ask, findsOneWidget);
+    f.w.provider = {'supportsImageInput': true};
+    f.w.changed();
+    await tester.pumpAndSettle();
+    expect(ask, findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets("picking again ends the last picture's flight at once", (
     tester,
   ) async {
