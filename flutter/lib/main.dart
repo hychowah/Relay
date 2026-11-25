@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
-import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
@@ -10,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import 'address_bar.dart';
+import 'area_capture.dart';
 import 'chat_dock.dart';
 import 'new_tab_page.dart';
 import 'browser_connection.dart';
@@ -36,7 +36,6 @@ import 'tab_memory.dart';
 import 'tab_preview.dart';
 import 'window_capture.dart';
 import 'bug_reports.dart';
-import 'capture_flight.dart';
 import 'transcript_pane.dart';
 
 Future<void> main() async {
@@ -266,18 +265,14 @@ class _RelayShellState extends State<RelayShell> {
   late final address = AddressInput(w, history: widget.browserHistory);
   final messagesScroll = ScrollController();
   Timer? saveTimer;
-  ({String appId, Uint8List bytes})? capture;
-  bool capturing = false, reportingBug = false;
-  ({WorkspaceTab tab, ui.Image image, bool reopenChat})? selecting;
-  // The composer's thumbnail, and the captured picture on its way there.
-  final captureSlot = GlobalKey();
-  OverlayEntry? flight;
+  bool reportingBug = false;
   late final layout = ChatLayout(
     widget.initialChatOpen,
     widget.initialChatWidth,
     widget.saveChatOpen,
     widget.saveChatWidth,
   );
+  late final capture = AreaCapture(context, w, layout);
 
   /// The pane a tab is being dragged over and the side it would take.
   (WorkspaceTab, SplitSide)? dropping;
@@ -303,7 +298,8 @@ class _RelayShellState extends State<RelayShell> {
     );
     draft = TextEditingController(text: widget.initialDraft);
     draft.addListener(_save);
-    layout.addListener(_layoutChanged);
+    layout.addListener(_redraw);
+    capture.addListener(_redraw);
     w.addListener(_changed);
     w.recorder.addListener(_changed);
     widget.updates?.addListener(_changed);
@@ -319,7 +315,7 @@ class _RelayShellState extends State<RelayShell> {
 
   void _changed() {
     if (mounted) {
-      if (selecting != null && w.active != selecting!.tab) _finishCapture(null);
+      capture.follow(w.active);
       setState(() {
         if (lastPresentation != w.presentations) {
           layout.showPage(
@@ -331,7 +327,7 @@ class _RelayShellState extends State<RelayShell> {
     }
   }
 
-  void _layoutChanged() => setState(() {});
+  void _redraw() => setState(() {});
 
   @override
   void dispose() {
@@ -343,10 +339,7 @@ class _RelayShellState extends State<RelayShell> {
     address.dispose();
     layout.dispose();
     messagesScroll.dispose();
-    selecting?.image.dispose();
-    flight
-      ?..remove()
-      ..dispose();
+    capture.dispose();
     w.removeListener(_changed);
     w.recorder.removeListener(_changed);
     widget.updates?.removeListener(_changed);
@@ -372,84 +365,17 @@ class _RelayShellState extends State<RelayShell> {
     } catch (_) {}
   }
 
-  Future<void> _capture() async {
-    final tab = w.active;
-    final page = tab?.page;
-    if (tab?.appId == null || page == null || capturing || selecting != null) {
-      return;
-    }
-    setState(() => capturing = true);
-    try {
-      final image = await decodeFrame(await page.snapshot());
-      if (!mounted || w.active != tab) {
-        image.dispose();
-        return;
-      }
-      // A phone's chat sheet covers the page, so step it aside while selecting.
-      final phone = MediaQuery.sizeOf(context).width < wideWorkspace;
-      setState(() {
-        selecting = (tab: tab!, image: image, reopenChat: phone && layout.open);
-        layout.showPage(closeChat: phone);
-      });
-    } catch (error) {
-      w.error = error.toString();
-      w.changed();
-    } finally {
-      if (mounted) setState(() => capturing = false);
-    }
-  }
-
-  void _finishCapture(CapturedRegion? region) {
-    final current = selecting;
-    if (current == null) return;
-    _land();
-    setState(() {
-      selecting = null;
-      if (current.reopenChat) layout.openChat();
-      if (region == null) return;
-      capture = (appId: current.tab.appId!, bytes: region.png);
-      if (MediaQuery.disableAnimationsOf(context)) return;
-      // The flight keeps its own handle on the frame, so the tool's handle
-      // is released as before.
-      final frame = current.image.clone();
-      flight = OverlayEntry(
-        builder: (_) => CaptureFlight(
-          frame: frame,
-          source: region.source,
-          from: region.area,
-          slot: captureSlot,
-          onLanded: _land,
-        ),
-      );
-      Overlay.of(context).insert(flight!);
-    });
-    // Let the overlay leave the tree before its frame is released.
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => current.image.dispose(),
-    );
-  }
-
-  /// Ends the flight; the composer's thumbnail shows from here on.
-  void _land() {
-    final entry = flight;
-    if (entry == null) return;
-    setState(() => flight = null);
-    entry
-      ..remove()
-      ..dispose();
-  }
-
   Future<void> _send() async {
     final text = draft.text;
     if (text.trim().isEmpty || w.busy) return;
-    final attachment = capture;
+    final attachment = capture.attachment;
     try {
       await w.send(
         text,
         capture: attachment,
         selection: transcriptSelection?.text,
       );
-      if (mounted && capture == attachment) setState(() => capture = null);
+      if (mounted) capture.sent(attachment);
       if (mounted && draft.text == text) {
         draft.clear();
         if (messagesScroll.hasClients) messagesScroll.jumpTo(0);
@@ -461,7 +387,7 @@ class _RelayShellState extends State<RelayShell> {
     draft.clear();
     setState(() {
       layout.openChat();
-      capture = null;
+      capture.remove();
     });
   }
 
@@ -851,13 +777,13 @@ class _RelayShellState extends State<RelayShell> {
             ),
           ),
         for (final tab in shown) ...[
-          if (selecting case final s? when s.tab == tab)
+          if (capture.pickingOn(tab) case final image?)
             below(
               tab,
               RegionCapture(
-                key: ValueKey(s.image),
-                image: s.image,
-                onDone: _finishCapture,
+                key: ValueKey(image),
+                image: image,
+                onDone: capture.finish,
               ),
             ),
           if (tab.appId == null)
@@ -1445,18 +1371,18 @@ class _RelayShellState extends State<RelayShell> {
                 ),
               ),
             ),
-          if (capture case final attachment?)
+          if (capture.attachment case final attachment?)
             Material(
               type: MaterialType.transparency,
               child: ListTile(
                 dense: true,
                 leading: SizedBox(
-                  key: captureSlot,
+                  key: capture.slot,
                   width: 52,
                   height: 38,
                   // Hidden while the captured picture is still flying here.
                   child: Opacity(
-                    opacity: flight == null ? 1 : 0,
+                    opacity: capture.flying ? 0 : 1,
                     child: Image.memory(
                       attachment.bytes,
                       fit: BoxFit.contain,
@@ -1476,7 +1402,7 @@ class _RelayShellState extends State<RelayShell> {
                 trailing: IconButton(
                   tooltip: 'Remove screenshot',
                   icon: const Icon(Icons.close),
-                  onPressed: () => setState(() => capture = null),
+                  onPressed: capture.remove,
                 ),
               ),
             ),
@@ -1540,9 +1466,7 @@ class _RelayShellState extends State<RelayShell> {
                   IconButton(
                     tooltip: 'Capture an area',
                     icon: const Icon(Icons.crop_free, size: 18),
-                    onPressed: capturing || selecting != null || w.busy
-                        ? null
-                        : _capture,
+                    onPressed: capture.busy || w.busy ? null : capture.start,
                   ),
                 if (w.provider['supportsReasoningEffort'] == true)
                   MenuAnchor(
