@@ -22,9 +22,9 @@ The pilot in practice:
   `setState`, so nothing needs to listen. It holds the text controller, the
   focus node and the fill-in, suggestion, Esc and paste state. Its public
   interface is the constructor (whose `workspace` and `history` stay
-  readable), `follow` and `dispose`. Its state fields are library-private (a
-  leading `_`), so only the view in the same file reads them, and no other
-  module can.
+  readable), `follow`, `dispose`, the `controller` and `focus` getters for
+  the field, and the rule methods below. Its state fields are
+  library-private (a leading `_`).
 - **The shell's side.** `main.dart` keeps one line per owner:
   `late final address = AddressInput(w, history: widget.browserHistory);`
   as a field, `address.follow(w.active);` in build where the old sync code
@@ -35,11 +35,22 @@ The pilot in practice:
 - **View.** `BrowserBar(workspace, tab, input)` is a `StatelessWidget`. The
   shell builds it where it called `_browserBar(tab)`, under the same keyed
   `Positioned`, so keys and the tree shape tests rely on stay the same.
-- **Logic placement.** Methods that touch only the owner's state and the
-  workspace (`_go`, `_fillIn`, `_filled`, `_addressTarget`) went onto the
-  owner. Methods that need a `BuildContext` (`_edited`, which invokes an
-  `Actions` intent) stayed in the view and reach the owner as
-  `input._field`. An owner never takes a region's `BuildContext`.
+- **Logic placement.** The rules live on the owner, as public methods
+  named for what the user does: `suggestionsFor`, `picked`, `escape`,
+  `pointerDown`, `tapped`, `submitted`, `go` and `edited`. The view draws
+  and wires its widgets to those methods (`onSelected: input.picked`). A
+  view calls owner methods and passes in, or acts on, what needs its
+  context; an owner never takes a region's `BuildContext`. Enter passes the
+  field's `submit` callback in, as `input.submitted(submit)`. `edited`
+  returns `now` itself unless the fill-in stays, and the view's formatter
+  invokes `AutocompleteFirstOptionIntent` with its own context exactly when
+  the returned value is a new one, as the old code did on that branch.
+- **No field access from the view.** A view never reads or writes an owner
+  field, even in the same file, where Dart would allow it. Later owners such
+  as `ChatLayout` and `AreaCapture` are used from several files, where
+  library-private access does not work, so the pilot does not teach it.
+  Check with `grep -n 'input\._' flutter/lib/<module>.dart` (with the view's
+  own name for its owner in place of `input`): expect nothing.
 - **Lifetime checks.** Where the shell checked `mounted` after an `await`,
   the owner checks its own `_disposed` flag, set first thing in `dispose`.
   The owner is disposed exactly when the shell is, so the check means the
@@ -71,8 +82,9 @@ The pilot in practice:
 5. **Build the module beside.** Write the new file: owner class first, then
    the view, then top-level helpers, in the old file's order where you can,
    so the moved blocks stay recognisable. Copy method bodies exactly. Keep
-   every name; the only renames are a leading `_` for fields that move onto
-   an owner, and `input.` (or the owner's name) in front of them in the view.
+   every name, except a leading `_` for fields that move onto an owner and
+   the public name, for what the user does, of a view callback that becomes
+   an owner method with the same body, which the view then calls.
    Give the owner and the view a `w` getter (`Workspace get w =>
    workspace;`), as the shell has, so lines that use `w.` move unchanged.
 6. **Move the callers.** In `main.dart`: replace the old fields with the
@@ -98,7 +110,8 @@ The pilot in practice:
     is not shown as moved. Each must be one of: the new file's imports,
     class and constructor lines, the owner's `follow` and `dispose`, field
     renames, `mounted` to the disposed check, `widget.<x>` to the owner's
-    field, an added `BuildContext` parameter, and comment edits for markers.
+    field, a view callback replaced by an owner method call, an added
+    `BuildContext` parameter, and comment edits for markers.
     Anything else is a behavior change and does not belong in the slice.
 12. **Structure and map.** `python3 tools/check_structure.py --update` (it
     only lowers), then set the `Lines` cell of the `main.dart` Known debt
@@ -218,9 +231,17 @@ npm run build
   there by absolute path and starts every shell command with `cd <worktree>
   &&`, since the shell does not keep `cd`.
 - **Private types in a public API.** `flutter_lints` reports a public field
-  whose type names a private type (the pilot's suggestions request uses the
-  private `_Suggestion`). Making the owner's fields library-private avoids
-  it and keeps the module's interface to what the design names.
+  or method whose type names a private type (the pilot's private
+  `_Suggestion` typedef). The owner's fields are library-private, so they
+  may use it. Its public methods spell the record type out,
+  `({String url, String title})`, which is the same type, so no new public
+  name is needed.
+- **A rule split between owner and view.** When the view keeps one
+  context-bound step of a moved rule (the pilot's intent call after
+  `edited`), check whether a test pins it: replace the view's condition with
+  `false`, then with `true`, and run the module's test file. In the pilot
+  neither failed, so the hand-back says that the step is checked only by
+  reading the code, and names the branch.
 - **No `context` in a stateless view.** A shell method that read
   `Theme.of(context)` or the shell's `colors` getter needs the context as a
   parameter in a `StatelessWidget`. In a builder callback that has its own

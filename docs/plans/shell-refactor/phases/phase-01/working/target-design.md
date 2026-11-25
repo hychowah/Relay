@@ -82,7 +82,7 @@ pushes the selected tab into those objects. Regions never pass their own
 
 | File | Public interface | Owns |
 |---|---|---|
-| `address_bar.dart` | `AddressInput(workspace, {history})` with `follow(WorkspaceTab? tab)`, `dispose()`; `BrowserBar(workspace, tab, input)`, `static const height = 46.0`; `inlineCompletion(typed, url)` | Fill-in, suggestions, Esc and paste rules, Go target, `browserTyped`; VPN switch (`/// Desktop only (macOS).`), PDF zoom and Highlight (`/// Desktop only.`) |
+| `address_bar.dart` | `AddressInput(workspace, {history})` with `follow(WorkspaceTab? tab)`, `dispose()`, `controller`, `focus` and the rule methods `suggestionsFor`, `picked`, `escape`, `pointerDown`, `tapped`, `submitted`, `go`, `edited`; `BrowserBar(workspace, tab, input)`, `static const height = 46.0`; `inlineCompletion(typed, url)` | Fill-in, suggestions, Esc and paste rules, Go target, `browserTyped`; VPN switch (`/// Desktop only (macOS).`), PDF zoom and Highlight (`/// Desktop only.`) |
 | `new_tab_page.dart` | `NewTabPage`, unchanged | App search, other devices' tabs |
 | `page_stack.dart` | `PageStack(workspace, desktop, address, capture, onChoose, onServers, onSplit, onResized)` | Keyed slots, split geometry, frames, tints, overlays, dividers, drop zones and hover |
 | `chat_dock.dart` | `ChatLayout(open, width, saveOpen, saveWidth)` with `open`, `only`, `width`, `transcriptOpen`, `showPage({closeChat})`, `toggle()`, `toggleOnly()`, `chatOnly()`, `saveWidth()`; `ChatDock(layout, workspace, size, screen, page, panel)` | Dock, phone sheet, compact bar, expand animation, width clamp |
