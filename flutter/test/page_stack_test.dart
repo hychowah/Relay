@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' show max;
 
 import 'package:material_ui/material_ui.dart';
@@ -364,6 +365,75 @@ void main() {
     await settle();
     expect(find.textContaining('Its app view could not open'), findsOneWidget);
     await opensServers();
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a loading app tab shows a spinner, and a Browser tab error '
+      'offers no App servers', (tester) async {
+    final f = Fixture();
+    await f.w.start();
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    final view = f.holdView = Completer();
+    final opening = f.w.openApp(f.w.apps[1]);
+    await tester.pump();
+    final loading = find.byKey(ValueKey('loading-${f.w.active!.id}'));
+    expect(
+      find.descendant(
+        of: loading,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsOneWidget,
+    );
+    view.complete();
+    await opening;
+    await tester.pumpAndSettle();
+    expect(loading, findsNothing);
+    expect(find.text('View Room layout'), findsOneWidget);
+
+    final browser = await f.w.openApp(f.w.apps[0]);
+    browser.error = 'The page failed.';
+    f.w.changed();
+    await tester.pumpAndSettle();
+    expect(find.text('The page failed.'), findsOneWidget);
+    expect(find.text('App servers'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets("dragging a split divider moves the tab's split map with it; "
+      'the workspace hears only the end', (tester) async {
+    final f = Fixture();
+    await f.w.start();
+    final room = await f.w.openApp(f.w.apps[1]);
+    final browser = await f.w.openApp(f.w.apps[0]);
+    f.w.dropInSplit(room, browser, SplitSide.left);
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    double mapWidth(WorkspaceTab tab) =>
+        tester.getRect(find.byKey(ValueKey('split-map-${tab.id}'))).width;
+    final (left, right) = (mapWidth(room), mapWidth(browser));
+    final saves = f.stored.length;
+    final drag = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('split-divider-0'))),
+      kind: PointerDeviceKind.mouse,
+    );
+    await drag.moveBy(const Offset(2, 0));
+    await drag.moveBy(const Offset(300, 0));
+    await tester.pump();
+    expect(mapWidth(room), greaterThan(left));
+    expect(mapWidth(browser), lessThan(right));
+    expect(f.stored, hasLength(saves));
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(f.stored, hasLength(saves + 1));
     await tester.pumpWidget(const SizedBox());
   });
 }

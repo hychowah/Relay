@@ -240,4 +240,64 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('the toolbar names Relay from 600 px wide, records chat '
+      'toggles, and New tab closes chat on a phone', (tester) async {
+    final f = Fixture();
+    await f.w.start();
+    tester.view.physicalSize = const Size(599, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    expect(find.text('Relay'), findsNothing);
+    tester.view.physicalSize = const Size(600, 800);
+    await tester.pumpAndSettle();
+    expect(find.text('Relay'), findsOneWidget);
+
+    final panel = find.byKey(const ValueKey('conversation-panel'));
+    expect(panel, findsOneWidget);
+    await tester.tap(find.byTooltip('New tab'));
+    await tester.pumpAndSettle();
+    expect(panel, findsNothing);
+
+    tester.view.physicalSize = const Size(1200, 800);
+    await tester.pumpAndSettle();
+    f.w.recorder.start();
+    await tester.tap(find.byTooltip('Toggle chat'));
+    await tester.pumpAndSettle();
+    expect(panel, findsOneWidget);
+    await tester.tap(find.byTooltip('New tab'));
+    await tester.pumpAndSettle();
+    expect(panel, findsOneWidget);
+    await tester.tap(find.byTooltip('Toggle chat'));
+    await tester.pumpAndSettle();
+    expect(panel, findsNothing);
+    expect(
+      [
+        for (final event in f.w.recorder.events)
+          if (event['name'] case 'open chat' || 'close chat') event['name'],
+      ],
+      ['open chat', 'close chat'],
+    );
+    f.w.recorder.stop();
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('returning to the app opens the conversation last opened on '
+      'another device', (tester) async {
+    final f = Fixture();
+    await f.w.start();
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    expect(f.w.conversationId, isNull);
+    f.current = 'elsewhere';
+    tester.binding
+      ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+      ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(f.w.conversationId, 'elsewhere');
+    await tester.pumpWidget(const SizedBox());
+  });
 }

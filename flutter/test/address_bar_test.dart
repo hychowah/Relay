@@ -353,4 +353,131 @@ void main() {
     // A click on macOS places the caret as the mouse goes down.
     variant: TargetPlatformVariant.only(TargetPlatform.macOS),
   );
+
+  testWidgets('Back, Forward and Highlight follow the page', (tester) async {
+    final f = Fixture();
+    await f.w.start();
+    final page = (await f.w.openApp(f.w.apps[0])).page! as FakePage;
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    Finder button(String tooltip) => find.ancestor(
+      of: find.byTooltip(tooltip),
+      matching: find.byType(IconButton),
+    );
+    bool enabled(String tooltip) =>
+        tester.widget<IconButton>(button(tooltip)).onPressed != null;
+    Future<void> pageChanged() async {
+      page.changed(false);
+      await tester.pumpAndSettle();
+    }
+
+    expect((enabled('Back'), enabled('Forward')), (false, false));
+    page.canGoBack = true;
+    await pageChanged();
+    expect((enabled('Back'), enabled('Forward')), (true, false));
+    page.canGoForward = true;
+    await pageChanged();
+    for (final action in ['Back', 'Forward', 'Reload']) {
+      await tester.tap(button(action));
+    }
+    expect(page.actions, ['back', 'forward', 'reload']);
+
+    page.selection = '';
+    await pageChanged();
+    expect(button('Select text on the page to highlight it'), findsOneWidget);
+    page.selection = 'selected passage';
+    await pageChanged();
+    expect(button('Highlight the selected text'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'an unsent address edit survives fullscreen and goes once the selected '
+    "page's address changes, as from Browser to an app and back",
+    (tester) async {
+      final f = Fixture();
+      await f.w.start();
+      final room = await f.w.openApp(f.w.apps[1]);
+      (room.page! as FakePage).url = 'https://room.example/';
+      final browser = await f.w.openApp(f.w.apps[0]);
+      final video = browser.page! as FakePage;
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, saveDraft: (_) async {}),
+      );
+      await tester.pumpAndSettle();
+      String shown() => tester.widget<TextField>(address).controller!.text;
+      await tester.enterText(address, 'unsent edit');
+      await tester.pumpAndSettle();
+
+      Future<void> pageFullScreen(bool on) async {
+        video.fullScreen = on;
+        video.changed(false);
+        await tester.pumpAndSettle();
+      }
+
+      await pageFullScreen(true);
+      expect(address, findsNothing);
+      await pageFullScreen(false);
+      expect(shown(), 'unsent edit');
+
+      f.w.select(room);
+      await tester.pumpAndSettle();
+      expect(address, findsNothing);
+      f.w.select(browser);
+      await tester.pumpAndSettle();
+      expect(shown(), 'https://example.com/desk');
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('Go records the page it opens as typed only with history', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final history in [true, false]) {
+      final f = Fixture()..historyPages = [];
+      await f.w.start();
+      await f.w.openApp(f.w.apps[0]);
+      await tester.pumpWidget(
+        RelayApp(
+          workspace: f.w,
+          saveDraft: (_) async {},
+          browserHistory: history,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(address, 'example.org');
+      await tester.tap(find.byTooltip('Go'));
+      await tester.pumpAndSettle();
+      expect(f.pages.single.navigated, ['example.org']);
+      expect(
+        f.history.where((call) => call.startsWith('POST')),
+        history
+            ? [
+                'POST /api/browser-history/typed '
+                    '{"url":"https://example.com/desk"}',
+              ]
+            : isEmpty,
+      );
+      await tester.pumpWidget(const SizedBox());
+    }
+  });
 }
+
+/// The selected Browser tab's address field.
+final address = find.byWidgetPredicate(
+  (w) =>
+      w is TextField &&
+      w.decoration?.hintText == 'Search or enter a web address',
+);

@@ -144,4 +144,100 @@ void main() {
     expect(f.w.tabs.length, 1);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('search filters the apps and hides other devices, and Enter '
+      'opens the first match', (tester) async {
+    final f = Fixture()
+      ..devices = [
+        {
+          'id': 'mac',
+          'name': 'Mac',
+          'updatedAt': DateTime.now().millisecondsSinceEpoch,
+          'tabs': {
+            'active': 0,
+            'tabs': [
+              {'appId': 'browser', 'url': 'https://news.example/'},
+            ],
+          },
+        },
+      ];
+    await f.w.start();
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    final devices = find.text("Open Mac's tabs here");
+    Future<List<String>> shownFor(String text) async {
+      await tester.enterText(search, text);
+      await tester.pumpAndSettle();
+      return [
+        for (final name in ['Browser', 'Room layout', 'Research'])
+          if (find
+              .descendant(
+                of: find.byType(NewTabPage),
+                matching: find.text(name),
+              )
+              .evaluate()
+              .isNotEmpty)
+            name,
+      ];
+    }
+
+    expect(devices, findsOneWidget);
+    // Descriptions match too.
+    expect(await shownFor('FURN'), ['Room layout']);
+    expect(devices, findsNothing);
+    expect(await shownFor('nothing like it'), isEmpty);
+    expect(find.text('No matching apps.'), findsOneWidget);
+    expect(await shownFor('  '), ['Browser', 'Room layout', 'Research']);
+    expect(devices, findsOneWidget);
+    expect(await shownFor('re'), ['Room layout', 'Research']);
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(f.w.active?.appId, 'room-layout');
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('choosing an app closes chat on a phone and keeps it on the '
+      'desktop', (tester) async {
+    final f = Fixture();
+    await f.w.start();
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    final panel = find.byKey(const ValueKey('conversation-panel'));
+    expect(panel, findsOneWidget);
+    await tester.enterText(search, 'Room');
+    await tester.pumpAndSettle();
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(f.w.active?.appId, 'room-layout');
+    expect(panel, findsNothing);
+
+    tester.view.physicalSize = const Size(1200, 800);
+    f.w.newTab();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Toggle chat'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NewTabPage),
+        matching: find.text('Browser'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(f.w.active?.appId, 'browser');
+    expect(panel, findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
 }
+
+/// The new tab page's app search.
+final search = find.byWidgetPredicate(
+  (w) => w is TextField && w.decoration?.hintText == 'Search apps',
+);
