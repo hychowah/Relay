@@ -50,6 +50,7 @@ is discarded; a merged one is reverted by a new slice.
 |---|---|---|
 | 1a | Test homes: fakes and shell tests moved unchanged | done |
 | 1b | Safety net: tests for the untested shell behavior | done |
+| 1c | Fix: an unloaded Browser tab's address | done |
 | 2 | Pilot: `address_bar.dart` | to do |
 | 3 | `new_tab_page.dart` | to do |
 | 4 | `chat_dock.dart` and `wideWorkspace` | to do |
@@ -74,6 +75,12 @@ change. Run probes U6–U8. Break one pinned behavior on purpose, see a test
 fail, revert, and report it under Checks. Add the new test names to the
 baseline. Exit: suite passes; baseline updated from the runner's output.
 Rollback: revert; tests only.
+
+**1c. Fix, the unloaded Browser tab's address.** The one behavior change,
+asked for by the user at the first pause point, before the pilot moves the
+address bar. An active Browser tab whose page is not loaded, such as after a
+failed reload, now shows its known address, and a Go from it is recorded as
+typed. One new test in `address_bar_test.dart`; the baseline has 134 names.
 
 **2. Pilot, `address_bar.dart`.** `AddressInput`, `BrowserBar`,
 `inlineCompletion`; the shell's build calls `address.follow(url)`. Writes the
@@ -133,8 +140,9 @@ which means a prerequisite is missing and goes back to the planner.
 
 ## Project limits
 
-- Behavior identical: after 1b, a slice edits tests only in import lines.
-  A bug found is noted in the hand-back and moved as it is.
+- Behavior identical: after 1b, a slice edits tests only in import lines;
+  the user's fix slice 1c is the one exception. A bug found is noted in the
+  hand-back and moved as it is.
 - No Mac run in a slice unless WSL cannot prove it; then one run, said first.
 - Recorded sizes only go down. Workers use worktrees named for the slice,
   reset to local `main`, and never merge, push or deploy.
@@ -146,13 +154,8 @@ which means a prerequisite is missing and goes back to the planner.
   setter: for the workspace.dart refactor.
 - A settings object replacing `RelayApp`'s parameters.
 - A `useWindow(tester, size)` test helper for the 20 repeated window setups.
-- The suspected address bug: an active Browser tab that is not loaded shows
-  an empty address, and a Go from it is not recorded as typed. Slice 1b checks
-  it; a fix slice after slice 8 needs the user's yes.
-  Slice 1b confirmed it with an uncommitted test; it is still unfixed.
 
 ## Next
 
-Slice 1b is done: 23 safety-net tests, with their names in the baseline. This
-is the first pause point. The user looks at the safety net, and slice 2, the
-pilot `address_bar.dart`, starts only after the user says to go on.
+Slice 1c is done: the unloaded Browser tab's address is fixed. Slice 2, the
+pilot `address_bar.dart`, is next; the user said to go on with it.

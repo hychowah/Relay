@@ -242,8 +242,8 @@ Each removed in the slice that replaces it:
 - U7. Can the update-install closure be driven on WSL? Slice 1b reads
   `AppUpdates.install`; if it fakes without product changes, pin "draft and
   session saved before restart"; otherwise slice 6 moves it verbatim.
-- U8. Is the suspected unloaded-tab address bug real? Slice 1b checks it with
-  an uncommitted test and reports the result.
+- U8. Is the suspected unloaded-tab address bug real? Yes: slice 1b confirmed
+  it, and slice 1c fixed it.
 
 ## Worker hand-back
 

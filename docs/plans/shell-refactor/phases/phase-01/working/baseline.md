@@ -4,14 +4,13 @@ Behavior unchanged means every test below still passes after every slice.
 A slice that moves or replaces a test updates its name here in the same
 slice.
 
-- Taken at: `e9b780a` (slice 1b tests; `flutter/lib/` is unchanged from
-  `main`).
+- Taken at: `50b2a72` (slice 1c fix and its test).
 - Command: `flutter test --reporter json`, run in `flutter/`.
-- Result: 133 tests, all passed, none skipped.
+- Result: 134 tests, all passed, none skipped.
 - Names are grouped by test file, from the runner's own output. A name ending
   in a variant note is one test run on that platform.
 
-## test/address_bar_test.dart (7)
+## test/address_bar_test.dart (8)
 
 - a Browser tab highlights selected text, and zooms a PDF
 - address bar asks the server for visited pages as the user types
@@ -20,6 +19,7 @@ slice.
 - Back, Forward and Highlight follow the page
 - an unsent address edit survives fullscreen and goes once the selected page's address changes, as from Browser to an app and back
 - Go records the page it opens as typed only with history
+- a Browser tab that could not load again shows its address, and Go from it records the page it opens as typed
 
 ## test/app_servers_test.dart (6)
 
