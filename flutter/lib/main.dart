@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import 'address_bar.dart';
 import 'browser_connection.dart';
 import 'browser_transcript.dart';
 import 'relay_api.dart';
@@ -260,21 +261,7 @@ class _RelayShellState extends State<RelayShell> {
   ColorScheme get colors => Theme.of(context).colorScheme;
   Workspace get w => widget.workspace;
   late final TextEditingController draft;
-  final address = TextEditingController();
-  final addressFocus = FocusNode();
-  bool pickedSuggestion = false, addressWasFocused = false;
-
-  /// The inline fill-in: what the user typed, the whole address shown, with
-  /// the filled-in rest selected after the typed text, and the page's URL.
-  ({String typed, String text, String url})? fill;
-
-  /// The last edit was a deletion or a paste, or Esc removed the fill-in
-  /// (which also hides the list); each lasts until the user's next edit.
-  bool noFill = false, escaped = false;
-
-  /// The latest suggestions request, kept so that filling in, which changes
-  /// the text but not the query, does not ask again until the page changes.
-  ({String query, Future<List<_Suggestion>> pages})? asked;
+  late final address = AddressInput(w, history: widget.browserHistory);
   final messagesScroll = ScrollController();
   Timer? saveTimer;
   ({String appId, Uint8List bytes})? capture;
@@ -292,7 +279,6 @@ class _RelayShellState extends State<RelayShell> {
   ({String pane, String text, String page})? transcriptSelection;
   late double chatWidth = widget.initialChatWidth;
   int lastPresentation = 0;
-  String? lastPageUrl;
 
   /// The page shown on the whole screen.
   BrowserSurface? onScreen;
@@ -347,7 +333,6 @@ class _RelayShellState extends State<RelayShell> {
     unawaited(widget.saveDraft(draft.text));
     draft.dispose();
     address.dispose();
-    addressFocus.dispose();
     messagesScroll.dispose();
     selecting?.image.dispose();
     flight
@@ -629,13 +614,7 @@ class _RelayShellState extends State<RelayShell> {
 
   @override
   Widget build(BuildContext context) {
-    final url = _addressOf(w.active);
-    if (url != lastPageUrl) {
-      lastPageUrl = url;
-      fill = null;
-      asked = null;
-      address.text = url == 'about:blank' ? '' : url ?? '';
-    }
+    address.follow(w.active);
     // Several controls open or close chat; the panel reopens as it was left.
     if (chatOpen != savedChatOpen) {
       savedChatOpen = chatOpen;
@@ -691,377 +670,6 @@ class _RelayShellState extends State<RelayShell> {
     );
   }
 
-  /// A Browser tab's bar, at the top of its own pane. Only the selected tab's
-  /// bar takes input: another pane's tint takes the first click and selects
-  /// that pane, so these buttons always act on the selected tab. A narrow
-  /// pane's bar leaves out Go and the PDF zoom, which Enter and a pinch do,
-  /// and the VPN button's label.
-  Widget _browserBar(WorkspaceTab tab) => LayoutBuilder(
-    builder: (context, size) => ClipRect(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: Row(children: _barControls(tab, wide: size.maxWidth >= 480)),
-      ),
-    ),
-  );
-
-  List<Widget> _barControls(WorkspaceTab tab, {required bool wide}) {
-    final browser = tab.page?.browser;
-    return [
-      IconButton(
-        tooltip: 'Back',
-        onPressed: browser?.canGoBack == true
-            ? () => w.browserAction('back')
-            : null,
-        icon: const Icon(Icons.arrow_back),
-      ),
-      IconButton(
-        tooltip: 'Forward',
-        onPressed: browser?.canGoForward == true
-            ? () => w.browserAction('forward')
-            : null,
-        icon: const Icon(Icons.arrow_forward),
-      ),
-      IconButton(
-        tooltip: 'Reload',
-        onPressed: () => w.browserAction('reload'),
-        icon: const Icon(Icons.refresh),
-      ),
-      if (Platform.isMacOS) _vpnSwitch(tab, label: wide),
-      Expanded(child: tab == w.active ? _addressField() : _addressShown(tab)),
-      if (wide)
-        IconButton(
-          tooltip: 'Go',
-          onPressed: () => _go(_addressTarget),
-          icon: const Icon(Icons.arrow_forward),
-        ),
-      ..._readingControls(tab, zoom: wide),
-    ];
-  }
-
-  /// Another pane's address, drawn as the address field draws it.
-  Widget _addressShown(WorkspaceTab tab) {
-    final url = _addressOf(tab);
-    final text = url == null || url == 'about:blank' ? '' : url;
-    return InputDecorator(
-      decoration: _addressDecoration,
-      isEmpty: text.isEmpty,
-      child: Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.bodyLarge,
-      ),
-    );
-  }
-
-  // Desktop (macOS) only: a quiet icon while the tab uses the Mac's own
-  // network, a filled "VPN" button while it goes through NordVPN in WSL;
-  // without its label in a narrow bar.
-  Widget _vpnSwitch(WorkspaceTab tab, {required bool label}) {
-    final on = tab.vpn;
-    final tooltip = on
-        ? 'VPN on: through NordVPN in WSL'
-        : "VPN off: the Mac's own network";
-    if (!on) {
-      return IconButton(
-        tooltip: tooltip,
-        onPressed: w.toggleVpn,
-        icon: const Icon(Icons.vpn_lock_outlined),
-      );
-    }
-    if (!label) {
-      return IconButton.filled(
-        tooltip: tooltip,
-        onPressed: w.toggleVpn,
-        icon: const Icon(Icons.vpn_lock),
-      );
-    }
-    return Tooltip(
-      message: tooltip,
-      child: FilledButton.icon(
-        onPressed: w.toggleVpn,
-        icon: const Icon(Icons.vpn_lock, size: 18),
-        label: const Text('VPN'),
-        style: FilledButton.styleFrom(
-          visualDensity: VisualDensity.compact,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-        ),
-      ),
-    );
-  }
-
-  // Desktop only: zoom for a PDF, which shows in the Mac's own PDF viewer,
-  // and Highlight for the text selected on any page of a Browser tab.
-  List<Widget> _readingControls(WorkspaceTab tab, {required bool zoom}) {
-    final browser = tab.page?.browser;
-    final selection = tab.page?.context?['selection'];
-    final selected = selection is String && selection.isNotEmpty;
-    return [
-      if (zoom && browser?.pdf == true) ...[
-        IconButton(
-          tooltip: 'Zoom out',
-          onPressed: () => w.browserAction('zoomOut'),
-          icon: const Icon(Icons.zoom_out),
-        ),
-        IconButton(
-          tooltip: 'Zoom in',
-          onPressed: () => w.browserAction('zoomIn'),
-          icon: const Icon(Icons.zoom_in),
-        ),
-        IconButton(
-          tooltip: 'Fit to width',
-          onPressed: () => w.browserAction('zoomFit'),
-          icon: const Icon(Icons.fit_screen),
-        ),
-      ],
-      if (browser?.canHighlight == true)
-        IconButton(
-          tooltip: selected
-              ? 'Highlight the selected text'
-              : 'Select text on the page to highlight it',
-          onPressed: selected ? () => w.browserAction('highlight') : null,
-          icon: const Icon(Icons.border_color),
-        ),
-    ];
-  }
-
-  /// What the address bar opens: the suggested page's own URL while its
-  /// filled-in text is shown, selected or accepted with the caret, since the
-  /// text drops its scheme, `www.` and final `/`; otherwise the text as typed.
-  String get _addressTarget =>
-      address.text == fill?.text ? fill!.url : address.text;
-
-  /// Opens [text] from the address bar; the page it lands on counts as typed.
-  Future<void> _go(String text) async {
-    final tab = w.active;
-    // A loaded tab's page is the one Go loads in, even if a network switch
-    // replaces it meanwhile; an unloaded tab gets its page from navigating.
-    final loaded = tab?.unloaded == null ? tab?.page : null;
-    await w.navigate(text);
-    final page = loaded ?? tab?.page;
-    if (mounted && w.error == null && page != null && widget.browserHistory) {
-      w.api.browserTyped(page.url);
-    }
-  }
-
-  // Suggestions appear only once the user changes the address the app wrote.
-  // Their first option stands for the typed text and is not listed, so Enter
-  // opens what was typed, or the filled-in page, until the arrow keys move to
-  // a page. The server
-  // answers as the user types; RawAutocomplete drops an answer once the text
-  // has changed again, and until then the earlier list stays, so the typed
-  // text option always reads the field rather than the text it was made for.
-  // As in Chrome, the best page's address also fills in after the typed text;
-  // the query stays what the user typed, so the fill-in asks for nothing new.
-  Widget _addressField() => RawAutocomplete<_Suggestion>(
-    textEditingController: address,
-    focusNode: addressFocus,
-    optionsBuilder: (value) async {
-      final query = value.text == fill?.text ? fill!.typed : value.text;
-      if (!widget.browserHistory ||
-          escaped ||
-          query == lastPageUrl ||
-          query.trim().isEmpty) {
-        return const [];
-      }
-      if (asked?.query != query) {
-        asked = (query: query, pages: w.api.browserSuggestions(query));
-      }
-      final pages = await asked!.pages;
-      // A failed request also answers nothing; ask again next time.
-      if (pages.isEmpty) asked = null;
-      if (mounted) _fillIn(query, pages);
-      return [if (pages.isNotEmpty) _typedText, ...pages];
-    },
-    displayStringForOption: (option) =>
-        option == _typedText ? address.text : option.url,
-    // Enter on the typed text option is opened by onSubmitted.
-    onSelected: (option) {
-      addressFocus.unfocus();
-      if (option == _typedText) return;
-      pickedSuggestion = true;
-      _go(option.url);
-    },
-    fieldViewBuilder: (context, controller, focus, submit) => Builder(
-      builder: (context) => Actions(
-        actions: {
-          DismissIntent: CallbackAction<DismissIntent>(
-            onInvoke: (intent) {
-              if (_filled(address.value)) {
-                escaped = true;
-                address.value = TextEditingValue(
-                  text: fill!.typed,
-                  selection: TextSelection.collapsed(
-                    offset: fill!.typed.length,
-                  ),
-                );
-              }
-              return Actions.maybeInvoke(context, intent);
-            },
-          ),
-        },
-        // A tap focuses the field as the field's own request, which
-        // selectAllOnFocus skips, and the tap has placed the caret by the
-        // time onTap runs; so a click that focuses the field selects here.
-        child: Listener(
-          onPointerDown: (_) => addressWasFocused = addressFocus.hasFocus,
-          child: TextField(
-            controller: controller,
-            focusNode: focus,
-            decoration: _addressDecoration,
-            inputFormatters: [
-              TextInputFormatter.withFunction(
-                (before, now) => _edited(context, before, now),
-              ),
-            ],
-            onTap: () {
-              if (!addressWasFocused) {
-                address.selection = TextSelection(
-                  baseOffset: 0,
-                  extentOffset: address.text.length,
-                );
-              }
-            },
-            // Each change of the text returns the highlight to the typed text.
-            onChanged: (_) => Actions.maybeInvoke(
-              context,
-              const AutocompleteFirstOptionIntent(),
-            ),
-            onSubmitted: (_) {
-              pickedSuggestion = false;
-              submit();
-              if (!pickedSuggestion) _go(_addressTarget);
-            },
-          ),
-        ),
-      ),
-    ),
-    optionsViewBuilder: (context, select, options) {
-      final highlighted = AutocompleteHighlightedOption.of(context) - 1;
-      return Align(
-        alignment: Alignment.topLeft,
-        child: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Material(
-            color: colors.surface,
-            elevation: 8,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: colors.outline),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: ListView(
-              shrinkWrap: true,
-              padding: const EdgeInsets.all(6),
-              children: [
-                for (final (index, option) in options.skip(1).indexed)
-                  ListTile(
-                    dense: true,
-                    selected: index == highlighted,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(7),
-                    ),
-                    title: Text(
-                      option.title.isEmpty ? option.url : option.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: option.title.isEmpty
-                        ? null
-                        : Text(
-                            option.url,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                    onTap: () => select(option),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      );
-    },
-  );
-
-  bool _filled(TextEditingValue value) =>
-      value.text == fill?.text &&
-      value.selection.start == fill!.typed.length &&
-      value.selection.end == value.text.length &&
-      value.composing.isCollapsed;
-
-  /// Fills in the best page after [query] once its answer arrives, if the
-  /// user is still editing [query], as typed or filled in, with the caret at
-  /// the end and no input method composing.
-  void _fillIn(String query, List<_Suggestion> pages) {
-    final value = address.value;
-    final atEnd =
-        value.selection.isCollapsed &&
-        value.selection.baseOffset == value.text.length &&
-        value.composing.isCollapsed;
-    final typed = _filled(value) ? fill!.typed : (atEnd ? value.text : null);
-    if (noFill || typed != query || !addressFocus.hasFocus) return;
-    final best = pages.firstOrNull;
-    final text = best == null ? null : inlineCompletion(query, best.url);
-    fill = text == null ? null : (typed: query, text: text, url: best!.url);
-    final shown = text ?? query;
-    if (shown != value.text) {
-      address.value = TextEditingValue(
-        text: shown,
-        selection: TextSelection(
-          baseOffset: query.length,
-          extentOffset: shown.length,
-        ),
-      );
-    }
-  }
-
-  /// Applies the user's own edits. Typing the next filled-in character keeps
-  /// the rest filled in without waiting for the server; any other edit drops
-  /// the fill-in, and a deletion or a paste fills nothing in until the next
-  /// edit, as in Chrome. Moving only the caret is not an edit.
-  TextEditingValue _edited(
-    BuildContext context,
-    TextEditingValue before,
-    TextEditingValue now,
-  ) {
-    final shown = fill, typed = now.text, cut = before.selection;
-    // The characters the edit put in place of the selection; several at once
-    // with no input method composing are a paste.
-    final added = typed.length - before.text.length + cut.end - cut.start;
-    escaped = false;
-    if (shown != null &&
-        _filled(before) &&
-        now.composing.isCollapsed &&
-        now.selection.isCollapsed &&
-        now.selection.baseOffset == typed.length &&
-        added == 1 &&
-        typed.length < shown.text.length &&
-        shown.text.toLowerCase().startsWith(typed.toLowerCase())) {
-      noFill = false;
-      fill = (
-        typed: typed,
-        text: typed + shown.text.substring(typed.length),
-        url: shown.url,
-      );
-      // The text stays the same, so onChanged does not run.
-      Actions.maybeInvoke(context, const AutocompleteFirstOptionIntent());
-      return TextEditingValue(
-        text: fill!.text,
-        selection: TextSelection(
-          baseOffset: typed.length,
-          extentOffset: fill!.text.length,
-        ),
-      );
-    }
-    fill = null;
-    noFill =
-        before.composing.isCollapsed &&
-        now.composing.isCollapsed &&
-        (added < 0 || added > 1 || added == 0 && !cut.isCollapsed);
-    return now;
-  }
-
   /// Every tab's page stays in one keyed slot of this stack, so showing it
   /// alone, in a split pane or hidden only changes its position and never
   /// recreates its native view.
@@ -1087,7 +695,9 @@ class _RelayShellState extends State<RelayShell> {
     // A Browser tab's bar sits at the top of its own pane, so selecting
     // another pane never moves a page. A page in fullscreen fills its pane.
     double bar(WorkspaceTab tab) =>
-        tab.isBrowser && tab.page?.browser?.fullScreen != true ? _barHeight : 0;
+        tab.isBrowser && tab.page?.browser?.fullScreen != true
+        ? BrowserBar.height
+        : 0;
     // What shows in place of the page, such as its error, starts below it.
     Widget below(WorkspaceTab tab, Widget child, {Key? key}) {
       final rect = rects[tab] ?? area;
@@ -1309,7 +919,7 @@ class _RelayShellState extends State<RelayShell> {
               // kept out too: these buttons act on the selected tab.
               child: ExcludeFocus(
                 excluding: w.active != tab,
-                child: _browserBar(tab),
+                child: BrowserBar(w, tab, address),
               ),
             ),
           // The other pane's tint is painted over its page on purpose: on
@@ -2399,38 +2009,3 @@ class _NewTabPageState extends State<NewTabPage> {
     );
   }
 }
-
-/// The address-bar text that completes [typed] with [url] inline, or null
-/// when [url], without its scheme and `www.`, does not continue [typed]. The
-/// typed characters stay as typed, and a bare site has no trailing `/`.
-String? inlineCompletion(String typed, String url) {
-  final prefix = RegExp(r'^(https?://)?(www\.)?', caseSensitive: false);
-  final start = typed.replaceFirst(prefix, '');
-  var address = url.replaceFirst(prefix, '');
-  if (RegExp(r'^[^/]+/$').hasMatch(address)) {
-    address = address.substring(0, address.length - 1);
-  }
-  if (start.isEmpty ||
-      address.length <= start.length ||
-      !address.toLowerCase().startsWith(start.toLowerCase())) {
-    return null;
-  }
-  return typed + address.substring(start.length);
-}
-
-/// A tab's address; an unloaded Browser tab keeps its own until it loads.
-String? _addressOf(WorkspaceTab? tab) => tab?.unloaded?.url ?? tab?.page?.url;
-
-/// The height of a Browser tab's bar above its page. It is fixed, so a page
-/// keeps its size whichever pane is selected.
-const _barHeight = 46.0;
-
-const _addressDecoration = InputDecoration(
-  hintText: 'Search or enter a web address',
-  isDense: true,
-  contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-);
-
-/// An address-bar suggestion: a visited page, or [_typedText].
-typedef _Suggestion = ({String url, String title});
-const _Suggestion _typedText = (url: '', title: '');
