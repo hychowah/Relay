@@ -68,7 +68,6 @@ The service has two entry points: `server/index.ts` serves the web page, and
 | File | Lines | Where its code should go |
 |---|---|---|
 | `flutter/test/workspace_test.dart` | 1,062 | Split with `workspace.dart` |
-| `flutter/lib/main.dart` | 1,025 | `chat_panel.dart`; `main.dart` keeps startup, the shell's state owners and the toolbar |
 | `flutter/lib/web_page.dart`, `flutter/test/web_page_test.dart` | 1,535, 840 | `browser_address.dart`, `mac_browser.dart` (macOS), `page_trace.dart`, `page_highlights.dart`, `hosted_page.dart`; the test's fake to `flutter/test/support/` |
 | `flutter/lib/workspace.dart` | 1,340 | `conversation_state.dart`, `workspace_session.dart` (save, restore, device tabs) |
 | `server/store.ts` | 877 | Keeps the database and schema; `store-browser.ts`, `store-runs.ts`, `store-memory.ts` |
@@ -78,7 +77,10 @@ The service has two entry points: `server/index.ts` serves the web page, and
 ## Structure window
 
 The [Flutter shell refactor](plans/shell-refactor/master-plan.md) owns
-`flutter/lib/main.dart`, `flutter/test/support/`, the new shell modules and
-their tests, and the `main.dart` entry in `tools/structure.json` and Known
-debt. Do not edit them until the plan's structure window releases them; a
-shell feature waits or goes into a module that already exists.
+`flutter/lib/main.dart`, the shell modules (`address_bar.dart`,
+`new_tab_page.dart`, `chat_dock.dart`, `area_capture.dart`,
+`workspace_menu.dart`, `page_stack.dart`, `chat_panel.dart`),
+`flutter/test/support/` and the shell tests (the modules' `_test.dart`
+files, `chat_input_test.dart`, `shell_actions_test.dart`, `shell_test.dart`)
+until its close-out ends. Do not edit them before then; a shell feature
+waits.
