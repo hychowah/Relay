@@ -41,6 +41,18 @@ class Fixture {
             return reply({'source': deskReport, 'sections': []});
           }
           if (path == '/api/app-servers') return reply([]);
+          // The workspace menu's dialogs, each with nothing saved yet.
+          if (path == '/api/memories') return reply([]);
+          if (path == '/api/stored-data') return reply([]);
+          if (path == '/api/settings/folders') return reply({'folders': []});
+          if (path == '/api/settings/provider') {
+            return reply({'mode': 'deepseek', 'hasKey': false});
+          }
+          if (path.endsWith('/search')) return reply([]);
+          if (path == '/api/bug-reports' && request.method == 'GET') {
+            return reply([]);
+          }
+          if (path.contains('/view')) await holdView?.future;
           if (path.contains('/view') && appDown) {
             return http.Response(jsonEncode({'error': 'App is down.'}), 502);
           }
@@ -141,7 +153,7 @@ class Fixture {
   final acks = <Json>[];
   final stored = <Json>[];
   List<Json> commands = [], messages = [], runs = [];
-  Completer<void>? holdSnapshot, holdPages;
+  Completer<void>? holdSnapshot, holdPages, holdView;
   Json? sent, bugReport;
   // The server's browsing history: its calls, and pages already ranked;
   // null pages stand for an older backend without history.

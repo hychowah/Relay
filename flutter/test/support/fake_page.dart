@@ -76,6 +76,8 @@ class FakePage extends PageSurface with BrowserSurface {
   @override
   bool pdf = false;
   @override
+  bool canGoBack = false, canGoForward = false;
+  @override
   bool get canHighlight => spec.browser;
   final actions = <String>[];
   @override
