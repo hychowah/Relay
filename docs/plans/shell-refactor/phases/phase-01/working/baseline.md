@@ -4,19 +4,22 @@ Behavior unchanged means every test below still passes after every slice.
 A slice that moves or replaces a test updates its name here in the same
 slice.
 
-- Taken at: `506d004` (slice 1a test moves; `flutter/lib/` is unchanged from
+- Taken at: `e9b780a` (slice 1b tests; `flutter/lib/` is unchanged from
   `main`).
 - Command: `flutter test --reporter json`, run in `flutter/`.
-- Result: 110 tests, all passed, none skipped.
+- Result: 133 tests, all passed, none skipped.
 - Names are grouped by test file, from the runner's own output. A name ending
   in a variant note is one test run on that platform.
 
-## test/address_bar_test.dart (4)
+## test/address_bar_test.dart (7)
 
 - a Browser tab highlights selected text, and zooms a PDF
 - address bar asks the server for visited pages as the user types
 - inline completion continues the typed text with the best address
 - address bar selects all on a focusing click and fills in the best page (variant: TargetPlatform.macOS)
+- Back, Forward and Highlight follow the page
+- an unsent address edit survives fullscreen and goes once the selected page's address changes, as from Browser to an app and back
+- Go records the page it opens as typed only with history
 
 ## test/app_servers_test.dart (6)
 
@@ -27,9 +30,10 @@ slice.
 - a backend without app servers says so and stops asking
 - a refresh waits for the list read still running
 
-## test/area_capture_test.dart (1)
+## test/area_capture_test.dart (2)
 
 - screenshot selection opens inside the active tab beside chat
+- picking an area moves a phone's chat aside until done or the tab changes, and its attachment stays until a conversation is chosen
 
 ## test/browser_connection_test.dart (2)
 
@@ -47,17 +51,25 @@ slice.
 - lists saved reports and opens their event timeline
 - marks a report solved and deletes another
 
-## test/chat_dock_test.dart (2)
+## test/chat_dock_test.dart (5)
 
 - chat can reverse mid-slide and reduced motion closes immediately
 - chat reopens closed when it was left closed
+- a phone's compact chat bar names the chat, stops a reply and opens chat
+- dragging the chat divider resizes chat as it moves and saves the width once
+- an agent presentation closes chat on a phone and ends chat only on the desktop
 
-## test/chat_panel_test.dart (4)
+## test/chat_panel_test.dart (9)
 
 - forwarded chat shows the handoff before the first message
 - compact chat keeps context, keyboard sending and grouped menus usable
 - a YouTube Browser tab offers a selectable transcript beside chat
 - the transcript follows the video until the user scrolls or selects
+- the effort menu marks its choice and shows a failed change
+- Send turns to Stop while a reply runs, and a send in flight holds history and new conversation
+- the draft is saved 300 ms after typing and when the window closes
+- closed chat keeps its draft and transcript, and drops a transcript selection that a newer page selection replaced
+- New conversation clears the draft, and a conversation chosen from the menu opens chat
 
 ## test/confirm_delete_button_test.dart (1)
 
@@ -82,18 +94,22 @@ slice.
 - attributes only the WebKit services in the app launchd domain
 - reports growth after warm-up, not the peak
 
-## test/new_tab_page_test.dart (4)
+## test/new_tab_page_test.dart (6)
 
 - another device's tabs open here once, from the new tab page
 - cold start publishes the app picker without a saved conversation
 - the app picker shows current registrations and keeps open tabs
 - desktop and phone picker, retained tabs and chat draft
+- search filters the apps and hides other devices, and Enter opens the first match
+- choosing an app closes chat on a phone and keeps it on the desktop
 
-## test/page_stack_test.dart (3)
+## test/page_stack_test.dart (5)
 
 - dragging tabs splits the page without recreating either view
 - split dividers resize side by side and stacked, and reset
 - an app tab that cannot load opens the App servers screen
+- a loading app tab shows a spinner, and a Browser tab error offers no App servers
+- dragging a split divider moves the tab's split map with it; the workspace hears only the end
 
 ## test/region_capture_test.dart (2)
 
@@ -109,13 +125,15 @@ slice.
 - shared folders are listed, added and removed on the server
 - memory editor keeps scope and saves an edited entry
 
-## test/shell_test.dart (5)
+## test/shell_test.dart (7)
 
 - a fullscreen video takes the whole screen alone and its pane in split
 - a click that moves a few pixels still selects the tab
 - newest tab first is a saved setting and slides the tab left
 - with newest tab first, clicking tab D of A B C D gives D A B C
 - deleting a tab during insertion keeps the next tab interactive
+- the toolbar names Relay from 600 px wide, records chat toggles, and New tab closes chat on a phone
+- returning to the app opens the conversation last opened on another device
 
 ## test/sources_test.dart (3)
 
@@ -156,11 +174,16 @@ slice.
 - a Browser transcript arrives through the page channel
 - page dialogs name the site and answer with the choice
 
-## test/workspace_menu_test.dart (3)
+## test/workspace_menu_test.dart (8)
 
 - a bug report pictures the whole window with its page in place
 - a dot marks the workspace menu while an update is ready
 - appearance follows the system until a theme is chosen
+- each workspace menu item opens its dialog, recorded by name
+- Forward is offered only with a conversation, bots and no reply
+- a bug report saves the window and chat state, and a failed save shows its error until dismissed
+- Reconnect restarts the workspace, and the banner hides in fullscreen
+- installing an update saves the draft and the open tabs first
 
 ## test/workspace_style_test.dart (1)
 

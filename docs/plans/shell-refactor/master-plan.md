@@ -49,7 +49,7 @@ is discarded; a merged one is reverted by a new slice.
 | # | Slice | Status |
 |---|---|---|
 | 1a | Test homes: fakes and shell tests moved unchanged | done |
-| 1b | Safety net: tests for the untested shell behavior | to do |
+| 1b | Safety net: tests for the untested shell behavior | done |
 | 2 | Pilot: `address_bar.dart` | to do |
 | 3 | `new_tab_page.dart` | to do |
 | 4 | `chat_dock.dart` and `wideWorkspace` | to do |
@@ -149,8 +149,10 @@ which means a prerequisite is missing and goes back to the planner.
 - The suspected address bug: an active Browser tab that is not loaded shows
   an empty address, and a Go from it is not recorded as typed. Slice 1b checks
   it; a fix slice after slice 8 needs the user's yes.
+  Slice 1b confirmed it with an uncommitted test; it is still unfixed.
 
 ## Next
 
-Slice 1a is done and awaits the orchestrator's merge. Next is slice 1b, the
-safety-net tests; it adds their names to the baseline.
+Slice 1b is done: 23 safety-net tests, with their names in the baseline. This
+is the first pause point. The user looks at the safety net, and slice 2, the
+pilot `address_bar.dart`, starts only after the user says to go on.
