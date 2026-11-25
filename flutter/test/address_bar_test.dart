@@ -473,6 +473,51 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     }
   });
+
+  testWidgets(
+    'a Browser tab that could not load again shows its address, and Go from '
+    'it records the page it opens as typed',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final f = Fixture(unloadAfter: const Duration(minutes: 30))
+        ..historyPages = [];
+      await f.w.start();
+      final browser = await f.w.openApp(f.w.apps[0]);
+      await f.w.openApp(f.w.apps[1]);
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, saveDraft: (_) async {}, browserHistory: true),
+      );
+      await tester.pump(const Duration(minutes: 31));
+      expect(browser.page, isNull);
+
+      // Offline just after waking, its reload fails and it stays unloaded.
+      FakePage.navigateError = StateError('No network');
+      addTearDown(() => FakePage.navigateError = null);
+      f.w.select(browser);
+      await tester.pumpAndSettle();
+      expect((browser.page, browser.unloaded?.url), (
+        null,
+        'https://example.com/desk',
+      ));
+      expect(
+        tester.widget<TextField>(address).controller!.text,
+        'https://example.com/desk',
+      );
+
+      FakePage.navigateError = null;
+      await tester.enterText(address, 'example.org');
+      await tester.tap(find.byTooltip('Go'));
+      await tester.pumpAndSettle();
+      expect((browser.page! as FakePage).navigated, ['example.org']);
+      expect(f.history.where((call) => call.startsWith('POST')), [
+        'POST /api/browser-history/typed {"url":"https://example.com/desk"}',
+      ]);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 }
 
 /// The selected Browser tab's address field.

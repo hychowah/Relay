@@ -629,7 +629,8 @@ class _RelayShellState extends State<RelayShell> {
 
   @override
   Widget build(BuildContext context) {
-    final url = w.active?.page?.url;
+    // The active tab's address; an unloaded Browser tab keeps its own.
+    final url = w.active?.unloaded?.url ?? w.active?.page?.url;
     if (url != lastPageUrl) {
       lastPageUrl = url;
       fill = null;
@@ -834,8 +835,12 @@ class _RelayShellState extends State<RelayShell> {
 
   /// Opens [text] from the address bar; the page it lands on counts as typed.
   Future<void> _go(String text) async {
-    final page = w.active?.page;
+    final tab = w.active;
+    // A loaded tab's page is the one Go loads in, even if a network switch
+    // replaces it meanwhile; an unloaded tab gets its page from navigating.
+    final loaded = tab?.unloaded == null ? tab?.page : null;
     await w.navigate(text);
+    final page = loaded ?? tab?.page;
     if (mounted && w.error == null && page != null && widget.browserHistory) {
       w.api.browserTyped(page.url);
     }
