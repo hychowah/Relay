@@ -55,6 +55,11 @@ status, assumptions, and the next step. Update its Next section at handoff.
 - Build the Mac client with `tools/publish-flutter`, which leaves nothing on
   the Mac. Before you finish, remove anything else your session put on the Mac:
   build folders, test apps, and the settings and data of any test app.
+- Read [docs/architecture.md](docs/architecture.md) before adding code, and
+  put new code where it says.
+- The pre-commit hook runs the structure check. Fix a failure by moving code,
+  never by raising a recorded size; raising one, adding an allow entry or
+  changing a rule is the orchestrator's or the user's decision.
 - Keep machine paths, addresses and personal details out of tracked files.
   Local machine notes, when present, are in `~/.config/relay/machine.md`,
   outside the repository.

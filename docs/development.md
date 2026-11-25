@@ -13,9 +13,29 @@ Run from the repository root:
 npm test
 npm run build
 python3 tools/check_records.py
+python3 tools/check_structure.py
 ```
 
 For a change to the Flutter client, also run its [checks](#flutter-client).
+
+## Structure and records checks
+
+The pre-commit hook in `tools/hooks/pre-commit` runs
+`python3 tools/check_structure.py --staged` and then
+`python3 tools/check_records.py --staged`, and stops the commit when either
+fails. A fresh clone turns it on once, for all its worktrees:
+
+```sh
+git config core.hooksPath tools/hooks
+```
+
+The structure check stops a file over 800 lines from growing more than 50
+lines past its size recorded in `tools/structure.json`, and keeps the
+boundaries in the [architecture map](architecture.md). Fix a failure by moving
+code where the map says. `python3 tools/check_structure.py --report` lists the
+large files and how much each may still grow. After a change shrinks a large
+file, run `python3 tools/check_structure.py --update`: it only lowers recorded
+sizes, and the lower sizes are committed with the change.
 
 ## Bug reports and requests
 

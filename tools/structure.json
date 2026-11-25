@@ -1,0 +1,91 @@
+{
+  "map": "docs/architecture.md",
+  "include": [
+    "server/**/*.ts",
+    "shared/**/*.ts",
+    "web/**/*.ts",
+    "web/**/*.tsx",
+    "web/**/*.css",
+    "web/**/*.html",
+    "public/**/*.js",
+    "public/**/*.html",
+    "examples/**/*.ts",
+    "examples/**/*.js",
+    "examples/**/*.html",
+    "tests/**/*.ts",
+    "tests/**/*.mjs",
+    "tools/**",
+    "flutter/lib/**/*.dart",
+    "flutter/test/**/*.dart",
+    "flutter/integration_test/**/*.dart",
+    "flutter/test_driver/**/*.dart",
+    "flutter/assets/**/*.js",
+    "flutter/assets/**/*.sh",
+    "flutter/macos/Runner/**/*.swift",
+    "flutter/macos/RunnerTests/**/*.swift",
+    "flutter/windows/runner/**/*.cpp",
+    "flutter/windows/runner/**/*.h",
+    "flutter/android/app/src/**/*.kt"
+  ],
+  "exclude": [
+    "tools/structure.json",
+    "flutter/packages/**",
+    "flutter/macos/Flutter/**",
+    "flutter/windows/flutter/**",
+    "**/ephemeral/**",
+    "**/GeneratedPluginRegistrant.*",
+    "**/generated_plugin_registrant.*",
+    "**/build/**",
+    "**/.dart_tool/**",
+    "**/node_modules/**",
+    "dist/**"
+  ],
+  "maxLines": 800,
+  "growth": 50,
+  "rules": [
+    {
+      "name": "web and server meet only in shared",
+      "files": [
+        "web/**",
+        "server/**"
+      ],
+      "forbid": "[\"'](\\.\\./)+(server|web)/",
+      "why": "The web page runs in the browser and the server runs in Node; code one imports from the other drags the wrong runtime in and ties the browser fallback to server internals.",
+      "fix": "Put the type or pure helper both sides need in shared/ and import it from there; anything else stays on its own side and travels over the HTTP API.",
+      "allow": []
+    },
+    {
+      "name": "shared imports only shared",
+      "files": [
+        "shared/**"
+      ],
+      "forbid": "\\b(from|import)\\s*\\(?\\s*[\"'](?!\\./)",
+      "why": "shared/ is loaded by both the browser page and the Node server, so it can depend on nothing that only one of them has: no server or web file, no Node built-in, no package.",
+      "fix": "Keep shared/ to types and plain data or functions that import only other shared/ files; put code that needs Node in server/ and code that needs the browser in web/.",
+      "allow": []
+    },
+    {
+      "name": "Windows web view stays in its adapter",
+      "files": [
+        "flutter/lib/**"
+      ],
+      "forbid": "package:webview_all_windows/",
+      "why": "Windows is a desktop-only test build: flutter/lib/windows_web_view.dart puts WebView2 behind the webview_flutter interface so the rest of the client, and later Android, stay free of Windows code.",
+      "fix": "Add the Windows call to flutter/lib/windows_web_view.dart behind the webview_flutter interface the rest of the client already uses.",
+      "allow": [
+        "flutter/lib/windows_web_view.dart"
+      ]
+    }
+  ],
+  "sizes": {
+    "flutter/lib/main.dart": 2429,
+    "flutter/lib/web_page.dart": 1535,
+    "flutter/lib/workspace.dart": 1340,
+    "flutter/test/web_page_test.dart": 840,
+    "flutter/test/workspace_test.dart": 3084,
+    "server/app.ts": 864,
+    "server/store.ts": 877,
+    "web/App.tsx": 1877,
+    "web/style.css": 2305
+  }
+}
