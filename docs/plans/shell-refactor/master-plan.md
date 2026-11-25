@@ -80,7 +80,8 @@ Rollback: revert; tests only.
 asked for by the user at the first pause point, before the pilot moves the
 address bar. An active Browser tab whose page is not loaded, such as after a
 failed reload, now shows its known address, and a Go from it is recorded as
-typed. One new test in `address_bar_test.dart`; the baseline has 134 names.
+typed; an unselected split pane with such a tab shows its address too. Two
+new tests in `address_bar_test.dart`; the baseline has 135 names.
 
 **2. Pilot, `address_bar.dart`.** `AddressInput`, `BrowserBar`,
 `inlineCompletion`; the shell's build calls `address.follow(url)`. Writes the
