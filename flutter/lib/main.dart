@@ -21,6 +21,7 @@ import 'workspace.dart';
 import 'conversation_history.dart';
 import 'provider_settings.dart';
 import 'workspace_dialogs.dart';
+import 'workspace_menu.dart';
 import 'app_library.dart';
 import 'app_servers.dart';
 import 'app_updates.dart';
@@ -452,59 +453,61 @@ class _RelayShellState extends State<RelayShell> {
     }
   }
 
-  Future<void> _menu(String action) async {
-    if (action != 'record') w.recorder.action('menu', {'item': action});
+  Future<void> _menu(WorkspaceAction action) async {
+    if (action != WorkspaceAction.record) {
+      w.recorder.action('menu', {'item': action.name});
+    }
     try {
       switch (action) {
-        case 'record':
+        case WorkspaceAction.record:
           await _recordBug();
-        case 'reports':
+        case WorkspaceAction.reports:
           await showDialog<void>(
             context: context,
             builder: (_) => BugReportsDialog(api: w.api),
           );
-        case 'servers':
+        case WorkspaceAction.servers:
           await showDialog<void>(
             context: context,
             builder: (_) => AppServersDialog(api: w.api),
           );
-        case 'stored':
+        case WorkspaceAction.stored:
           await showDialog<void>(
             context: context,
             builder: (_) => StoredDataDialog(api: w.api),
           );
-        case 'folders':
+        case WorkspaceAction.folders:
           await showDialog<void>(
             context: context,
             builder: (_) => SharedFoldersDialog(api: w.api),
           );
-        case 'provider':
+        case WorkspaceAction.provider:
           await showDialog<void>(
             context: context,
             builder: (_) => ProviderSettings(workspace: w),
           );
-        case 'bots':
+        case WorkspaceAction.bots:
           await showBots(context, w, _selectedConversation);
-        case 'memory':
+        case WorkspaceAction.memory:
           await showDialog<void>(
             context: context,
             builder: (_) =>
                 MemoryDialog(workspace: w, onSelected: _selectedConversation),
           );
-        case 'forward':
+        case WorkspaceAction.forward:
           await showDialog<void>(
             context: context,
             builder: (_) =>
                 ForwardDialog(workspace: w, onSelected: _selectedConversation),
           );
-        case 'library':
+        case WorkspaceAction.library:
           await w.refreshApps();
           if (!mounted) return;
           await showDialog<void>(
             context: context,
             builder: (_) => AppLibrary(workspace: w),
           );
-        case 'updates':
+        case WorkspaceAction.updates:
           unawaited(widget.updates!.loadPreviews());
           await showDialog<void>(
             barrierDismissible: false,
@@ -532,9 +535,9 @@ class _RelayShellState extends State<RelayShell> {
               ),
             ),
           );
-        case 'reconnect':
+        case WorkspaceAction.reconnect:
           await w.start();
-        case 'chat':
+        case WorkspaceAction.chat:
           layout.showChatOnly();
       }
     } catch (e) {
@@ -805,7 +808,9 @@ class _RelayShellState extends State<RelayShell> {
               SavedReport(
                 report: tab.report!,
                 error: tab.error,
-                onServers: tab.isBrowser ? null : () => _menu('servers'),
+                onServers: tab.isBrowser
+                    ? null
+                    : () => _menu(WorkspaceAction.servers),
               ),
             ),
           if (tab.error != null && tab.report == null)
@@ -821,7 +826,7 @@ class _RelayShellState extends State<RelayShell> {
                     // The app's server may be stopped.
                     if (!tab.isBrowser)
                       OutlinedButton.icon(
-                        onPressed: () => _menu('servers'),
+                        onPressed: () => _menu(WorkspaceAction.servers),
                         icon: const Icon(Icons.dns_outlined),
                         label: const Text('App servers'),
                       ),
@@ -984,7 +989,7 @@ class _RelayShellState extends State<RelayShell> {
           tooltip: w.recorder.recording
               ? 'Recording. Stop and save'
               : 'Record a bug or request',
-          onPressed: () => _menu('record'),
+          onPressed: () => _menu(WorkspaceAction.record),
           icon: w.recorder.recording
               ? const Icon(Icons.fiber_manual_record, color: Colors.red)
               : Icon(
@@ -1016,23 +1021,51 @@ class _RelayShellState extends State<RelayShell> {
           ),
           menuChildren: [
             const MenuLabel('WORKSPACE'),
-            _menuItem('library', 'App library', Icons.grid_view_rounded),
-            _menuItem('bots', 'Bots', Icons.smart_toy_outlined),
-            _menuItem('memory', 'Memory', Icons.bookmarks_outlined),
-            _menuItem('servers', 'App servers', Icons.dns_outlined),
-            _menuItem('folders', 'Shared folders', Icons.folder_outlined),
+            _menuItem(
+              WorkspaceAction.library,
+              'App library',
+              Icons.grid_view_rounded,
+            ),
+            _menuItem(WorkspaceAction.bots, 'Bots', Icons.smart_toy_outlined),
+            _menuItem(
+              WorkspaceAction.memory,
+              'Memory',
+              Icons.bookmarks_outlined,
+            ),
+            _menuItem(
+              WorkspaceAction.servers,
+              'App servers',
+              Icons.dns_outlined,
+            ),
+            _menuItem(
+              WorkspaceAction.folders,
+              'Shared folders',
+              Icons.folder_outlined,
+            ),
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 5),
               child: Divider(),
             ),
             const MenuLabel('CONNECTION'),
-            _menuItem('provider', 'Provider and model', Icons.tune_rounded),
-            _menuItem('reconnect', 'Reconnect', Icons.refresh_rounded),
+            _menuItem(
+              WorkspaceAction.provider,
+              'Provider and model',
+              Icons.tune_rounded,
+            ),
+            _menuItem(
+              WorkspaceAction.reconnect,
+              'Reconnect',
+              Icons.refresh_rounded,
+            ),
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 5),
               child: Divider(),
             ),
-            _menuItem('chat', 'Chat only', Icons.chat_bubble_outline_rounded),
+            _menuItem(
+              WorkspaceAction.chat,
+              'Chat only',
+              Icons.chat_bubble_outline_rounded,
+            ),
             SubmenuButton(
               leadingIcon: const Icon(Icons.contrast_rounded, size: 17),
               menuChildren: [
@@ -1057,14 +1090,18 @@ class _RelayShellState extends State<RelayShell> {
               onChanged: (value) => w.setNewestTabFirst(value!),
               child: const Text('Newest tab first'),
             ),
-            _menuItem('stored', 'Stored data', Icons.storage_rounded),
+            _menuItem(
+              WorkspaceAction.stored,
+              'Stored data',
+              Icons.storage_rounded,
+            ),
             if (widget.updates case final updates?)
               MenuItemButton(
                 leadingIcon: Badge(
                   isLabelVisible: updates.ready,
                   child: const Icon(Icons.system_update_alt_rounded, size: 17),
                 ),
-                onPressed: () => _menu('updates'),
+                onPressed: () => _menu(WorkspaceAction.updates),
                 child: Text(updates.ready ? 'Update ready' : 'Updates'),
               ),
             const Padding(
@@ -1072,7 +1109,11 @@ class _RelayShellState extends State<RelayShell> {
               child: Divider(),
             ),
             const MenuLabel('DEVELOPMENT'),
-            _menuItem('reports', 'Reports', Icons.bug_report_outlined),
+            _menuItem(
+              WorkspaceAction.reports,
+              'Reports',
+              Icons.bug_report_outlined,
+            ),
             if (Platform.isMacOS)
               CheckboxMenuButton(
                 value: tabMemory.on,
@@ -1086,7 +1127,7 @@ class _RelayShellState extends State<RelayShell> {
   );
 
   Widget _menuItem(
-    String action,
+    WorkspaceAction action,
     String label,
     IconData icon, {
     bool enabled = true,
@@ -1162,7 +1203,7 @@ class _RelayShellState extends State<RelayShell> {
                 ),
                 menuChildren: [
                   _menuItem(
-                    'forward',
+                    WorkspaceAction.forward,
                     'Forward conversation',
                     Icons.forward_to_inbox_outlined,
                     enabled:
@@ -1447,7 +1488,7 @@ class _RelayShellState extends State<RelayShell> {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: TextButton(
-                      onPressed: () => _menu('provider'),
+                      onPressed: () => _menu(WorkspaceAction.provider),
                       style: TextButton.styleFrom(
                         foregroundColor: colors.onSurfaceVariant,
                         padding: const EdgeInsets.symmetric(horizontal: 6),
