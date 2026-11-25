@@ -356,6 +356,66 @@ void main() {
     variant: TargetPlatformVariant.only(TargetPlatform.macOS),
   );
 
+  testWidgets(
+    'typing the next filled-in character returns the highlight to the typed text',
+    (tester) async {
+      final f = Fixture()
+        ..historyPages = [
+          {'url': 'http://www.example.com/', 'title': ''},
+          {'url': 'https://example.com/desk', 'title': 'Desk'},
+        ];
+      await f.w.start();
+      await f.w.openApp(f.w.apps[0]);
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, saveDraft: (_) async {}, browserHistory: true),
+      );
+      await tester.pumpAndSettle();
+      final address = find.byWidgetPredicate(
+        (w) =>
+            w is TextField &&
+            w.decoration?.hintText == 'Search or enter a web address',
+      );
+      final field = tester.widget<TextField>(address).controller!;
+      TextEditingValue shown(String text, [int? typed]) => TextEditingValue(
+        text: text,
+        selection: TextSelection(
+          baseOffset: typed ?? text.length,
+          extentOffset: text.length,
+        ),
+      );
+      Future<void> edit(TextEditingValue value) async {
+        tester.testTextInput.updateEditingValue(value);
+        await tester.pumpAndSettle();
+      }
+
+      bool siteHighlighted() => tester
+          .widget<ListTile>(
+            find.widgetWithText(ListTile, 'http://www.example.com/'),
+          )
+          .selected;
+
+      await tester.tap(address);
+      await tester.pumpAndSettle();
+      await edit(shown(''));
+      await edit(shown('exa'));
+      await edit(shown('exam'));
+      expect(field.value, shown('example.com', 4));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      expect(siteHighlighted(), isTrue);
+      // The text stays what was shown, so only the fill-in's own rule moves
+      // the highlight back.
+      await edit(shown('examp'));
+      expect(field.value, shown('example.com', 5));
+      expect(find.text('Desk'), findsOneWidget);
+      expect(siteHighlighted(), isFalse);
+    },
+  );
+
   testWidgets('Back, Forward and Highlight follow the page', (tester) async {
     final f = Fixture();
     await f.w.start();
