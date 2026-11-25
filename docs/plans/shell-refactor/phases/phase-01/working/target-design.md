@@ -84,7 +84,7 @@ pushes the selected tab into those objects. Regions never pass their own
 |---|---|---|
 | `address_bar.dart` | `AddressInput(workspace, {history})` with `follow(WorkspaceTab? tab)`, `dispose()`, `controller`, `focus` and the rule methods `suggestionsFor`, `picked`, `escape`, `pointerDown`, `tapped`, `submitted`, `go`, `edited`; `BrowserBar(workspace, tab, input)`, `static const height = 46.0`; `inlineCompletion(typed, url)` | Fill-in, suggestions, Esc and paste rules, Go target, `browserTyped`; VPN switch (`/// Desktop only (macOS).`), PDF zoom and Highlight (`/// Desktop only.`) |
 | `new_tab_page.dart` | `NewTabPage`, unchanged | App search, other devices' tabs |
-| `page_stack.dart` | `PageStack(workspace, desktop, address, capture, onChoose, onServers, onSplit, onResized)` | Keyed slots, split geometry, frames, tints, overlays, dividers, drop zones and hover |
+| `page_stack.dart` | `PageStack(workspace, desktop, address, capture, layout, onChoose, onServers, onResized)`, stateful only for the drop hover; it builds the `LayoutBuilder` the shell had around the stack, and a drop calls `layout.showPage()` | Keyed slots, split geometry, frames, tints, overlays, dividers, drop zones and hover |
 | `chat_dock.dart` | `ChatLayout(open, width, saveOpen, saveWidth)`, a `ChangeNotifier` the shell redraws on, with `open`, `only`, `width`, `transcriptOpen`, `saveOpenIfChanged()` (the shell's build), `showPage({closeChat})`, `openChat()`, `closeChat()`, `toggle()`, `toggleOnly()`, `showChatOnly()`, `toggleTranscript()`, `resize(width)`, `resizeEnded()`; `ChatDock(layout, workspace, size, screen, page, panel)` | Dock, phone sheet, compact bar, expand animation, width clamp |
 | `area_capture.dart` | `AreaCapture(shellContext, workspace, layout)`, a `ChangeNotifier` the shell redraws on, with `start()`, `finish(region?)`, `follow(activeTab)`, `remove()`, `sent(attachment)`, `attachment`, `busy`, `flying`, `slot` and `pickingOn(tab)`, the frame being picked on when that tab is the one | Snapshot, area picking, flight overlay, the phone sheet stepping aside |
 | `workspace_menu.dart` | `enum WorkspaceAction` (names are the recorded names); `ShellActions(shellContext, workspace, updates, layout, saveDraftNow, onConversationChosen)` with `run(action)`; `WorkspaceMenu(actions, workspace, updates, themeMode, onThemeMode, tabMemory)`, stateful only so Show tab memory redraws its check; `actionItem(actions, action, label, icon, {enabled})` for the menu and chat's Forward | Every dialog, recording and saving a bug report with its guard, update install, banner on error |
@@ -224,7 +224,10 @@ Each removed in the slice that replaces it:
 ## Unknowns
 
 - U1. Does the extra widget layer above the page stack re-parent native views
-  on the Mac? WSL: the element-identity test. Live: the close-out Mac check.
+  on the Mac? WSL: no. Slice 7 put `PageStack` and its `LayoutBuilder`,
+  unkeyed and in every build, where the shell's `LayoutBuilder` was, so the
+  slots' parent chain never changes between builds; the element-identity test
+  passes unmodified. Live: the close-out Mac check.
 - U2. Does `use_build_context_synchronously` flag the stored shell context?
   Yes: slice 5 found the lint follows a context kept in a field, and flags
   `MediaQuery.sizeOf(_context)` after the snapshot `await` without a guard.

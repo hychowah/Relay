@@ -56,7 +56,7 @@ is discarded; a merged one is reverted by a new slice.
 | 4 | `chat_dock.dart` and `wideWorkspace` | done |
 | 5 | `area_capture.dart` | done |
 | 6 | `workspace_menu.dart` | done |
-| 7 | `page_stack.dart` | to do |
+| 7 | `page_stack.dart` | done |
 | 8 | `chat_panel.dart` | to do |
 | 9 | Close-out: Mac check, then an upkeep slice | to do |
 
@@ -107,8 +107,10 @@ menu and action rules that had none, five of them in
 `shell_actions_test.dart`; the baseline has 155 names. Exit: baseline passes;
 no action strings left; 1,332 lines.
 
-**7. `page_stack.dart`.** `PageStack`. Exit: the element-identity and
-nothing-over-the-page tests pass unmodified; near 1,050 lines.
+**7. `page_stack.dart`.** `PageStack`, with the drop-hover state in its own
+`State`. Five new tests pin the page-stack rules that had none; the baseline
+has 160 names. Exit: the element-identity and nothing-over-the-page tests
+pass unmodified; 1,025 lines.
 
 **8. `chat_panel.dart`.** `ChatInput` and `ChatPanel`; the shell calls
 `chat.follow(...)` before building the dock. Exit: done measures 1–7; the
@@ -133,8 +135,8 @@ module that already exists.
   `flutter/test/support/`: until slice 8.
 - The new shell test files (`address_bar_test.dart`, `new_tab_page_test.dart`,
   `page_stack_test.dart`, `chat_dock_test.dart`, `chat_panel_test.dart`,
-  `area_capture_test.dart`, `workspace_menu_test.dart`, `shell_test.dart`):
-  until slice 8.
+  `area_capture_test.dart`, `workspace_menu_test.dart`,
+  `shell_actions_test.dart`, `shell_test.dart`): until slice 8.
 - The `main.dart` entry of `tools/structure.json` and its row of the map's
   Known debt: until slice 8.
 
@@ -164,10 +166,13 @@ which means a prerequisite is missing and goes back to the planner.
   kept fill-in through object identity.
 - A public `Suggestion` type name instead of the spelled-out record type in
   `AddressInput`'s public methods.
+- Merge `shell_actions_test.dart`'s `_CheckedUpdates` with
+  `workspace_menu_test.dart`'s `_RestartingUpdates`.
+- Let `TabMemory` notify when switched, so `WorkspaceMenu` can be stateless.
+- An `actions.item(...)` method in place of the free `actionItem` function.
 
 ## Next
 
-Slice 6 is done: the workspace menu and every shell action moved into
-`workspace_menu.dart` and `main.dart` has 1,332 lines. The user said at the
-second pause point to go on with slices 3-8 with no further planned pauses.
-Slice 7, `page_stack.dart`, is next.
+Slice 7 is done: the page stack moved into `page_stack.dart` and `main.dart`
+has 1,025 lines. The user said at the second pause point to go on with slices
+3-8 with no further planned pauses. Slice 8, `chat_panel.dart`, is next.

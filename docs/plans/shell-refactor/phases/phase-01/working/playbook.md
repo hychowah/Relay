@@ -1,8 +1,7 @@
 # Shell refactor playbook
 
-How each production slice (3 to 8) moves one region out of
-`flutter/lib/main.dart`. Slice 2, the pilot, moved the address bar into
-`flutter/lib/address_bar.dart` this way. Read the slice's row in the
+How each production slice moves one region out of `flutter/lib/main.dart`,
+as slice 2, the pilot, moved the address bar. Read the slice's row in the
 [target design](target-design.md) and the
 [master plan](../../../master-plan.md) first. The refactor rules in the slice
 brief come before this page.
@@ -19,8 +18,7 @@ The pilot in practice:
 
 - **Owner object.** `AddressInput` is a plain Dart class, not a widget and
   not a `ChangeNotifier`: the old code changed these fields without
-  `setState`, so nothing needs to listen. It holds the text controller, the
-  focus node and the fill-in, suggestion, Esc and paste state. Its public
+  `setState`, so nothing needs to listen. Its public
   interface is the constructor (whose `workspace` and `history` stay
   readable), `follow`, `dispose`, the `controller` and `focus` getters for
   the field, and the rule methods below. Its state fields are
@@ -56,8 +54,6 @@ The pilot in practice:
   own name for its owner in place of `input`): expect nothing.
 - **Lifetime checks.** Where the shell checked `mounted` after an `await`,
   the owner checks its own `_disposed` flag, set first thing in `dispose`.
-  The owner is disposed exactly when the shell is, so the check means the
-  same as before.
 - **Shared constants.** `_barHeight`, which the page geometry also reads,
   became `BrowserBar.height`. A private item that code staying in
   `main.dart` still uses becomes the smallest public piece of the new
@@ -126,8 +122,8 @@ The pilot in practice:
 13. **Structure and map.** `python3 tools/check_structure.py --update` (it
     only lowers), then set the `Lines` cell of the `main.dart` Known debt
     row in `docs/architecture.md` to the new count, and drop the module's
-    own name from that row's "Where its code should go" cell, since the
-    module exists now. All go in the move commit.
+    own name from that row's "Where its code should go" cell. All go in
+    the move commit.
 14. **Other checks.** `npm test`, `npm run build`,
     `python3 tools/check_records.py`, `python3 tools/check_structure.py`.
 15. **Commits.** Any test-only pinning commit first (step 5). Then one
@@ -268,8 +264,7 @@ npm run build
 - **Seeing a test fail on old code.** Put the old file in place with
   `git show <commit>:<path> > <path>`, run the test, then restore yours.
 - **Subagents and worktrees.** A subagent cannot call EnterWorktree; it
-  works in the worktree its starter made, by absolute path, with `cd
-  <worktree> &&` before every shell command.
+  works by absolute path in the worktree its starter made.
 - **Private types in a public API.** `flutter_lints` reports a public field
   or method whose type names a private type (the pilot's private
   `_Suggestion` typedef). The owner's fields are library-private, so they
@@ -295,10 +290,9 @@ npm run build
   build always runs before `dispose`.
 - **Reviewers need the full Flutter path.** Give /smart-commit's
   reviewers the SDK's path, or they skip `flutter analyze` and the tests.
-- **Recorded size versus file length.** The recorded size can be lower than
-  the file's length before the slice (slice 1c grew `main.dart` past it).
-  `--update` sets it to the new length; the Known debt row takes the same
-  number.
+- **Recorded size versus file length.** The recorded size can be below the
+  file's length (slice 1c grew `main.dart` past it); `--update` sets it to
+  the new length, and the Known debt row takes that number.
 
 - **An owner others change.** When the old fields were written inside the
   shell's `setState` and later modules or a view change them too, make the
@@ -343,11 +337,16 @@ npm run build
   query method (`pickingOn(tab)`) rather than the record.
 - **A guard the UI already enforces.** A rule that only repeats what the UI
   allows (`start`'s check that no capture is running, behind a disabled
-  button) cannot fail a test through `RelayApp`. Say so in the hand-back and
-  move it as it is.
+  button) cannot fail a test through `RelayApp`, nor can hover bookkeeping
+  that never shows (clearing `dropping`). Say so in the hand-back and move it
+  as it is.
 - **A view that calls the shell's `setState`.** Make it a
   `StatefulWidget` with no fields, so the line moves verbatim (Show tab
   memory), and check that nothing else needed the shell's redraw.
+- **State only the view reads** (`dropping`) goes in the view's own `State`,
+  whose `setState` redraws only the view; check that the shell's build reads
+  none of it. A whole-shell redraw the view needs (a divider drag moves the
+  tab strip's map) is a callback the shell answers with `_redraw`.
 - **Field promotion.** After the first `_updates!`, a private final field
   is promoted; drop the later `!` the analyzer flags.
 - **An enum-first step.** Wrapped calls can pass the 50-line allowance; put
