@@ -85,8 +85,9 @@ new tests in `address_bar_test.dart`; the baseline has 135 names.
 
 **2. Pilot, `address_bar.dart`.** `AddressInput`, `BrowserBar`,
 `inlineCompletion`; the shell's build calls `address.follow(w.active)`, so
-1c's address rule stays in the module. Writes the playbook. Exit: baseline
-passes unmodified; `main.dart` near 2,050 lines.
+1c's address rule stays in the module. Writes the playbook. One new test
+pins the highlight reset that had no test; the baseline has 136 names. Exit:
+baseline passes unmodified; `main.dart` near 2,050 lines.
 
 **3. `new_tab_page.dart`.** A verbatim move. Exit: baseline passes; near
 1,765 lines.

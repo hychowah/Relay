@@ -79,7 +79,14 @@ The pilot in practice:
    the smallest public part in the new module). Grep `flutter/test`,
    `flutter/integration_test` and `docs/` too: a public top-level function
    a test calls (like `inlineCompletion`) needs an import line in that test.
-5. **Build the module beside.** Write the new file: owner class first, then
+5. **Pin untested behavior first.** For each behavior of the code you move
+   that no test pins, add a test that pins it, through `RelayApp`, before
+   the move. To find such a behavior, break it on purpose (replace a
+   condition with `false`, then `true`) and run the module's test file;
+   nothing failing means nothing pins it. Show the new test passes on the
+   old code and fails with the behavior broken, commit it alone as a
+   test-only commit, and add its name to `baseline.md` by command (below).
+6. **Build the module beside.** Write the new file: owner class first, then
    the view, then top-level helpers, in the old file's order where you can,
    so the moved blocks stay recognisable. Copy method bodies exactly. Keep
    every name, except a leading `_` for fields that move onto an owner and
@@ -87,44 +94,45 @@ The pilot in practice:
    an owner method with the same body, which the view then calls.
    Give the owner and the view a `w` getter (`Workspace get w =>
    workspace;`), as the shell has, so lines that use `w.` move unchanged.
-6. **Move the callers.** In `main.dart`: replace the old fields with the
+7. **Move the callers.** In `main.dart`: replace the old fields with the
    owner field, the old sync code in build with `owner.follow(...)` at the
    same place, the old disposals with `owner.dispose()` at the same place,
    and each old builder call with the view, under the same key.
-7. **Delete the old.** Remove every Deletes item from `main.dart`. A Python
+8. **Delete the old.** Remove every Deletes item from `main.dart`. A Python
    script that slices the file by line numbers, with an `assert` on the
    first and last line of each slice, is safer than hand edits for blocks of
    hundreds of lines. Add the new import; let `flutter analyze` report the
    imports that became unused.
-8. **Markers.** A desktop-only member of the new shared file gets
+9. **Markers.** A desktop-only member of the new shared file gets
    `/// Desktop only.` or `/// Desktop only (macOS).` as the first words of
    its doc comment (turn an existing `//` comment into the doc comment). This
    changes comment lines only; the code under it must stay a pure move.
-9. **Format and analyze.** `dart format` the two files, then
-   `flutter analyze` must say "No issues found!". It covers `test/` and
-   `integration_test/` too, so a test that needs an import fails here first.
-10. **Tests.** Fix only import lines in tests. Run the full suite with the
+10. **Format and analyze.** `dart format` the two files, then
+    `flutter analyze` must say "No issues found!". It covers `test/` and
+    `integration_test/` too, so a test that needs an import fails here first.
+11. **Tests.** Fix only import lines in tests. Run the full suite with the
     JSON reporter again and compare the names (below): same count, all
     passing, no name lost or changed.
-11. **Move review.** Run the `--color-moved` diff and list every line that
+12. **Move review.** Run the `--color-moved` diff and list every line that
     is not shown as moved. Each must be one of: the new file's imports,
     class and constructor lines, the owner's `follow` and `dispose`, field
     renames, `mounted` to the disposed check, `widget.<x>` to the owner's
     field, a view callback replaced by an owner method call, an added
     `BuildContext` parameter, and comment edits for markers.
     Anything else is a behavior change and does not belong in the slice.
-12. **Structure and map.** `python3 tools/check_structure.py --update` (it
+13. **Structure and map.** `python3 tools/check_structure.py --update` (it
     only lowers), then set the `Lines` cell of the `main.dart` Known debt
     row in `docs/architecture.md` to the new count. Both go in the move
     commit.
-13. **Other checks.** `npm test`, `npm run build`,
+14. **Other checks.** `npm test`, `npm run build`,
     `python3 tools/check_records.py`, `python3 tools/check_structure.py`.
-14. **Commits.** One move commit (code, test imports, `structure.json`, the
-    map's line count), through /smart-commit with a bug review. Then one
-    records commit: slice marked done in the master plan, Next updated, any
+15. **Commits.** Any test-only pinning commit first (step 5). Then one
+    move commit (code, test imports, `structure.json`, the map's line
+    count), through /smart-commit with a bug review. Then one records
+    commit: slice marked done in the master plan, Next updated, any
     new trap added here. Stage, and run
     `python3 tools/check_records.py --staged` before each commit.
-15. **Clean up.** Delete your own files in `tmp/`, then send the hand-back.
+16. **Clean up.** Delete your own files in `tmp/`, then send the hand-back.
 
 Splitting the move into "add the copy" and "delete the original" commits
 would make each commit compile, but neither commit's diff would show a move.
@@ -191,6 +199,36 @@ git diff --color=always --color-moved=dimmed-zebra \
   | grep -P '^\e\[3[12]m[+-]' | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^[+-]\s*$'
 ```
 
+A new pinning test changes `baseline.md`. Regenerate its name lists from
+the JSON run, then update the count and commit in its header by hand. Save
+this as `tmp/baseline.py`; it prints each file's section in the record's
+layout:
+
+```python
+import json, sys
+from collections import defaultdict
+suites, order = {}, defaultdict(list)
+for line in open(sys.argv[1]):
+    line = line.strip()
+    if not line.startswith('{'):
+        continue
+    e = json.loads(line)
+    if e.get('type') == 'suite':
+        suites[e['suite']['id']] = e['suite']['path'].split('flutter/')[-1]
+    elif e.get('type') == 'testStart':
+        t = e['test']
+        if not t['name'].startswith('loading '):
+            order[suites[t['suiteID']]].append((t['id'], t['name']))
+for path in sorted(order):
+    tests = sorted(order[path])
+    print(f"## {path} ({len(tests)})\n")
+    print('\n'.join(f"- {name}" for _, name in tests) + '\n')
+```
+
+```sh
+python3 tmp/baseline.py tmp/after.json > tmp/baseline-body.md
+```
+
 Short lines such as `),`, `}` or `submit();` can show as not moved even
 inside a moved block: git needs about 20 letters or digits for a moved
 block. Count them as moves when their neighbours are.
@@ -240,8 +278,9 @@ npm run build
   context-bound step of a moved rule (the pilot's intent call after
   `edited`), check whether a test pins it: replace the view's condition with
   `false`, then with `true`, and run the module's test file. In the pilot
-  neither failed, so the hand-back says that the step is checked only by
-  reading the code, and names the branch.
+  neither failed, so the merge review asked for a test that pins the
+  highlight reset; it came after the move. Later slices add such a test
+  before the move (step 5).
 - **No `context` in a stateless view.** A shell method that read
   `Theme.of(context)` or the shell's `colors` getter needs the context as a
   parameter in a `StatelessWidget`. In a builder callback that has its own
