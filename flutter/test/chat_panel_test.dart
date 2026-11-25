@@ -1,9 +1,12 @@
 
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:relay_flutter/main.dart';
+import 'package:relay_flutter/provider_settings.dart';
 import 'package:relay_flutter/relay_api.dart';
 import 'package:relay_flutter/transcript_pane.dart';
 
@@ -342,4 +345,258 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('the effort menu marks its choice and shows a failed change', (
+    tester,
+  ) async {
+    // No start, so no poll can put its own error in the banner.
+    final f = Fixture();
+    f.w.provider = {'model': 'DeepSeek', 'supportsReasoningEffort': true};
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    Finder checked(String item) => find.descendant(
+      of: find.widgetWithText(MenuItemButton, item),
+      matching: find.byIcon(Icons.check),
+    );
+    await tester.tap(find.text('Thinking'));
+    await tester.pumpAndSettle();
+    expect(find.text('THINKING EFFORT'), findsOneWidget);
+    expect(checked('Connection default'), findsOneWidget);
+    expect(checked('High'), findsNothing);
+    await tester.tap(find.text('High'));
+    await tester.pumpAndSettle();
+    expect(f.w.draftEffort, 'high');
+    await tester.tap(find.text('High'));
+    await tester.pumpAndSettle();
+    expect(checked('Connection default'), findsNothing);
+    expect(checked('High'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    // A saved conversation's change goes to the server; its failure shows.
+    f.w.conversationId = 'conversation';
+    f.failSnapshot = true;
+    f.w.changed();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Thinking'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Low'));
+    await tester.pumpAndSettle();
+    expect((f.w.error, f.w.pollError), ('Snapshot failed', null));
+    expect(
+      find.descendant(
+        of: find.byType(MaterialBanner),
+        matching: find.text('Snapshot failed'),
+      ),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'Send turns to Stop while a reply runs, and a send in flight holds '
+    'history and new conversation',
+    (tester) async {
+      final f = Fixture();
+      await f.w.start();
+      f.w.provider = {'model': 'DeepSeek'};
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, saveDraft: (_) async {}),
+      );
+      await tester.pumpAndSettle();
+      f.w.recorder.start();
+      // The model button opens the provider settings.
+      await tester.tap(find.text('DeepSeek'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ProviderSettings), findsOneWidget);
+      expect(
+        f.w.recorder.events.where((e) => e['name'] == 'menu').single['item'],
+        'provider',
+      );
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+
+      bool enabled(IconData icon) =>
+          tester
+              .widget<IconButton>(find.widgetWithIcon(IconButton, icon))
+              .onPressed !=
+          null;
+      // The spinner of a running reply never settles.
+      Future<void> settle() async {
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+      }
+
+      expect(find.byTooltip('Send message'), findsOneWidget);
+      // A send waiting for the server.
+      f.holdSnapshot = Completer();
+      await tester.enterText(composer, 'Hello');
+      await tester.tap(find.byTooltip('Send message'));
+      await settle();
+      expect(f.w.sending, isTrue);
+      expect(find.byTooltip('Stop response'), findsOneWidget);
+      expect(enabled(Icons.history_rounded), isFalse);
+      expect(enabled(Icons.edit_square), isFalse);
+      f.runs = [
+        {'id': 'run', 'status': 'running'},
+      ];
+      f.holdSnapshot!.complete();
+      f.holdSnapshot = null;
+      await settle();
+      // A reply running after the send leaves them usable.
+      expect((f.w.sending, f.w.busy), (false, true));
+      expect(find.byTooltip('Stop response'), findsOneWidget);
+      expect(enabled(Icons.history_rounded), isTrue);
+      expect(enabled(Icons.edit_square), isTrue);
+      await tester.tap(find.byTooltip('Stop response'));
+      await settle();
+      expect(
+        f.w.recorder.events.where((e) => e['name'] == 'stop reply'),
+        hasLength(1),
+      );
+      f.runs = [];
+      await f.w.refresh();
+      await settle();
+      expect(find.byTooltip('Send message'), findsOneWidget);
+      f.w.recorder.stop();
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('the draft is saved 300 ms after typing and when the window '
+      'closes', (tester) async {
+    final f = Fixture();
+    final drafts = <String>[];
+    await tester.pumpWidget(
+      RelayApp(workspace: f.w, saveDraft: (text) async => drafts.add(text)),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(composer, 'Half');
+    await tester.pump(const Duration(milliseconds: 299));
+    expect(drafts, isEmpty);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(drafts, ['Half']);
+    await tester.enterText(composer, 'Half a thought');
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpWidget(const SizedBox());
+    expect(drafts, ['Half', 'Half a thought']);
+    await tester.pump(const Duration(seconds: 1));
+    expect(drafts, ['Half', 'Half a thought']);
+  });
+
+  testWidgets(
+    'closed chat keeps its draft and transcript, and drops a transcript '
+    'selection that a newer page selection replaced',
+    (tester) async {
+      final f = Fixture();
+      await f.w.start();
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await f.w.openApp(f.w.apps[0]);
+      final page = f.pages.last
+        ..url = 'https://www.youtube.com/watch?v=video'
+        ..transcript = {
+          'language': 'English',
+          'text': '[0:01] Hello there\n[0:40] Second part',
+        };
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, initialDraft: '', saveDraft: (_) async {}),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Transcript'));
+      await tester.pumpAndSettle();
+      final paragraph = find.text('[0:40] Second part');
+      final drag = await tester.startGesture(
+        tester.getTopLeft(paragraph) + const Offset(1, 5),
+        kind: PointerDeviceKind.mouse,
+      );
+      await drag.moveTo(tester.getTopRight(paragraph) + const Offset(-1, 5));
+      await drag.up();
+      await tester.pumpAndSettle();
+      await tester.enterText(composer, 'Keep this draft');
+      final fromTranscript = find.text('“[0:40] Second part”');
+      expect(fromTranscript, findsOneWidget);
+
+      // Closing chat removes its panel.
+      final panel = find.byKey(const ValueKey('conversation-panel'));
+      Future<void> toggleChat() async {
+        await tester.tap(find.byTooltip('Toggle chat'));
+        await tester.pumpAndSettle();
+      }
+
+      await toggleChat();
+      expect(panel, findsNothing);
+      await toggleChat();
+      expect(find.text('Keep this draft'), findsOneWidget);
+      expect(paragraph, findsOneWidget);
+      expect(fromTranscript, findsOneWidget);
+
+      // Selecting something newer on the page while chat is closed drops the
+      // transcript's selection, even once the page's selection is back.
+      await toggleChat();
+      page.selection = 'newer page text';
+      f.w.changed();
+      await tester.pumpAndSettle();
+      page.selection = 'selected passage';
+      f.w.changed();
+      await tester.pumpAndSettle();
+      await toggleChat();
+      expect(fromTranscript, findsNothing);
+      expect(find.text('“selected passage”'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('New conversation clears the draft, and a conversation chosen '
+      'from the menu opens chat', (tester) async {
+    final f = Fixture()..current = 'conversation';
+    await f.w.start();
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      RelayApp(
+        workspace: f.w,
+        initialDraft: 'Old draft',
+        saveDraft: (_) async {},
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(f.w.conversationId, 'conversation');
+    await tester.tap(find.byTooltip('New conversation'));
+    await tester.pumpAndSettle();
+    expect(f.w.conversationId, isNull);
+    expect(find.text('Old draft'), findsNothing);
+
+    final panel = find.byKey(const ValueKey('conversation-panel'));
+    await tester.tap(find.byTooltip('Toggle chat'));
+    await tester.pumpAndSettle();
+    expect(panel, findsNothing);
+    await tester.tap(find.byTooltip('Workspace menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, 'Bots'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Personal chat'));
+    await tester.pumpAndSettle();
+    expect(panel, findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
 }
+
+/// The chat's message field.
+final composer = find.byWidgetPredicate(
+  (w) =>
+      w is TextField &&
+      w.decoration?.hintText == 'Ask Relay about your workspace…',
+);

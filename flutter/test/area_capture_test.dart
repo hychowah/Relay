@@ -125,4 +125,86 @@ void main() {
     expect(find.text('Screenshot attached'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets(
+    'picking an area moves a phone\'s chat aside until done or the tab '
+    'changes, and its attachment stays until a conversation is chosen',
+    (tester) async {
+      final f = Fixture();
+      await f.w.start();
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final browser = await f.w.openApp(f.w.apps[0]);
+      final room = await f.w.openApp(f.w.apps[1]);
+      f.pages.last.frame = await tester.runAsync(() async {
+        final recorder = ui.PictureRecorder();
+        Canvas(recorder).drawColor(Colors.blue, BlendMode.src);
+        final image = await recorder.endRecording().toImage(80, 60);
+        final png = await image.toByteData(format: ui.ImageByteFormat.png);
+        image.dispose();
+        return png!.buffer.asUint8List();
+      });
+      await tester.pumpWidget(
+        RelayApp(workspace: f.w, initialDraft: '', saveDraft: (_) async {}),
+      );
+      await tester.pumpAndSettle();
+      // The snapshot is decoded by the engine, outside the test's clock.
+      Future<void> settle(Finder until) async {
+        for (var i = 0; i < 30 && until.evaluate().isEmpty; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+          await tester.pump(const Duration(milliseconds: 20));
+        }
+        await tester.pump(const Duration(seconds: 1));
+      }
+
+      final panel = find.byKey(const ValueKey('conversation-panel'));
+      final picking = find.byType(RegionCapture);
+      expect(panel, findsOneWidget);
+      await tester.tap(find.byTooltip('Capture an area'));
+      await settle(picking);
+      expect(picking, findsOneWidget);
+      expect(panel, findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settle(panel);
+      expect(picking, findsNothing);
+      expect(panel, findsOneWidget);
+
+      await tester.tap(find.byTooltip('Capture an area'));
+      await settle(picking);
+      expect(panel, findsNothing);
+      f.w.select(browser);
+      await settle(panel);
+      expect(picking, findsNothing);
+      expect(panel, findsOneWidget);
+
+      tester.view.physicalSize = const Size(1200, 800);
+      f.w.select(room);
+      await tester.pumpAndSettle();
+      final page = tester.getRect(find.text('View Room layout'));
+      await tester.tap(find.byTooltip('Capture an area'));
+      await settle(picking);
+      await tester.dragFrom(
+        page.topLeft + const Offset(20, 20),
+        const Offset(200, 120),
+      );
+      await settle(find.byTooltip('Remove screenshot'));
+      await tester.pumpAndSettle();
+      final attached = find.text('Screenshot · room-layout');
+      expect(attached, findsOneWidget);
+      await tester.tap(find.byTooltip('Toggle chat'));
+      await tester.pumpAndSettle();
+      expect(panel, findsNothing);
+      await tester.tap(find.byTooltip('Toggle chat'));
+      await tester.pumpAndSettle();
+      expect(attached, findsOneWidget);
+      await tester.tap(find.byTooltip('New conversation'));
+      await tester.pumpAndSettle();
+      expect(attached, findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 }
