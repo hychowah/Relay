@@ -86,6 +86,8 @@ already services. Machine paths are in the local machine notes, not here.
 
 ### Phase 1 — Manage local apps
 
+Done on 2026-11-26.
+
 Prerequisite, done 2026-11-23: a probe showed that a user service could
 start, inspect, read the logs of and stop another user service.
 
@@ -182,8 +184,9 @@ Mac, reported by the user on 2026-11-26 with Stable 0.0.21, no problems
 reported: Start, Stop, Restart, the **Start with the computer** switch, the
 log lines, and Backtest Web started from the screen. On the host, Backtest
 Web, last started on 2026-11-25 at 21:42 (its unit has no boot start), kept
-running through two `relay-app` restarts on 2026-11-26. Not yet checked on
-the Mac: the App servers button in a tab that cannot load.
+running through two `relay-app` restarts on 2026-11-26. Asked about the App
+servers button in a tab that cannot load, the user answered "all ok" the
+same day.
 
 Limit: each systemctl or journalctl call has its own 15-second limit, so a
 start can outlast the client's 20 seconds; the client then shows a timeout
@@ -191,7 +194,5 @@ while systemd carries on, and the next list read shows the real state.
 
 ## Next
 
-1. On the Mac, stop an app from the screen, open its tab and press its App
-   servers button: the screen must open. This is Phase 1's last check.
-2. Phase 2 (S09): confirm with the user that it is still wanted before
+1. Phase 2 (S09): confirm with the user that it is still wanted before
    building it.

@@ -151,7 +151,11 @@ problems reported: quitting and reopening with a Browser tab and two or more
 app tabs brought back the window, tabs and chat panel, the last active tab
 first and the chat history without waiting; chat and app tabs loaded under
 the Host check; the split tab, night mode, the YouTube transcript pane and
-Reports. Which detailed cases they tried is not recorded.
+Reports. Asked about details they had not named (hidden tabs finishing
+within the 20 s limit; the transcript pane's following, seeking, pausing and
+ads; split-tab dividers and per-pane address bars; night mode following a
+live macOS switch; Reports' whole-window screenshot), they answered "all
+ok".
 
 Browser popups (desktop only): webview_flutter_wkwebview 3.27.2 loaded a
 page's new window into its opener, which broke sign-in popups. A forwarding UI
@@ -163,11 +167,7 @@ real WKWebViews.
 ## Next
 
 1. Check on the Mac that Stable 0.0.21's first start removed the update
-   folders beside the app and the older downloads. Ask the user whether their
-   pass of 2026-11-26 covered these details, which it did not name: hidden tabs
-   finishing within the 20 s limit; the transcript pane's following, seeking,
-   pausing and ads; split-tab dividers and per-pane address bars; night mode
-   following a live macOS switch; and Reports' whole-window screenshot.
+   folders beside the app and the older downloads.
 2. Republishing a test build's name leaves its earlier ZIP in the release
    folder on WSL. Remove it at publish time if that folder grows.
 3. Review Stable 0.0.21 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`. The suite's longest waits, on tab switches, are candidates for a smoothness fix. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.

@@ -335,7 +335,7 @@ The [Flutter handoff](../flutter/master-plan.md#next) records the user's Mac che
 
 The [coding sessions plan](../coding-sessions/master-plan.md) hands requests to Claude Code or Codex sessions through a coding app in its own project. The [shell refactor](../shell-refactor/master-plan.md) is complete; the coding plan's Next holds steps.
 
-Phase 1 of the [app servers plan](../app-servers/master-plan.md) (R17) passed its Mac check on 2026-11-26 except the button in a tab that cannot load.
+Phase 1 of the [app servers plan](../app-servers/master-plan.md) (R17) is done; its Mac check passed on 2026-11-26.
 
 1. Verify a sourced two-app question on the user's saved records from the Mac.
    Both stock adapters have run as local services, registered with the live

@@ -96,9 +96,9 @@ The stand-in part passed on 2026-11-19 in the coding app's project: seven tests
 cover those three points, a start that happens once, the three start outcomes
 and requests addressed to a foreign host. Relay's app loader accepted the app
 and refused an unpublished start operation. Live: a real session was started
-in the scratch target from the Mac on 2026-11-26 (Phase 2's check); whether it
-came from a drafted request and reopened from its conversation is not
-recorded.
+in the scratch target from the Mac on 2026-11-26 (Phase 2's check). Asked
+whether a session started from a drafted request reopens from its
+conversation, the user answered "all ok" the same day.
 
 Added at the user's request on 2026-11-19, covering C08: the home screen lists
 up to 30 recent sessions and opens one. An opened session reports
@@ -177,16 +177,14 @@ Covers C07 in practice. Read those rules before this phase starts.
 
 ## Next
 
-Phase 2 is done; the coding app runs it since 2026-11-23. Claude
+Phases 0–2 are done; the coding app runs phase 2 since 2026-11-23. Claude
 Code sessions are started with `claude --bg`, so they show in the user's TUI,
 and a message reaches a running one through Claude Code's daemon socket; if
 that fails, an idle one is stopped and resumed. Codex and hapi-started
 sessions act through hapi. Conversations started outside hapi are read from
 their Claude Code and Codex transcripts.
 
-1. Phase 1's live check is not recorded: on the Mac, a session started from
-   a drafted request reopens from its conversation. Ask the user.
-2. Phase 3 (check-back).
-3. Suggested on 2026-11-19, not yet agreed: show in Relay's tab bar and in the
+1. Phase 3 (check-back).
+2. Suggested on 2026-11-19, not yet agreed: show in Relay's tab bar and in the
    conversation when a session waits for approval or finishes (display only),
    and send a Browser selection or capture to a session as a draft.
