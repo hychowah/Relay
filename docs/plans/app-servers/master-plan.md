@@ -130,7 +130,7 @@ Covers S09.
 ## Phase 1 design as built
 
 The servers file format and the screen are in the
-[README](../../../README.md#manage-app-servers). Beyond that:
+[running guide](../../running.md#manage-app-servers). Beyond that:
 
 - The servers file is separate from the apps file because some servers are
   not registered apps.

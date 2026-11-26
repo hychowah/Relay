@@ -7,7 +7,7 @@ targets and animation. Relay owns chat, execution records, device-scoped
 presentation and cancellation. It does not install executable app code into the
 agent harness. App processes are not part of the protocol; the host's service
 manager can run them, controlled from the optional
-[servers file](../README.md#manage-app-servers).
+[servers file](running.md#manage-app-servers).
 
 ## Registration
 
@@ -234,7 +234,7 @@ previous document context while preserving app context. `capabilities.search`
 also keeps Relay's Library control for a v2 app.
 
 An app that cannot serve the protocol itself can sit behind an external adapter
-registered by address. See [Setup](../README.md#setup) for registration.
+registered by address. See [Connect your own app](running.md#connect-your-own-app) for registration.
 
 ## Built-in Files app
 

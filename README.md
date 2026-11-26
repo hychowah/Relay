@@ -1,34 +1,90 @@
 # Relay
 
-Relay is a personal agent workspace. You chat with an AI agent beside your own
-apps. The agent can read from a connected app, answer with sources, and show
-the result inside that app's own screen. In the Flutter app, it can also read
-and search folders on your computer that you choose to share, without changing
-them, and fill in a web form in the built-in Browser for you to check and
-submit yourself.
+**An AI agent that works inside your own apps.** Your apps open as tabs, with
+one conversation beside them. Ask a question and the agent reads the apps you
+connected, answers with sources, and shows the answer on the app's own screen,
+for example by opening the right report section or playing a robot motion.
 
-## Vision
+![Relay's start page: the connected apps on the left, the conversation on the right](docs/images/workspace.png)
 
-- **One workspace for your own tools.** A conversation can span several apps
-  and stays open when you switch between them.
-- **Apps stay independent.** Each app keeps its own screens and technology, and
-  joins Relay by address through a [small protocol](docs/integration.md).
-  Relay itself holds no code for any particular app.
-- **Your records stay with you.** Conversations, memory and provider keys live
-  in the Relay service on your own machine, not in the clients or the apps.
-- **Desktop first, phone later.** The Flutter app is the main client, the web
-  page is the browser fallback, and a phone app is the long-term goal.
+## What it does
 
-## How it fits together
+- **One conversation across your apps.** The chat stays open while you switch
+  tabs, so you can compare a research page, a stock report and a web page in
+  one thread.
+- **Answers with sources.** The agent cites the app record or page each answer
+  came from, and can open that part of the app for you.
+- **Any app can join.** An app joins through a [small HTTP protocol](docs/integration.md)
+  and keeps its own screens and technology. Relay has no code for any
+  particular app.
+- **A built-in browser** (Flutter app). Ask about the page, a PDF or a YouTube video
+  (through its transcript), capture part of the screen as an image, highlight
+  text, and let the agent fill in a form for you to check and submit yourself.
+- **Your files, read-only** (Flutter app). Share folders on your computer, and the agent
+  can read and search them, but never change them.
+- **A workspace that remembers.** Tabs, split views and the conversation come
+  back after a restart, and other devices can open your tabs.
+
+## Apps connected so far
+
+Each app below lives in its own project and joins Relay by address alone.
+
+| App | What the agent can do with it |
+| --- | --- |
+| **Browser** (built in) | Open websites, read pages, PDFs and video transcripts, and fill in forms without submitting them. |
+| **Files** (built in) | Read and search the folders you share. |
+| **Research Web** | Search a bilingual library of humanoid robot products, papers, patents and articles, and compare products without inventing missing values. |
+| **Analysis Web** | Find saved stock research reports by ticker, quote a section, and open that section on screen. |
+| **Backtest Web** | Find completed trading backtests and read their settings and returns. |
+| **Coding sessions** | Write a request for a Claude Code or Codex session in one of your repositories. You read it, edit it, and press Start yourself. |
+| **Robot viewer** | Read and fix URDF and xacro robot files, find problems such as missing meshes or bad joint limits, play a motion, and look at a screenshot of the result. Earlier versions of each file are kept, so a change can be undone. |
+| **Room layout** | A small sample app in [`examples/room-layout`](examples/room-layout/README.md) that shows the whole protocol. |
+
+![Coding sessions and Robot viewer side by side in a split tab](docs/images/split-view.png)
+
+## How it works
+
+```text
+┌──────────────────┐  chat   ┌──────────────────┐  operations  ┌───────────┐
+│ Flutter app or   │────────▶│ Relay service    │─────────────▶│ Your apps │
+│ web page         │◀────────│ agent, records,  │◀─────────────│           │
+│ (tabs + chat)    │         │ model keys       │              │           │
+└──────────────────┘         └──────────────────┘              └───────────┘
+         ▲                                                           │
+         └──────────── app screens, shown in a web view ─────────────┘
+```
+
+1. Each app serves a short **manifest**: its name, what it is for, and how to
+   use it.
+2. When a question needs an app, the agent asks it for its **operations**
+   (such as `research.search` or `robot.inspect`) and calls them. Other apps'
+   details stay out of the model's context.
+3. An operation can return a **view** for the app to show, such as a section
+   to highlight. The app draws it on its own screen inside Relay.
 
 | Part | What it is |
 | --- | --- |
-| Service (`server/`) | Node 24, SQLite and the OpenCode agent runtime. It holds the records and makes every model call. |
-| Flutter client (`flutter/`) | The main client. See its [README](flutter/README.md). |
-| Web page (`web/`) | A React page served by the service. |
-| Apps | Your own websites that implement the protocol. `examples/room-layout` is a complete sample. |
+| Service (`server/`) | Node 24, SQLite and the OpenCode agent runtime. It holds the records and makes every model call, with Claude, OpenAI or DeepSeek. |
+| Flutter client (`flutter/`) | The main client, for the Mac. See its [README](flutter/README.md). |
+| Web page (`web/`) | A React page served by the service, for other computers. |
+| Apps | Your own websites that serve the protocol. |
 
-## Setup
+## Design choices
+
+- **Keys and records stay on your machine.** Conversations, memory and
+  provider keys live only in the Relay service, never in the clients or apps.
+- **The user takes the last step.** The agent fills in a form but never
+  submits it, and writes a coding request but never starts it.
+- **Apps are kept apart.** Each app runs on its own origin, in a sandboxed
+  frame unless you mark it as trusted, and the agent sees only what its
+  operations return. Browsing history and highlights are never given to the
+  agent or to apps.
+- **Shared folders are read-only.** Hidden files such as `.env` and `.ssh`
+  stay out of the agent's reach.
+- **Safe on the network.** The service answers only its own address, so other
+  websites cannot reach it through a renamed domain (DNS rebinding).
+
+## Try it
 
 You need Node 24.9 or later.
 
@@ -38,10 +94,10 @@ npm run build
 npm start
 ```
 
-Open `http://127.0.0.1:3210`. Without an API key Relay runs in a scripted demo
-mode, so you can try chat right away.
+Open `http://127.0.0.1:3210`. Without an API key Relay runs a scripted demo,
+so you can try chat right away.
 
-**Try the sample app.** Start it in one terminal and Relay in another:
+To try the sample app, start it in one terminal and Relay in another:
 
 ```sh
 node examples/room-layout/server.ts
@@ -50,78 +106,17 @@ RELAY_APPS_FILE=examples/room-layout/apps.json npm start
 
 Choose **+ → Room layout** and send a message.
 
-**Connect your own app.** Implement the [protocol](docs/integration.md) in the
-app, copy `apps.example.json`, set the app's address, and start Relay with
-`RELAY_APPS_FILE` pointing at your copy. Later edits to that file apply
-without a restart; reload the page to see them.
+[Running Relay](docs/running.md) covers model keys, connecting your own app,
+other devices, backups and starting your app servers from Relay.
 
-**Use a real model.** Open **Model connection** in the page and add a Claude,
-DeepSeek or OpenAI key, or set a key file as shown in `.env.example`. Without a
-saved key, Relay also uses `DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY` or
-`OPENAI_API_KEY` from its environment, so a key exported for other tools counts
-as configured. By default live requests are sent only while the host's NordVPN
-client is connected; set `RELAY_VPN_CHECK=off` to turn that check off.
+## Status
 
-**Open it from another device.** Relay answers only requests addressed to
-`127.0.0.1` or `localhost` on its port, so a website that points its own name
-at Relay (DNS rebinding) is refused. To use the page through a forward, such
-as a private tailnet, set `RELAY_ORIGIN` to the address the other device
-opens, for example `http://<device-reachable-host>:<port>`.
+Relay is a personal prototype in daily use. The Flutter app runs on macOS 14
+or later. Windows uses the web page while a Windows build is in testing, and
+a phone app comes later.
 
-**Keep your data.** Records are stored in `RELAY_DATA_DIR` (default `runtime/`).
-To back up, stop Relay and copy that whole folder; restore it to the same path.
+## Learn more
 
-## Manage app servers
-
-The Flutter app can start and stop the servers of your local apps. Choose
-**App servers** in the workspace menu: each server shows whether it is
-running, starting, stopping, stopped or failed, with Start, Stop, Restart, a
-**Start with the computer** switch and its recent log lines. An app tab that
-cannot load has an **App servers** button that opens the same screen.
-
-Relay is only a remote control. Your user service manager (`systemd --user`)
-runs each server from its own user unit, so servers keep running when Relay
-restarts, restart after a crash, and keep their logs. Relay never writes or
-changes a unit; start commands live only in the unit files on the host.
-
-Each server needs its own user unit, set up once, for example
-`~/.config/systemd/user/notes-web.service` with made-up values:
-
-```ini
-[Unit]
-Description=Notes web
-
-[Service]
-WorkingDirectory=/srv/notes
-ExecStart=/usr/bin/node server.js
-Restart=on-failure
-
-[Install]
-WantedBy=default.target
-```
-
-Run `systemctl --user daemon-reload`, then add one line for it to a private
-servers file outside the repository, and set `RELAY_SERVERS_FILE` on the
-Flutter backend to that file's path:
-
-```json
-[
-  {"id": "notes-web", "name": "Notes", "unit": "notes-web.service"}
-]
-```
-
-`id` uses lowercase letters, digits, `-` and `_`; `name` is shown on the
-screen; `unit` is the user unit Relay controls. A request names only a server
-id, so the screen can act only on units the file lists. Do not list Relay's
-own backend or web page units: Stop would end the backend mid-request, and
-the client could not start it again. A unit without an `[Install]` section
-cannot start with the computer, and its switch shows as not available.
-
-The file is read on every request, so edits apply at once. Without
-`RELAY_SERVERS_FILE` or the file, the screen is empty; a file that cannot be
-read or is not valid shows its reason on the screen.
-
-## Development
-
-To build, test, measure or publish Relay, see the
-[development guide](docs/development.md).
+- [App protocol](docs/integration.md)
+- [Architecture](docs/architecture.md)
+- [Development guide](docs/development.md): building, testing and publishing

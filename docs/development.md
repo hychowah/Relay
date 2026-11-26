@@ -199,7 +199,7 @@ App library and Bots dialog show them when they open. See
 [Registration](integration.md#registration).
 
 `RELAY_SERVERS_FILE` optionally names the app servers the App servers screen
-controls; see [Manage app servers](../README.md#manage-app-servers).
+controls; see [Manage app servers](running.md#manage-app-servers).
 
 For remote devices, forward the WSL port through the private tailnet and set
 `FLUTTER_RELAY_ORIGIN` to its device-reachable origin when starting the
