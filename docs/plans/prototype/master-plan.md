@@ -331,11 +331,11 @@ effects to the first write, access scopes and versioned migrations to
 projects, and network policy injection to the Docker executor. Revisit
 acknowledgements if bridge ownership changes and run lifecycles as needed.
 
-The [Flutter handoff](../flutter/master-plan.md#next) covers installing and reviewing Stable 0.0.21 on the Mac, with its checks for tab restore, the transcript pane and the app list refresh, and the split view. It also lists Mac checks for the capture animation, the Browser's PDF viewer, highlights and Stored data, which are in Stable since 0.0.17, published on 2026-11-23. The backend, last deployed at `92f7bc5` on 2026-11-26, connects the Browser on the Relay port, not 3251: builds older than 0.0.17, and a Windows app built before `acad2d8`, cannot read pages or transcripts. Windows checks wait until the user returns to Windows.
+The [Flutter handoff](../flutter/master-plan.md#next) records the user's Mac checks of Stable 0.0.21 on 2026-11-26 and the checks still open, including the app list refresh and Mac checks for the capture animation, the Browser's PDF viewer, highlights and Stored data, which are in Stable since 0.0.17, published on 2026-11-23. The backend, last deployed at `92f7bc5` on 2026-11-26, connects the Browser on the Relay port, not 3251: builds older than 0.0.17, and a Windows app built before `acad2d8`, cannot read pages or transcripts. Windows checks wait until the user returns to Windows.
 
 The [coding sessions plan](../coding-sessions/master-plan.md) hands requests to Claude Code or Codex sessions through a coding app in its own project. The [shell refactor](../shell-refactor/master-plan.md) is complete; the coding plan's Next holds steps.
 
-Phase 1 of the [app servers plan](../app-servers/master-plan.md) (R17) is deployed and in Stable 0.0.18; its Mac check is next.
+Phase 1 of the [app servers plan](../app-servers/master-plan.md) (R17) passed its Mac check on 2026-11-26 except the button in a tab that cannot load.
 
 1. Verify a sourced two-app question on the user's saved records from the Mac.
    Both stock adapters have run as local services, registered with the live

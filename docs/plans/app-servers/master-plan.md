@@ -108,8 +108,8 @@ launch commands unchanged. Analysis Web's unit signals only its supervisor, as
 Ctrl+C does, so a stop leaves running analysis jobs alone; a stop freed both
 ports and a start served both sites and the Analysis adapter. Its Windows
 launcher must no longer be used. The servers file lists all six units since
-the deploy. Still to check: Backtest Web's tailnet forward when the site is
-started without its own launcher (Next 1).
+the deploy. Backtest Web's tailnet address answers when the site is started
+from the screen rather than its own launcher (user, 2026-11-26).
 
 Covers S01–S08 and S10.
 
@@ -176,8 +176,14 @@ and the list answered through the tailnet address. No unit was started,
 stopped, enabled or disabled through the live backend. The backend ran
 `2d7d489` from later that day; there the list still answered, and a foreign
 Host still got 403. Stable 0.0.18, published the same day, has the screen;
-the two test builds that carried it before are retired. Not yet verified: the
-Mac run.
+the two test builds that carried it before are retired.
+
+Mac, reported by the user on 2026-11-26 with Stable 0.0.21, no problems
+reported: Start, Stop, Restart, the **Start with the computer** switch, the
+log lines, and Backtest Web started from the screen. On the host, Backtest
+Web, last started on 2026-11-25 at 21:42 (its unit has no boot start), kept
+running through two `relay-app` restarts on 2026-11-26. Not yet checked on
+the Mac: the App servers button in a tab that cannot load.
 
 Limit: each systemctl or journalctl call has its own 15-second limit, so a
 start can outlast the client's 20 seconds; the client then shows a timeout
@@ -185,8 +191,7 @@ while systemd carries on, and the next list read shows the real state.
 
 ## Next
 
-1. With Stable 0.0.21 on the Mac, make the one Mac check: every Mac item of
-   Phase 1 Done when, and also start Backtest Web from the screen and check
-   that its tailnet address answers.
+1. On the Mac, stop an app from the screen, open its tab and press its App
+   servers button: the screen must open. This is Phase 1's last check.
 2. Phase 2 (S09): confirm with the user that it is still wanted before
    building it.

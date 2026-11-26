@@ -78,8 +78,7 @@ the prototype's executor boundary (R13, R16) is unchanged.
 Done on 2026-11-19 against the local session tool, with one real Claude Code
 session in a scratch folder: sign-in, start in a chosen folder, send a request,
 see the turn end, read the reply, see an approval request, stop and archive.
-The requested file was not written without approval. The tool's page sends no
-header that forbids framing. Showing that page inside the Mac client is unproven.
+The requested file was not written without approval.
 
 ### Phase 1 — Handoff
 
@@ -96,11 +95,13 @@ reopens from its conversation.
 The stand-in part passed on 2026-11-19 in the coding app's project: seven tests
 cover those three points, a start that happens once, the three start outcomes
 and requests addressed to a foreign host. Relay's app loader accepted the app
-and refused an unpublished start operation. The live part is open: no real
-session has been started through the app.
+and refused an unpublished start operation. Live: a real session was started
+in the scratch target from the Mac on 2026-11-26 (Phase 2's check); whether it
+came from a drafted request and reopened from its conversation is not
+recorded.
 
 Added at the user's request on 2026-11-19, covering C08: the home screen lists
-up to 30 recent sessions and opens one in the frame. An opened session reports
+up to 30 recent sessions and opens one. An opened session reports
 only its id as the view context, so a restored tab reopens it. Nine tests and a
 headless browser run against stand-ins passed, and the live app listed the
 user's real sessions. The Relay repository is now a target as well.
@@ -113,15 +114,15 @@ only while Codex has it loaded and is otherwise listed with that reason. Ten
 tests pass, and the live app listed 30 conversations in 6 projects. Opening an
 outside conversation through the real session tool is unverified.
 
-Phase 2 replaces the frame described above with the coding app's own session
-screen.
+Phase 1 showed sessions in a frame of the session tool's own page; Phase 2
+replaced it with the coding app's own screen.
 
 ### Phase 2 — Workspace screen
 
-Replaces the framed session tool page with the coding app's own screen, and
-adds a theme message to Relay core. Covers C03 and C09. The
-[design](phases/phase-02/working/design.md) holds the modules, routes, error
-model and probes.
+Replaced the framed session tool page with the coding app's own screen, and
+added a theme message to Relay core. Covers C03 and C09. The coding app's
+server owns the session model and the page draws its snapshots; hapi's own
+chat reducer, bundled on that server, turns messages into blocks.
 
 1. **Session screen.** The workspace bar, conversation, composer and
    approvals, with Relay's theme. Done when the stand-in tests pass, the
@@ -137,9 +138,13 @@ Built in source on 2026-11-23 in the coding app's branch `workspace-screen`
 (steps 1–3), with the theme in Relay. Evidence: 23 stand-in tests and the type
 check pass; headless runs against a stand-in showed each view at full and
 narrow width; each step had an audit and a bug review, and a first-principles
-review covered all three. Not yet verified: any action against the real hapi
-(send, resume, approve, "+", the terminal), the Mac client, light mode in the
-Mac and typing speed in its WebView.
+review covered all three.
+
+Mac, reported by the user on 2026-11-26 with Stable 0.0.21, no problems
+reported: a real session in the scratch target started, approved and answered
+beside the chat, in light and dark; the tree's counts and a worktree's changes
+matched git; the terminal took typing. Unverified: sending to a stopped
+session (resume) and "+".
 
 Agreed with the user on 2026-11-23:
 - "Open workspace…" lists the configured targets plus "Recent sessions in all
@@ -151,7 +156,8 @@ Agreed with the user on 2026-11-23:
 ### Phase 3 — Check-back
 
 Reading sessions for the Relay agent, and follow-up drafts the user sends from
-the screen. Covers C05–C06.
+the screen. Covers C05–C06. The agent's reading reuses the screen's session
+snapshot rather than a second normalizer.
 
 - Operations to list sessions and read one, agreed on 2026-11-23: title, project name, agent, status (running, waiting for approval,
   idle, finished), waiting approvals, recent messages and the result. Never the
@@ -171,27 +177,16 @@ Covers C07 in practice. Read those rules before this phase starts.
 
 ## Next
 
-1. The coding app runs phase 2 since 2026-11-23: its service builds hapi's
-   chat code from the checkout the running hapi was built from, and Relay's
-   apps file no longer marks it trusted. Read-only checks against the real
-   hapi passed: a session's snapshot (104 blocks, no token), the workspaces,
-   the session list. Since 2026-11-23 conversations started outside hapi
-   are read from their Claude Code and Codex transcripts, because hapi's copy
-   froze silently whenever its terminal attachment ended. Claude Code sessions
-   are started with `claude --bg` (auto mode by default), so they show in the
-   user's TUI. A message reaches a running one through Claude Code's internal
-   daemon socket, mid-turn while it works (verified live); if that channel
-   fails, an idle one is stopped and resumed. hapi's screen reading is unused.
-   Codex and hapi-started sessions still act through hapi. A workspace opens
-   in about 0.2 s. A real send through the screen is unverified. The backend that passes the theme on is deployed since
-   2026-11-23 and Stable 0.0.18 sends it; whether the screen
-   shows Relay's colours is unverified.
-2. One Mac check of phase 2's three "Done when" items together: a real
-   session in the scratch target is started, approved and answered; the
-   tree's counts and a worktree's changes match git; the terminal takes
-   typing; in light and dark, beside the chat.
-3. Then phase 3 (check-back). At phase 2's handoff, rewrite the Phase 1 frame
-   text above and remove the phase 2 design note.
-4. Suggested on 2026-11-19, not yet agreed: show in Relay's tab bar and in the
+Phase 2 is done; the coding app runs it since 2026-11-23. Claude
+Code sessions are started with `claude --bg`, so they show in the user's TUI,
+and a message reaches a running one through Claude Code's daemon socket; if
+that fails, an idle one is stopped and resumed. Codex and hapi-started
+sessions act through hapi. Conversations started outside hapi are read from
+their Claude Code and Codex transcripts.
+
+1. Phase 1's live check is not recorded: on the Mac, a session started from
+   a drafted request reopens from its conversation. Ask the user.
+2. Phase 3 (check-back).
+3. Suggested on 2026-11-19, not yet agreed: show in Relay's tab bar and in the
    conversation when a session waits for approval or finishes (display only),
    and send a Browser selection or capture to a session as a draft.
