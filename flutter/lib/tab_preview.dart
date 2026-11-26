@@ -30,9 +30,7 @@ class TabPreview extends StatefulWidget {
 }
 
 class _TabPreviewState extends State<TabPreview> {
-  late final PageSurface? page = widget.tab.unloaded == null
-      ? widget.tab.page
-      : null;
+  late final PageSurface? page = widget.tab.loadedPage;
   late final Future<Uint8List?> picture = page == null || widget.shown
       ? Future.value()
       : page!.preview().catchError((_) => null);

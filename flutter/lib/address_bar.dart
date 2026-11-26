@@ -43,7 +43,7 @@ class AddressInput {
   /// Shows [tab]'s address, dropping any edit, fill-in and suggestions
   /// request, when it differs from the address last followed.
   void follow(WorkspaceTab? tab) {
-    final url = _addressOf(tab);
+    final url = tab?.address;
     if (url != _lastPageUrl) {
       _lastPageUrl = url;
       _fill = null;
@@ -178,7 +178,7 @@ class AddressInput {
     final tab = w.active;
     // A loaded tab's page is the one Go loads in, even if a network switch
     // replaces it meanwhile; an unloaded tab gets its page from navigating.
-    final loaded = tab?.unloaded == null ? tab?.page : null;
+    final loaded = tab?.loadedPage;
     await w.navigate(text);
     final page = loaded ?? tab?.page;
     if (!_disposed && w.error == null && page != null && history) {
@@ -285,7 +285,7 @@ class BrowserBar extends StatelessWidget {
 
   /// Another pane's address, drawn as the address field draws it.
   Widget _addressShown(BuildContext context) {
-    final url = _addressOf(tab);
+    final url = tab.address;
     final text = url == null || url == 'about:blank' ? '' : url;
     return InputDecorator(
       decoration: _addressDecoration,
@@ -497,9 +497,6 @@ String? inlineCompletion(String typed, String url) {
   }
   return typed + address.substring(start.length);
 }
-
-/// A tab's address; an unloaded Browser tab keeps its own until it loads.
-String? _addressOf(WorkspaceTab? tab) => tab?.unloaded?.url ?? tab?.page?.url;
 
 const _addressDecoration = InputDecoration(
   hintText: 'Search or enter a web address',

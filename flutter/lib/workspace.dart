@@ -39,6 +39,20 @@ class WorkspaceTab {
   /// How long the tab has been off screen, as the unload check counts it.
   Duration hidden = Duration.zero;
   String get title => unloaded?.title ?? page?.title ?? name;
+
+  /// Where the tab is: the address an unloaded tab keeps, else its page's.
+  String? get address => unloaded?.url ?? page?.url;
+
+  /// The tab's own page, once loaded. While an unloaded tab loads again, or
+  /// after a failed network switch left it a start page, the page it holds is
+  /// not yet the tab's: there is none to picture, read or record a visit on.
+  PageSurface? get loadedPage => unloaded == null ? page : null;
+
+  /// Closes the tab's page, if it has one, and leaves the tab without it.
+  void dropPage() {
+    page?.dispose();
+    page = null;
+  }
 }
 
 class Workspace extends ChangeNotifier {
@@ -357,6 +371,14 @@ class Workspace extends ChangeNotifier {
       tab.reloading ??= _reloadPage(tab)
           .whenComplete(() => tab.reloading = null);
 
+  /// Loads [tab] again if it is unloaded, for an operation that needs its
+  /// page; a failed reload throws the tab's own error.
+  Future<void> _requireLoaded(WorkspaceTab tab) async {
+    if (tab.unloaded == null) return;
+    await _reload(tab);
+    if (tab.unloaded != null) throw StateError(tab.error!);
+  }
+
   /// The tab keeps its address until the page has loaded it. After a failure,
   /// such as no network just after waking, it stays unloaded with the error,
   /// so showing it again retries. Like a restore, the page is not counted as
@@ -366,16 +388,14 @@ class Workspace extends ChangeNotifier {
     tab.hidden = Duration.zero;
     tab.error = null;
     // A start page left by a failed network switch.
-    tab.page?.dispose();
-    tab.page = null;
+    tab.dropPage();
     try {
       if (await _loadPage(tab) && unloaded.url != 'about:blank') {
         await tab.page!.browser!.navigate(unloaded.url, restoring: true);
       }
       tab.unloaded = null;
     } catch (e) {
-      tab.page?.dispose();
-      tab.page = null;
+      tab.dropPage();
       tab.error =
           'Could not load ${unloaded.url} again: $e\nClick the tab to try again.';
     }
@@ -521,8 +541,7 @@ class Workspace extends ChangeNotifier {
         select(existing, manual: manual, opened: true);
         return existing;
       }
-      existing.page?.dispose();
-      existing.page = null;
+      existing.dropPage();
       existing.error = null;
       existing.report = null;
     }
@@ -583,8 +602,7 @@ class Workspace extends ChangeNotifier {
         tabs.add(tab);
       }
     }
-    tab.page?.dispose();
-    tab.page = null;
+    tab.dropPage();
     tab.report = report;
     tab.error = null;
     if (manual) presentations++;
@@ -674,8 +692,7 @@ class Workspace extends ChangeNotifier {
           tab.unloaded = null;
           tab.error = null;
           // A start page left by a failed network switch.
-          tab.page?.dispose();
-          tab.page = null;
+          tab.dropPage();
           await _loadPage(tab);
         }
       }
@@ -698,9 +715,8 @@ class Workspace extends ChangeNotifier {
     recorder.action('browser vpn', {'on': !tab.vpn});
     _manual();
     await tab.reloading;
-    final url = tab.unloaded?.url ?? tab.page?.url;
-    tab.page?.dispose();
-    tab.page = null;
+    final url = tab.address;
+    tab.dropPage();
     tab.vpn = !tab.vpn;
     try {
       if (await _loadPage(tab) && url != null && url != 'about:blank') {
@@ -723,7 +739,7 @@ class Workspace extends ChangeNotifier {
   Future<BrowserSurface> browserTab(String tabId) async {
     final tab = tabs.where((tab) => tab.id == tabId).firstOrNull;
     tab?.hidden = Duration.zero;
-    if (tab?.unloaded != null) await _reload(tab!);
+    if (tab != null) await _requireLoaded(tab);
     final browser = tab?.page?.browser;
     if (browser == null) {
       throw StateError(tab?.error ?? 'The requested browser tab is closed.');
@@ -1043,10 +1059,7 @@ class Workspace extends ChangeNotifier {
         if (app == null) throw StateError('App is unavailable.');
         target = await openApp(app, manual: false, requireAppView: true);
       }
-      if (target != null && target.unloaded != null) {
-        await _reload(target);
-        if (target.unloaded != null) throw StateError(target.error!);
-      }
+      if (target != null) await _requireLoaded(target);
       await target?.page?.ready.timeout(const Duration(seconds: 20));
       if (_manualRevision != revision || active != target) {
         await _ack(command, 'stale');
@@ -1129,7 +1142,7 @@ class Workspace extends ChangeNotifier {
           {
             'appId': tab.appId,
             if (tab.vpn) 'vpn': true,
-            'url': tab.unloaded?.url ?? tab.page?.url,
+            'url': tab.address,
             'source': tab.report?['source'],
             'context': _viewIntent(tab.page?.context),
           },
