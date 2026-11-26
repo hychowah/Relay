@@ -94,16 +94,16 @@ other devices, backups and starting your app servers from Relay.
 
 ## Where it's heading
 
-The goal is a workspace that grows with the person using it. When you need a
-tool you don't have, you ask for it:
+The goal is a self-evolving workspace: one you change by talking to the agent
+inside it, instead of waiting for someone else to ship a feature.
 
-- **Ask for an app, get an app.** Describe what you need, and the agent
-  writes a new app that serves the protocol, starts it, and opens it as a new
-  tab.
-- **Change apps by talking.** Ask for a new screen, operation or fix in an app
-  you already use, and the agent updates it while you watch.
-- **Relay evolves the same way.** The same flow applies to Relay's own client
-  and service, so each workspace ends up shaped by its owner.
+- **App creation.** Describe a tool you need, and the agent builds a new app
+  or plugin, starts it and opens it as a new tab.
+- **Bug fixing.** Tell the agent what went wrong, and it finds the cause in
+  the app's code, fixes it and shows you the change before it goes live.
+- **Self-evolution.** The same loop applies to every app and to Relay itself:
+  new screens, operations and settings come from asking for them, so each
+  workspace becomes highly customized to its owner.
 
 The groundwork is in place: any app joins by address with no change to Relay,
 the app list reloads without a restart, and Relay can start and stop app
