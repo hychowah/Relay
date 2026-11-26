@@ -288,7 +288,9 @@ figure changes. A tab's process comes from WebKit's private
 ### How some features work
 
 - VPN tabs use HTTP CONNECT on the Relay backend's existing port; the backend
-  looks names up through NordVPN and applies the Browser's address rule.
+  looks names up through NordVPN and applies the Browser's address rule. It
+  repeats the NordVPN check every 2 seconds while tunnels are open and closes
+  them all when a check fails.
   WebRTC is turned off with a private WebKit setting that also covers frames
   (popups take the opener's settings); a macOS without that setting does not
   load VPN tabs.

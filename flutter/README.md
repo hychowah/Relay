@@ -136,7 +136,9 @@ switch is a filled "VPN" button and the tab's chip shows a lock in place of the
 globe. Switching reopens the tab's address in a new web view, without its back
 history. Nothing falls back to the Mac's network: if the route fails, for
 example while NordVPN in WSL is off, the page does not load and says so, and a
-VPN tab that could not be set up loads nothing. VPN tabs share one WebKit
+VPN tab that could not be set up loads nothing. If NordVPN drops while VPN
+tabs are open, the backend closes their connections within about 2 seconds
+and nothing loads until it is back; then reload. VPN tabs share one WebKit
 profile of their own, so their sign-ins persist and stay apart from normal
 tabs. Video calls do not work in VPN tabs: the tunnel carries only TCP, and
 WebRTC's UDP would show the Mac's own address, so WebRTC is off there.

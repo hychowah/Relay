@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { connect, createServer, type AddressInfo } from "node:net";
+import { connect, createServer, type AddressInfo, type Socket } from "node:net";
 import { serve } from "@hono/node-server";
 import { WebSocket } from "ws";
 import { createBrowser } from "../server/browser.ts";
@@ -16,7 +16,9 @@ test("the Browser proxy allows only public addresses", () => {
     assert.equal(publicAddress(address), false, address);
 });
 
-test("the Browser proxy refuses local targets and a failed VPN check without connecting", async () => {
+test("the Browser proxy refuses local targets and a failed VPN check without connecting", async (t) => {
+  // The watch's own checks stay out of the counts below.
+  t.mock.timers.enable({ apis: ["setInterval"] });
   let vpnUp = true;
   let checks = 0;
   const browser = createBrowser();
@@ -67,5 +69,57 @@ test("the Browser proxy refuses local targets and a failed VPN check without con
     browser.close();
     server.close();
     local.close();
+  }
+});
+
+test("the Browser proxy closes its open tunnels when NordVPN drops, until it is back", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  let vpnUp = true;
+  let checks = 0;
+  const server = serve({ fetch: () => new Response(null, { status: 404 }), hostname: "127.0.0.1", port: 0 });
+  // A tunnel that passed its check stays open here, at its name lookup.
+  let lookedUp = () => {};
+  const proxy = attachBrowserProxy(server, async () => {
+    checks++;
+    if (!vpnUp) throw new Error("NordVPN is not connected.");
+  }, () => { lookedUp(); return new Promise<string[]>(() => {}); });
+  await once(server, "listening");
+  const port = (server.address() as AddressInfo).port;
+  const request = (target: string) => {
+    const socket = connect(port, "127.0.0.1");
+    socket.write(`CONNECT ${target} HTTP/1.1\r\nHost: ${target}\r\n\r\n`);
+    return socket;
+  };
+  // A tunnel the proxy leaves open fails the test instead of hanging it.
+  const closes = (socket: Socket) => Promise.race([once(socket, "close"), new Promise((_, fail) =>
+    setTimeout(() => fail(new Error("The tunnel stayed open.")), 2000).unref())]);
+  const open = async () => {
+    const reached = new Promise<void>((done) => { lookedUp = done; });
+    const socket = request("open.test:443");
+    await reached;
+    return socket;
+  };
+  try {
+    // The watch finds the drop: the open tunnel closes without a new request.
+    const first = await open();
+    vpnUp = false;
+    t.mock.timers.tick(2000);
+    await closes(first);
+    // No tunnel is open, so nothing is checked.
+    const before = checks;
+    t.mock.timers.tick(2000);
+    assert.equal(checks, before);
+
+    // Back up, tunnels open again; a new tunnel's failed check also closes them.
+    vpnUp = true;
+    const second = await open();
+    vpnUp = false;
+    const refused = request("down.test:443");
+    const [[data]] = await Promise.all([once(refused, "data"), closes(second)]);
+    assert.equal(data.toString().split("\r\n")[0], "HTTP/1.1 503 Service Unavailable");
+    refused.destroy();
+  } finally {
+    proxy.close();
+    server.close();
   }
 });

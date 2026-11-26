@@ -18,6 +18,7 @@ on 2026-11-23. Today every Browser page loads over the Mac's network.
 | V05 | The switch is saved with the tab and restored on start. Switching reopens the tab's current address in a new web view; its back history is not kept. |
 | V06 | VPN tabs reach only public internet addresses, not WSL's local services, the home network or the tailnet. |
 | V07 | Desktop only: the Mac app. The Windows test build and the web page show no switch. The agent reads and shows pages the same way in both kinds of tab. |
+| V08 | When NordVPN in WSL drops while VPN tabs are open, the backend closes all their open connections within about 2 seconds and refuses new ones until NordVPN is connected again. The user asked for this on 2026-11-26. |
 
 V01, V03 and V04 are defaults chosen while planning (new tabs off, no
 fallback, kept sign-ins); the user can change them before Phase 2.
@@ -39,7 +40,9 @@ has no password of its own.
 **VPN check.** Each tunnel first passes the NordVPN check Relay uses before
 model calls (`requireNordVPN`, which also honours `RELAY_VPN_CHECK=off`). The
 check takes about 20 ms, but 30 at once took 0.45 s, so tunnels that start
-while a check runs share it; no result is reused after it ends.
+while a check runs share it; no result is reused after it ends. While any
+tunnel is open the proxy repeats the check every 2 seconds. A failed check,
+from that watch or from a new tunnel, closes every open tunnel (V08).
 
 **Name lookups (V02).** WSL's own resolver hands names to Windows, which
 looks them up over the home network. The proxy asks public name servers
@@ -190,15 +193,38 @@ navigation delegate before loading an empty page left the page running.
 Nothing was left on the Mac.
 Test build `browser-vpn` was republished from `9227f06`, with the fixes.
 
+## V08 evidence (2026-11-26)
+
+Built in `server/browser-proxy.ts`; no client change. A closed tunnel is a
+load error in the page, which shows nothing after a tab's first page (see
+Limits); Reload works once NordVPN is back.
+
+- `npm test` (143 pass) and `npm run build` pass. The new proxy test shows an
+  open tunnel closed by the watch, no check while no tunnel is open, and an
+  open tunnel closed by a new tunnel's failed check, which itself gets 503.
+  Removing the close, the watch or its stop, or making it 20 s, each fails it.
+- Scratch proxy on WSL with a stand-in `nordvpn` that turns to Disconnected:
+  a download's client socket and the proxy's outgoing connection were both
+  gone 1 second later, the next request got 503, and one after "reconnecting"
+  got 200.
+- 300 real `nordvpn status` checks 2 seconds apart, with NordVPN up: all
+  said Connected, none took over a second, so the watch should not cut pages
+  by mistake.
+
+Unverified: a real NordVPN drop, and the Mac's view of it.
+
 ## Limits
 
 - No proxy password: any tailnet device, and any local process that can reach
   the port, can send traffic out through WSL's NordVPN. This is Relay's own
   boundary (it has no sign-in either).
-- NordVPN's Kill Switch is off in WSL. The check runs before each tunnel, so a
-  VPN drop during an open connection can send traffic out over the normal
-  network. Turning the Kill Switch on would close this; that is the user's
-  choice and outside this plan.
+- NordVPN's Kill Switch is off in WSL. After a drop, open tunnels close at
+  the next check, up to about 2 seconds later (V08); until then their traffic
+  can leave over the normal network. Only the Kill Switch closes that gap for
+  all of WSL; that is the user's choice and outside this plan. Binding the
+  proxy's connections to the VPN's own address would close it for VPN tabs
+  alone. It is not built: only a real disconnect shows whether NordVPN removes
+  that address on a drop.
 - WebRTC is off in VPN tabs, so video calls do not work there.
 - `RELAY_VPN_CHECK=off` turns the proxy into a plain relay over WSL's
   network. The live service does not set it.
@@ -233,5 +259,8 @@ retired.
 1. Not recorded as done: the hand checks in Phase 2 (switching both ways, a
    popup, a PDF, sign-in kept after a restart), and the VPN-down message
    while NordVPN in WSL is off. Ask the user which they made.
-2. Then close out this plan. The Phase 2 worktree has no test build left and
+2. V08 needs a `relay-app` deploy, on the user's word. A brief real NordVPN
+   disconnect during a download, with the user's OK at the time, would
+   confirm it live.
+3. Then close out this plan. The Phase 2 worktree has no test build left and
    can be retired.
