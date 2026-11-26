@@ -131,17 +131,19 @@ an unloaded Browser tab shows its address. Analysis, 168 Flutter tests, 143
 backend tests and the type check passed on its commit. The user asked for it
 ("release. a stable version") after a hand check of test build
 `shell-closeout` (`545dad6`); of the client code merged after that build,
-`981387c`, only WSL tests ran. No test build is listed now. The backend runs
-`a796aa2` since 2026-11-26, with the Files hardening and the agent's form
-instructions merged after `c6d01fd`. `c6d01fd`, deployed on 2026-11-24 with
-`npm ci` for the new `unpdf` package, answered about 4 s after start, listed
-Files with no view and no shared folders, and refused the folder settings for
-a foreign Host. The web page service has run `88769c8` since a WSL restart on
-2026-11-25. Of earlier builds the user said 0.0.19's test build all works
-well, without testing unloading, and wrote "confirm file picker is working"
-(2026-11-24; build not recorded), read as a report that it works; which checks
-below they made is not recorded. Nothing in 0.0.20 or 0.0.21 has run through
-the native Mac workflow.
+`981387c`, only WSL tests ran. No test build is listed now. The backend and
+the web page service run `92f7bc5` since 2026-11-26. Each now answers only
+requests that name its own address (`FLUTTER_RELAY_ORIGIN`, `RELAY_ORIGIN`),
+and the host page frames only app pages. The backend also has the Files
+hardening, the agent's form instructions, and the closing of VPN-tab
+connections when NordVPN drops (a real drop is untested). Checked with curl
+from WSL and from Windows through both tailnet forwards: 200 at each service's
+own addresses, 403 for a foreign Host. No client has run against it yet. Of
+earlier builds the user said 0.0.19's test build all works well, without
+testing unloading, and wrote "confirm file picker is working" (2026-11-24;
+build not recorded), read as a report that it works; which checks below they
+made is not recorded. Nothing in 0.0.20 or 0.0.21 has run through the native
+Mac workflow.
 
 Browser popups (desktop only): webview_flutter_wkwebview 3.27.2 loaded a
 page's new window into its opener, which broke sign-in popups. A forwarding UI
@@ -154,7 +156,9 @@ real WKWebViews.
 
 1. Install Stable 0.0.21 on the Mac. Check that tabs, the chat panel and the
    window come back after a restart, and that its first start removes the
-   update folders beside the app and the older downloads.
+   update folders beside the app and the older downloads. Check too that chat
+   and app tabs load: since 2026-11-26 the backend refuses a Host that is not
+   its own address.
 2. Republishing a test build's name leaves its earlier ZIP in the release
    folder on WSL. Remove it at publish time if that folder grows.
 3. Review Stable 0.0.21 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`. The suite's longest waits, on tab switches, are candidates for a smoothness fix. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
