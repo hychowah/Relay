@@ -122,13 +122,11 @@ tool you don't have, you ask for it:
 - **Relay evolves the same way.** The same flow applies to Relay's own client
   and service, so each workspace ends up shaped by its owner.
 
-Several pieces already exist. Any app joins by address with no change to
-Relay, and the app list reloads without a restart. Relay can start and stop
-app servers. The Coding sessions app hands a written request to Claude Code or
-Codex. Robot viewer redraws the moment an agent edits its files. The missing
-piece is a safe place for code the agent writes: a sandbox that gets only the
-files and network access it needs, where you approve each change before it
-goes live.
+The groundwork is in place: any app joins by address with no change to Relay,
+the app list reloads without a restart, and Relay can start and stop app
+servers. The missing piece is a safe place for code the agent writes: a
+sandbox that gets only the files and network access it needs, where you
+approve each change before it goes live.
 
 ## Status
 
