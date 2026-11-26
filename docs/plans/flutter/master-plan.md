@@ -133,11 +133,12 @@ tests on its parent. The user asked for it ("release a stable version and
 push") and had chosen two report categories, Bug and Request. Publishing it
 retired test builds `pre-0-0-20`, `pre-0-0-20-files` and `bug-page-trace`;
 `file-picker` stays listed because it was built with uncommitted changes. The
-backend runs `c6d01fd`, deployed on 2026-11-24 with `npm ci` for the new
-`unpdf` package: it answered about 4 s after start, listed Files with no view
-and no shared folders, and refused the folder settings for a foreign Host. The
-server changes merged after it (the Files hardening and the agent's form
-instructions) are not deployed, and the web page service still runs `2d7d489`.
+backend runs `a796aa2` since 2026-11-26, with the Files hardening and the
+agent's form instructions merged after `c6d01fd`. `c6d01fd`, deployed on
+2026-11-24 with `npm ci` for the new `unpdf` package, answered about 4 s after
+start, listed Files with no view and no shared folders, and refused the folder
+settings for a foreign Host. The web page service has run `88769c8` since a
+WSL restart on 2026-11-25.
 Of earlier builds the user said 0.0.19's test build all works well, without
 testing unloading, and wrote "confirm file picker is working" (2026-11-24;
 build not recorded), read as a report that it works; which checks below they
@@ -251,7 +252,7 @@ real WKWebViews.
    submit. A fill aimed at a hidden tab, or made while the conversation is
    expanded, must be refused, and hidden fields must not be listed. Also share
    a test folder holding a PDF in **Shared folders** and have the real provider
-   search and read it, after deploying the server changes merged since
-   `c6d01fd` ([decision 0003](../prototype/phases/phase-01/decisions/0003-shared-folders-and-form-filling.md)).
+   search and read it; the server changes for it are live since 2026-11-26
+   ([decision 0003](../prototype/phases/phase-01/decisions/0003-shared-folders-and-form-filling.md)).
 
 Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).

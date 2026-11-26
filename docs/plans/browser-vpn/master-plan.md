@@ -219,12 +219,14 @@ Unverified: a real NordVPN drop, and the Mac's view of it.
   the port, can send traffic out through WSL's NordVPN. This is Relay's own
   boundary (it has no sign-in either).
 - NordVPN's Kill Switch is off in WSL. After a drop, open tunnels close at
-  the next check, up to about 2 seconds later (V08); until then their traffic
+  the next check, up to about 2 seconds later (V08), or about 7 if
+  `nordvpn status` hangs until its 5-second limit; until then their traffic
   can leave over the normal network. Only the Kill Switch closes that gap for
   all of WSL; that is the user's choice and outside this plan. Binding the
   proxy's connections to the VPN's own address would close it for VPN tabs
   alone. It is not built: only a real disconnect shows whether NordVPN removes
-  that address on a drop.
+  that address on a drop. On 2026-11-26 the user chose to leave the gap as it
+  is ("Leave it").
 - WebRTC is off in VPN tabs, so video calls do not work there.
 - `RELAY_VPN_CHECK=off` turns the proxy into a plain relay over WSL's
   network. The live service does not set it.
@@ -259,8 +261,10 @@ retired.
 1. Not recorded as done: the hand checks in Phase 2 (switching both ways, a
    popup, a PDF, sign-in kept after a restart), and the VPN-down message
    while NordVPN in WSL is off. Ask the user which they made.
-2. V08 needs a `relay-app` deploy, on the user's word. A brief real NordVPN
+2. V08 is live: `relay-app` was deployed at `a796aa2` on 2026-11-26 on the
+   user's word and answered 2 s after start; through the live proxy a public
+   address connected and a private one got 403. A brief real NordVPN
    disconnect during a download, with the user's OK at the time, would
-   confirm it live.
+   confirm the drop itself.
 3. Then close out this plan. The Phase 2 worktree has no test build left and
    can be retired.
