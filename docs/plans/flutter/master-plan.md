@@ -174,8 +174,11 @@ real WKWebViews.
    parent; the probe's hover moved without that and stayed with it. The
    committed code (111e7ca) is in Stable 0.0.20; the user tried it earlier in
    test build `bug-page-trace`, since retired, and said it "seems good" (2026-11-24; which cases they tried
-   is not recorded). `hover_redraw_test.dart` has not run: run it, and re-run
-   it after each Flutter upgrade.
+   is not recorded). `hover_redraw_test.dart` ran on the MacBook Neo on 2026-11-26
+   (main 545dad6) and failed twice before any hovering ("the page did not
+   load", line 78; likely cause, unconfirmed: line 77 compares `'$count'` with
+   `'40'` and WKWebView probably returns 40.0). The hover is still unverified:
+   fix the test's wait, run it, and re-run it after each Flutter upgrade.
 6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 7. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
 8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.
@@ -237,8 +240,8 @@ real WKWebViews.
    an arXiv PDF, click chat and send (the question must carry the
    selection), and open **Stored data**. Unverified: a password-protected
    PDF. Why 0.0.16 lost the selection is unknown; embedded PDFs still use
-   that path. Rerun `highlight_clicks_test.dart` (not run since its last
-   edits); in Stable 0.0.18, make the development guide's by-hand highlight checks and
+   that path. `highlight_clicks_test.dart` passed on the MacBook Neo on 2026-11-26 (main
+   545dad6), one run; in Stable 0.0.18, make the development guide's by-hand highlight checks and
    check drag smoothness, then mark the 2026-11-23 report solved.
 21. Check **Updates** build times on Mac.
 22. Form filling (`browser.form`, `browser.fill`; desktop only) has passed only

@@ -76,9 +76,9 @@ Done measure 8, the Mac check, kept apart from the WSL evidence. It ran on
 - Hand check on the test build `shell-closeout` (main `545dad6`): VPN switch;
   tab hover card; Show tab memory; address fill-in; chat open and close
   (page not reloaded, draft kept); area capture; split view (drag a tab to
-  split, drag the divider, neither page reloads). The user said, "i checked
-  shell-closeout, all pass". That overall statement is the record, not seven
-  separate results. The split view and chat steps are the live evidence for
+  split, drag the divider, neither page reloads). The user told the
+  orchestrator session, "i checked shell-closeout, all pass". That overall
+  statement is the record, not seven separate results. The split view and chat steps are the live evidence for
   unknown U1: the extra widget layer does not recreate native page views.
 
 ## Lasting decisions
@@ -102,9 +102,14 @@ Done measure 8, the Mac check, kept apart from the WSL evidence. It ran on
 
 ## What is left
 
-No unfinished target remains. The hover test is open: whether a redraw keeps
-a page's hover under the mouse is still unverified on the Mac. Making
-`hover_redraw_test.dart` pass is a separate change outside this refactor.
+One target was not met: the target design planned a doc comment on
+`RelayShell` stating the owner rule, and it was not written. The map's "The
+Flutter shell" section holds the rule instead.
+
+The hover test is open: whether a redraw keeps a page's hover under the
+Mac's mouse is still unverified. Making `hover_redraw_test.dart` pass is a
+separate change outside this refactor; its next step is in the [Flutter
+plan's Next](../flutter/master-plan.md#next).
 
 Not now:
 

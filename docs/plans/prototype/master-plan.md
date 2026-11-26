@@ -330,7 +330,7 @@ Defer read/write effects to the first write, access scopes and versioned migrati
 
 The [Flutter handoff](../flutter/master-plan.md#next) covers installing and reviewing Stable 0.0.20 on the Mac, with its checks for tab restore, the transcript pane and the app list refresh, and the split view. It also lists Mac checks for the capture animation, the Browser's PDF viewer, highlights and Stored data, which are in Stable since 0.0.17, published on 2026-11-23. The backend, last deployed at `c6d01fd` on 2026-11-24, connects the Browser on the Relay port, not 3251: builds older than 0.0.17, and a Windows app built before `acad2d8`, cannot read pages or transcripts. Windows checks wait until the user returns to Windows.
 
-The [coding sessions plan](../coding-sessions/master-plan.md) hands requests to Claude Code or Codex sessions through a coding app in its own project. The [shell refactor](../shell-refactor/master-plan.md) splits `flutter/lib/main.dart`. Their Next sections hold current steps.
+The [coding sessions plan](../coding-sessions/master-plan.md) hands requests to Claude Code or Codex sessions through a coding app in its own project. The [shell refactor](../shell-refactor/master-plan.md) is complete; the coding plan's Next holds steps.
 
 Phase 1 of the [app servers plan](../app-servers/master-plan.md) (R17) is deployed and in Stable 0.0.18; its Mac check is next.
 
