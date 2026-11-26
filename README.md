@@ -109,6 +109,27 @@ Choose **+ → Room layout** and send a message.
 [Running Relay](docs/running.md) covers model keys, connecting your own app,
 other devices, backups and starting your app servers from Relay.
 
+## Where it's heading
+
+The goal is a workspace that grows with the person using it. When you need a
+tool you don't have, you ask for it:
+
+- **Ask for an app, get an app.** Describe what you need, and the agent
+  writes a new app that serves the protocol, starts it, and opens it as a new
+  tab.
+- **Change apps by talking.** Ask for a new screen, operation or fix in an app
+  you already use, and the agent updates it while you watch.
+- **Relay evolves the same way.** The same flow applies to Relay's own client
+  and service, so each workspace ends up shaped by its owner.
+
+Several pieces already exist. Any app joins by address with no change to
+Relay, and the app list reloads without a restart. Relay can start and stop
+app servers. The Coding sessions app hands a written request to Claude Code or
+Codex. Robot viewer redraws the moment an agent edits its files. The missing
+piece is a safe place for code the agent writes: a sandbox that gets only the
+files and network access it needs, where you approve each change before it
+goes live.
+
 ## Status
 
 Relay is a personal prototype in daily use. The Flutter app runs on macOS 14
