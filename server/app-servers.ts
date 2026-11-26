@@ -111,25 +111,7 @@ export function serverStatus(server: AppServer, unit: Properties): ServerStatus 
   };
 }
 
-/**
- * Refuses requests to these paths that name a Host other than Relay's own
- * addresses (host:port). A page whose name is rebound to Relay's address
- * would be same-origin, so an Origin check cannot stop it (DNS rebinding);
- * its requests still carry its own Host.
- */
-export function onlyRelayHosts(app: Hono, paths: string[], hosts: string[], message: string) {
-  const allowed = new Set(hosts.map((host) => host.toLowerCase()));
-  for (const path of paths) {
-    app.use(path, async (c, next) => {
-      if (!allowed.has(c.req.header("host")?.toLowerCase() ?? "")) throw new HTTPException(403, { message });
-      await next();
-    });
-  }
-}
-
 export interface AppServerOptions {
-  /** Relay's own addresses as host:port; requests naming another Host are refused. */
-  hosts: string[];
   run?: Run;
   /** How long a started server must keep running before the start counts. */
   settleMs?: number;
@@ -139,9 +121,8 @@ export interface AppServerOptions {
  * Adds the App servers routes. The servers file is read on every request.
  * Log lines go only to the client that asked; Relay does not log them.
  */
-export function addAppServers(app: Hono, file: string | undefined, { hosts, run = runCommand, settleMs = 1000 }: AppServerOptions) {
+export function addAppServers(app: Hono, file: string | undefined, { run = runCommand, settleMs = 1000 }: AppServerOptions = {}) {
   const systemctl = (...args: string[]) => run("systemctl", ["--user", ...args]);
-  onlyRelayHosts(app, ["/api/app-servers", "/api/app-servers/*"], hosts, "This address may not control app servers.");
 
   function find(id: string) {
     const server = readServers(file).find((server) => server.id === id);

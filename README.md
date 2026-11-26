@@ -62,6 +62,12 @@ saved key, Relay also uses `DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY` or
 as configured. By default live requests are sent only while the host's NordVPN
 client is connected; set `RELAY_VPN_CHECK=off` to turn that check off.
 
+**Open it from another device.** Relay answers only requests addressed to
+`127.0.0.1` or `localhost` on its port, so a website that points its own name
+at Relay (DNS rebinding) is refused. To use the page through a forward, such
+as a private tailnet, set `RELAY_ORIGIN` to the address the other device
+opens, for example `http://<device-reachable-host>:<port>`.
+
 **Keep your data.** Records are stored in `RELAY_DATA_DIR` (default `runtime/`).
 To back up, stop Relay and copy that whole folder; restore it to the same path.
 
@@ -106,13 +112,10 @@ Flutter backend to that file's path:
 
 `id` uses lowercase letters, digits, `-` and `_`; `name` is shown on the
 screen; `unit` is the user unit Relay controls. A request names only a server
-id, so the screen can act only on units the file lists. These requests must
-name the backend's own address (`127.0.0.1:3250`, `localhost:3250` or
-`FLUTTER_RELAY_ORIGIN`), so a page that points its name at Relay (DNS
-rebinding) is refused. Do not list Relay's own backend or web page units:
-Stop would end the backend mid-request, and the client could not start it
-again. A unit without an `[Install]` section cannot start with the
-computer, and its switch shows as not available.
+id, so the screen can act only on units the file lists. Do not list Relay's
+own backend or web page units: Stop would end the backend mid-request, and
+the client could not start it again. A unit without an `[Install]` section
+cannot start with the computer, and its switch shows as not available.
 
 The file is read on every request, so edits apply at once. Without
 `RELAY_SERVERS_FILE` or the file, the screen is empty; a file that cannot be

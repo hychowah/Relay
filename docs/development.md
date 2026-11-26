@@ -203,7 +203,9 @@ controls; see [Manage app servers](../README.md#manage-app-servers).
 
 For remote devices, forward the WSL port through the private tailnet and set
 `FLUTTER_RELAY_ORIGIN` to its device-reachable origin when starting the
-backend. Give the app the same origin once in WSL:
+backend. The backend refuses requests that name any other address than that
+origin, `127.0.0.1:3250` and `localhost:3250`. Give the app the same origin
+once in WSL:
 
 ```sh
 git config --local relay.appUrl http://<device-reachable-host>:<relay-port>

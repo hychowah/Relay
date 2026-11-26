@@ -7,18 +7,24 @@
 <script>
   // Only this trusted host exposes the native channel. The app stays in its iframe.
   const view = JSON.parse(decodeURIComponent(location.hash.slice(1)));
+  // Anyone can open this page with any view in its address. Frame only a web
+  // page on the app's own site: a javascript: address, or a page on Relay's
+  // own site, would run as Relay itself.
+  const site = new URL(view.url);
+  if (!['http:', 'https:'].includes(site.protocol) || site.origin === location.origin || site.origin !== view.origin)
+    throw new Error('Relay opens only an app page on its own site.');
   const frame = document.createElement('iframe');
   frame.title = 'Connected app';
   if (view.sandbox !== undefined) frame.setAttribute('sandbox', view.sandbox);
-  const token = new URL(view.url, location.origin).searchParams.get('token');
+  const token = site.searchParams.get('token');
   const version = view.protocolVersion || 2;
   window.addEventListener('message', event => {
     if (event.source !== frame.contentWindow || event.origin !== view.origin || event.data?.token !== token || (version === 2 && event.data?.version !== 2)) return;
     if (['relay.ready', 'relay.context', 'relay.presented', 'relay.navigation'].includes(event.data.type))
       window.RelayHost.postMessage(JSON.stringify(event.data));
   });
-  window.relayPresent = data => frame.contentWindow.postMessage({...data,version,token}, view.origin === 'null' ? '*' : view.origin);
-  frame.src = view.url;
+  window.relayPresent = data => frame.contentWindow.postMessage({...data,version,token}, view.origin);
+  frame.src = site.href;
   window.addEventListener('DOMContentLoaded', () => document.body.append(frame));
 </script>
 <body></body>

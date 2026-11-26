@@ -10,6 +10,7 @@ import {createFiles} from '../server/files.ts';
 import {attachBrowserProxy} from '../server/browser-proxy.ts';
 import {ProviderSettingsStore} from '../server/provider-settings.ts';
 import {addAppServers} from '../server/app-servers.ts';
+import {onlyRelayHosts, relayHosts} from '../server/relay-hosts.ts';
 
 const relayOrigin = process.env.FLUTTER_RELAY_ORIGIN || 'http://127.0.0.1:3250';
 const browser = createBrowser();
@@ -29,13 +30,11 @@ if (process.env.RELAY_PROVIDER_DIR && !existsSync(`${dataDir}/provider.json`)) {
 }
 const workspace = await startWorkspace(dataDir, apps);
 workspace.app.route('/', flutterReleases(`${dataDir}/releases`));
-// Relay's own addresses; requests naming another Host cannot reach these settings.
-const hosts = [new URL(relayOrigin).host, '127.0.0.1:3250', 'localhost:3250'];
-files.addRoutes(workspace.app, hosts);
-addAppServers(workspace.app, process.env.RELAY_SERVERS_FILE, {hosts});
+files.addRoutes(workspace.app);
+addAppServers(workspace.app, process.env.RELAY_SERVERS_FILE);
 workspace.app.use('/flutter-host.html', async (c, next) => {c.header('Cache-Control', 'no-store'); await next();});
 workspace.app.use('/*', serveStatic({root:'./public'}));
-const server = serve({fetch:workspace.app.fetch, hostname:'127.0.0.1', port:3250});
+const server = serve({fetch:onlyRelayHosts(workspace.app.fetch, relayHosts(3250, relayOrigin)), hostname:'127.0.0.1', port:3250});
 browser.attach(server);
 const proxy = attachBrowserProxy(server);
 console.log(`Flutter experiment: ${relayOrigin}`);

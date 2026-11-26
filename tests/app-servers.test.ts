@@ -51,13 +51,11 @@ function setup(t: TestContext, entries?: unknown) {
   const store = new Store(":memory:");
   t.after(() => store.close());
   const { app } = createWorkspace(store, () => [], { mode: "fixture", model: "fixture", configured: true });
-  addAppServers(app, entries === undefined ? undefined : file, { hosts: ["relay.test:3250"], run: systemd.run, settleMs: 0 });
-  // Like every client request, it names Relay's address and a POST sends JSON.
-  // An empty host sends no Host header.
-  const request = async (path: string, method = "GET", body: unknown = method === "GET" ? undefined : {}, host = "relay.test:3250") => {
-    const named: Record<string, string> = host ? { Host: host } : {};
-    const response = await app.request(path, body === undefined ? { method, headers: named } : {
-      method, headers: { ...named, "Content-Type": "application/json" }, body: JSON.stringify(body),
+  addAppServers(app, entries === undefined ? undefined : file, { run: systemd.run, settleMs: 0 });
+  // Like every client request, a POST sends JSON.
+  const request = async (path: string, method = "GET", body: unknown = method === "GET" ? undefined : {}) => {
+    const response = await app.request(path, body === undefined ? { method } : {
+      method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     });
     return { status: response.status, body: await response.json() as any };
   };
@@ -182,23 +180,9 @@ test("recent logs come from the server's own unit and stay out of Relay's log", 
   assert.equal(errors.mock.callCount() + logs.mock.callCount(), 0);
 });
 
-test("only requests addressed to Relay itself reach the servers, and changes must send JSON", async (t) => {
-  const { request, app, systemd } = setup(t, [notes]);
-  systemd.units["notes-web.service"] = { ...running, UnitFileState: "disabled" };
-  // A rebound name, another port, and no Host at all.
-  for (const host of ["evil.test:3250", "relay.test:3251", ""]) {
-    for (const [path, method, body] of [
-      ["/api/app-servers", "GET"], ["/api/app-servers/notes/logs", "GET"],
-      ["/api/app-servers/notes/stop", "POST"], ["/api/app-servers/notes/auto-start", "PUT", { on: true }],
-    ] as const) {
-      const refused = await request(path, method, body ?? (method === "GET" ? undefined : {}), host);
-      assert.equal(refused.status, 403, `${method} ${path} with Host ${host || "(none)"}`);
-    }
-  }
-  assert.equal(systemd.calls.length, 0);
-  assert.equal((await request("/api/app-servers", "GET", undefined, "RELAY.test:3250")).status, 200);
-
-  const plain = await app.request("/api/app-servers/notes/stop", { method: "POST", headers: { Host: "relay.test:3250" }, body: "stop" });
+test("changes to the servers must send JSON", async (t) => {
+  const { app, systemd } = setup(t, [notes]);
+  const plain = await app.request("/api/app-servers/notes/stop", { method: "POST", body: "stop" });
   assert.equal(plain.status, 415);
   assert.equal(systemd.calls.some(([, , verb]) => verb === "stop"), false);
 });

@@ -75,7 +75,7 @@ function fixture(t: TestContext) {
   };
   workspace.setHarness(harness);
   t.after(async () => { await workspace.close(); store.close(); });
-  files.addRoutes(workspace.app, ["relay.test:3250"]);
+  files.addRoutes(workspace.app);
   const request = (method: string, path: string, body?: unknown, host = "relay.test:3250", headers: Record<string, string> = {}) =>
     workspace.app.request(`http://${host}${path}`, {
       method, headers: { "Content-Type": "application/json", Host: host, ...headers },
@@ -88,7 +88,7 @@ function fixture(t: TestContext) {
   return { base, shared, dataDir, files, workspace, request, call, failure };
 }
 
-test("shared folders are added as existing absolute folders, kept on disk, removed, and changed only through Relay's own address", async (t) => {
+test("shared folders are added as existing absolute folders, kept on disk, removed, and changed only from Relay's own page", async (t) => {
   const f = fixture(t);
   for (const path of ["shared", join(f.base, "missing"), join(f.shared, "notes.md"), f.dataDir, join(f.shared, "old-relay")])
     assert.equal((await f.request("POST", "/api/settings/folders", { path })).status, 400, path);
@@ -100,10 +100,6 @@ test("shared folders are added as existing absolute folders, kept on disk, remov
   assert.deepEqual(await createFiles(f.dataDir, {}).app.integration.call!("files.list", {}, {}), { data: { folders: [f.shared] } });
   const removed = await f.request("DELETE", `/api/settings/folders?path=${encodeURIComponent(f.shared)}`);
   assert.deepEqual(await removed.json(), { folders: [] });
-  // A page rebound to Relay's address (DNS rebinding) sends its own Host.
-  for (const [method, path, body] of [["GET", "/api/settings/folders"], ["POST", "/api/settings/folders", { path: f.shared }],
-    ["DELETE", `/api/settings/folders?path=${encodeURIComponent(f.shared)}`]] as const)
-    assert.equal((await f.request(method, path, body, "evil.test:3250")).status, 403, method);
   // Another site's page reaches Relay's real address with its own Origin; a
   // plain-text form post needs no preflight.
   const evil = { Origin: "https://evil.example" };

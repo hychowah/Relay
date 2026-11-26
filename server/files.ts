@@ -4,7 +4,6 @@ import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node
 import type { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { RegisteredApp } from "./app.ts";
-import { onlyRelayHosts } from "./app-servers.ts";
 import { pdfMostChars, pdfReader, pdfText } from "./pdf-text.ts";
 
 // Relay's built-in Files app: read-only access to the folders the user shares
@@ -265,9 +264,8 @@ export function createFiles(dataDir: string, env: NodeJS.ProcessEnv = process.en
     folders = next;
   }
 
-  /** Adds the folder settings routes, answering only requests to Relay's own addresses (host:port). */
-  function addRoutes(server: Hono, hosts: string[]) {
-    onlyRelayHosts(server, ["/api/settings/folders"], hosts, "This address may not see or change shared folders.");
+  /** Adds the folder settings routes. */
+  function addRoutes(server: Hono) {
     // Another site's page reaches Relay's real address with its own Origin. The
     // workspace already refuses a non-JSON POST (a form post that needs no
     // preflight); this check refuses any cross-site change that gets past it.
