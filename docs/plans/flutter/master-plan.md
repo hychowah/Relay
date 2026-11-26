@@ -174,11 +174,11 @@ real WKWebViews.
    parent; the probe's hover moved without that and stayed with it. The
    committed code (111e7ca) is in Stable 0.0.20; the user tried it earlier in
    test build `bug-page-trace`, since retired, and said it "seems good" (2026-11-24; which cases they tried
-   is not recorded). `hover_redraw_test.dart` ran on the MacBook Neo on 2026-11-26
-   (main 545dad6) and failed twice before any hovering ("the page did not
-   load", line 78; likely cause, unconfirmed: line 77 compares `'$count'` with
-   `'40'` and WKWebView probably returns 40.0). The hover is still unverified:
-   fix the test's wait, run it, and re-run it after each Flutter upgrade.
+   is not recorded). `hover_redraw_test.dart` failed twice on the MacBook Neo
+   on 2026-11-26 before any hovering: WKWebView returns the row count as
+   40.0, which the wait did not match. With that fixed it passed on the first
+   run (main 0dbccc3 plus the fix): the pointer reached row 15 and five redraws sent no further hover events. Re-run
+   it after each Flutter upgrade.
 6. The native workflow's Browser step loads a public shop page that sometimes answers slowly or with 429. Point it at a steadier page if that recurs.
 7. Check on the Mac that opening a YouTube video updates the Browser address, tab title and Back button; only a faked web view tests this.
 8. Check on the Mac that an app added to the live apps file appears in the app picker without Reconnect, and that a removed one leaves its open tab in place. Service and widget tests cover this, and the live backend applied a file edit without a restart; the Mac is unverified.

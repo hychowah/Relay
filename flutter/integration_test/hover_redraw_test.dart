@@ -74,7 +74,8 @@ void main() {
         final count = await controller.runJavaScriptReturningResult(
           'document.querySelectorAll(".row").length',
         );
-        if ('$count' == '40') break;
+        // WKWebView may return the number as 40.0.
+        if (double.tryParse('$count') == 40) break;
         expect(tries, lessThan(100), reason: 'the page did not load');
         await Future<void>.delayed(const Duration(milliseconds: 100));
         await tester.pump();
