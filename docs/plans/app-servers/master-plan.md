@@ -185,7 +185,7 @@ while systemd carries on, and the next list read shows the real state.
 
 ## Next
 
-1. With Stable 0.0.20 on the Mac, make the one Mac check: every Mac item of
+1. With Stable 0.0.21 on the Mac, make the one Mac check: every Mac item of
    Phase 1 Done when, and also start Backtest Web from the screen and check
    that its tailnet address answers.
 2. Phase 2 (S09): confirm with the user that it is still wanted before

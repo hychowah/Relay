@@ -242,6 +242,8 @@ Unverified: a real NordVPN drop, and the Mac's view of it.
   message, as in normal tabs.
 - A VPN tab that fails to load at start stays open but may come back
   blank; its address then has to be typed again.
+- A VPN switch that fails on an unloaded tab leaves the tab its address and a
+  blank start page. The user said this is intended (2026-11-26).
 - The macOS minimum is now 14 and the update feed does not check it; the
   user's Macs run 15 and later.
 - The Windows client ignores the saved flag, so a copy of Mac tabs opened
