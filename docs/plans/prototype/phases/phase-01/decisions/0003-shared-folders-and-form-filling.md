@@ -38,5 +38,5 @@ Host and Origin checks on the folder settings.
 The live Flutter backend was deployed at `c6d01fd` on 2026-11-24: it answered after
 start, listed Files with no view, and refused the folder settings for a
 foreign Host. Not yet checked: the Mac WKWebView, a real provider reading a
-shared PDF, and Windows WebView2. The Mac checks are item 22 of the
+shared PDF, and Windows WebView2. The Mac checks are the form filling item of the
 [Flutter plan's Next section](../../../../flutter/master-plan.md#next).
