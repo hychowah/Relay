@@ -74,13 +74,31 @@ The service has two entry points: `server/index.ts` serves the web page, and
 | `server/app.ts` | 864 | `tool-handlers.ts`, `runs.ts`; bots and memories to `add*` route modules |
 | `web/App.tsx`, `web/style.css` | 1,877, 2,305 | Maintained fallback, not split |
 
-## Structure window
+## The Flutter shell
 
-The [Flutter shell refactor](plans/shell-refactor/master-plan.md) owns
-`flutter/lib/main.dart`, the shell modules (`address_bar.dart`,
-`new_tab_page.dart`, `chat_dock.dart`, `area_capture.dart`,
-`workspace_menu.dart`, `page_stack.dart`, `chat_panel.dart`),
-`flutter/test/support/` and the shell tests (the modules' `_test.dart`
-files, `chat_input_test.dart`, `shell_actions_test.dart`, `shell_test.dart`)
-until its close-out ends. Do not edit them before then; a shell feature
-waits.
+`flutter/lib/main.dart` holds startup, `RelayApp` and `RelayShell`: the state
+owners and listeners, fullscreen, the banner and the toolbar. Each region of
+the window has its own module:
+
+| Module | Region |
+|---|---|
+| `address_bar.dart` | `BrowserBar` and `AddressInput`: fill-in, suggestions, Go |
+| `new_tab_page.dart` | `NewTabPage`: app search, other devices' tabs |
+| `page_stack.dart` | `PageStack`: every tab's page, split panes, dividers, drop zones |
+| `chat_dock.dart` | `ChatDock` and `ChatLayout`: dock, phone sheet, width |
+| `chat_panel.dart` | `ChatPanel` and `ChatInput`: header, transcript, composer |
+| `area_capture.dart` | `AreaCapture`: area picking and its attachment |
+| `workspace_menu.dart` | `WorkspaceMenu`, `ShellActions` and `WorkspaceAction`: menu, dialogs, bug reports |
+
+State that must outlive a region's widget, or that several regions read, is an
+owner object the shell creates, disposes and hands down; the region's widget
+is a stateless view of it. The shell pushes the selected tab into each owner
+with `follow`. An owner keeps its state private and offers getters and
+methods named for what the user does; a view uses only those and never passes
+its own `BuildContext` to it. An owner the shell redraws on is a
+`ChangeNotifier`; never call a method that notifies during a build (`follow`
+runs in the build and never notifies).
+
+A new region or feature follows the same pattern in its own module. The shell
+never recreates a tab's native page view: `PageStack` keeps every page in one
+keyed slot, so nothing above it may change the widgets' parent chain.

@@ -1,164 +1,112 @@
 # Flutter shell refactor
-Status: active
+Status: complete
 
-## Goal
+## Outcome
 
-`flutter/lib/main.dart` holds the whole shell: one class with about 35
-pieces of screen state that draws every region of the window. Its tests share
-`flutter/test/workspace_test.dart` with the workspace tests and the shared
-fakes. Nearly every client feature edits both files. This refactor splits the
-shell into a module per region, each piece of shared screen state with one
-owner, and the tests beside the modules they test. Behavior stays exactly the
-same. The user approved this brief on 2026-11-25.
+`flutter/lib/main.dart` held the whole shell: one class, about 35 pieces of
+screen state, every region of the window. The user approved the refactor on
+2026-11-25. The shell is now one module per region, behavior unchanged apart
+from the one fix below:
 
-The [target design](phases/phase-01/working/target-design.md) holds the
-modules, interfaces, hidden coupling, error model, Deletes and unknowns. In
-the same folder, `baseline.md` (slice 1a writes it) defines "behavior
-unchanged", and `playbook.md` (slice 2 writes it) holds the method every
-later slice repeats.
-
-## Done measures
-
-1. `main.dart` holds only startup, `RelayApp`, `RelayShell` with the state
-   owners and listeners, fullscreen, the banner, the toolbar and three
-   callbacks, about 570 lines. Its `tools/structure.json` entry is gone.
-2. Each shell state field has one owner, no module reads another module's
-   internals, and no menu action is dispatched by string.
-3. Every baseline test passes after every slice, unmodified apart from import
-   lines, or replaced by a named test at the new interface.
-4. `workspace_test.dart` holds only workspace tests, at its lowered recorded
-   size; shared fakes are in `flutter/test/support/`; no test imports another
-   test file.
-5. `flutter analyze` is clean, `integration_test/` included.
-6. Desktop-only members are marked as the map says.
-7. The [architecture map](../../architecture.md) names each new module; the
-   `main.dart` Known debt row is gone and the `workspace_test.dart` row shows
-   its lowered size.
-8. One Mac check at close-out is recorded, separate from the WSL evidence.
+- `address_bar.dart`, `new_tab_page.dart`, `chat_dock.dart`,
+  `area_capture.dart`, `workspace_menu.dart`, `page_stack.dart` and
+  `chat_panel.dart`; the [architecture map](../../architecture.md) names them.
+- `main.dart` went from 2,429 lines (its recorded size at `3e71256`) to 551,
+  and its `tools/structure.json` entry and Known debt row are gone.
+- The shell tests sit beside their modules, and the shared fakes are in
+  `flutter/test/support/`. `workspace_test.dart` holds only workspace tests,
+  at 1,062 lines (3,084 before).
+- The suite grew from 110 to 168 tests: 58 new tests pin shell rules that no
+  test covered.
 
 ## Slices
 
-Each slice is built by a /deliver-change worker on its own branch from `main`
-and merged by the orchestrator. Every slice after 1a edits `main.dart` or the
-new test files, so they run one at a time. Each production slice builds the
-new module beside the old code, moves the callers, deletes the old code, runs
-`python3 tools/check_structure.py --update`, updates the `main.dart` Known
-debt line count, and marks itself done here. A slice that fails before merging
-is discarded; a merged one is reverted by a new slice.
+Each slice was built on its own branch and merged by the orchestrator, from
+`3e71256` to `545dad6`.
 
-| # | Slice | Status |
-|---|---|---|
-| 1a | Test homes: fakes and shell tests moved unchanged | done |
-| 1b | Safety net: tests for the untested shell behavior | done |
-| 1c | Fix: an unloaded Browser tab's address | done |
-| 2 | Pilot: `address_bar.dart` | done |
-| 3 | `new_tab_page.dart` | done |
-| 4 | `chat_dock.dart` and `wideWorkspace` | done |
-| 5 | `area_capture.dart` | done |
-| 6 | `workspace_menu.dart` | done |
-| 7 | `page_stack.dart` | done |
-| 8 | `chat_panel.dart` | done |
-| 9 | Close-out: Mac check, then an upkeep slice | to do |
+| Slice | Commits |
+|---|---|
+| 1a Test homes | `5195d57`, `506d004`, `fff4b08` |
+| 1b Safety-net tests | `dc41670` to `78dfb7c` |
+| 1c Unloaded Browser tab's address | `50b2a72` to `abb976d` |
+| 2 `address_bar.dart` (pilot) | `cecbaa6` to `e4bbed2` |
+| 3 `new_tab_page.dart` | `14f5e08`, `10e5709` |
+| 4 `chat_dock.dart`, `wideWorkspace` | `f56ea9d` to `19c599d` |
+| 5 `area_capture.dart` | `4502852` to `31dc6e3` |
+| 6 `workspace_menu.dart` | `7092fd5` to `7af0a55` |
+| 7 `page_stack.dart` | `06a1dff` to `d1c0200` |
+| 8 `chat_panel.dart` | `7e592e7` to `e4107dd`, `545dad6` (`88769c8` in between is the WSL test memory cap, not shell work) |
 
-**1a. Test homes (tests only).** Move `FakePage` to
-`flutter/test/support/fake_page.dart` and `Fixture`, `apps` and `deskReport`
-to `support/fixture.dart`; point `sources_test.dart` there. Move the 26 shell
-tests unchanged into the eight test files the target design lists. Lower the
-`workspace_test.dart` size and its map row's line count. Write the baseline
-from `flutter test --reporter json` output. Exit: the whole suite's 110 test
-names pass before and after; each new file passes alone; `git diff --color-moved` shows
-only moves and import lines. Rollback: revert; tests only.
+## Done measures
 
-**1b. Safety net (tests only).** Add the target design's safety-net tests
-through `RelayApp`, using existing tooltips, texts and keys; no product
-change. Run probes U6–U8. Break one pinned behavior on purpose, see a test
-fail, revert, and report it under Checks. Add the new test names to the
-baseline. Exit: suite passes; baseline updated from the runner's output.
-Rollback: revert; tests only.
+WSL evidence, on `545dad6`:
 
-**1c. Fix, the unloaded Browser tab's address.** The one behavior change,
-asked for by the user at the first pause point, before the pilot moves the
-address bar. An active Browser tab whose page is not loaded, such as after a
-failed reload, now shows its known address, and a Go from it is recorded as
-typed; an unselected split pane with such a tab shows its address too. Two
-new tests in `address_bar_test.dart`; the baseline has 135 names.
+1. `main.dart` holds startup, `RelayApp`, `RelayShell` with the owners and
+   listeners, fullscreen, the banner, the toolbar and three callbacks:
+   551 lines, no `structure.json` entry. Met.
+2. Each shell state field has one owner; no view reads an owner's private
+   fields (grep on `545dad6`); no action is dispatched by string, as
+   `WorkspaceAction` replaced them. Met.
+3. The 168 tests all pass on `545dad6`, with names identical to the baseline
+   (checked by the coordinator). Each slice changed test
+   files only in import lines, apart from the new pinning tests. Met.
+4. `workspace_test.dart` is at 1,062 lines; the fakes are in
+   `flutter/test/support/`; no test imports another test file (grep). Met.
+5. `flutter analyze` says "No issues found!". Met.
+6. Desktop-only members carry the map's markers (for example the VPN switch
+   and Show tab memory). Met.
+7. The map names each module; the `main.dart` Known debt row is gone and the
+   `workspace_test.dart` row shows 1,062. Met.
+   `check_structure.py` and `check_records.py` pass.
 
-**2. Pilot, `address_bar.dart`.** `AddressInput`, `BrowserBar`,
-`inlineCompletion`; the shell's build calls `address.follow(w.active)`, so
-1c's address rule stays in the module. Writes the playbook. One new test
-pins the highlight reset that had no test; the baseline has 136 names. Exit:
-baseline passes unmodified; `main.dart` near 2,050 lines.
+Done measure 8, the Mac check, kept apart from the WSL evidence. It ran on
+2026-11-26 on the MacBook Neo from main `545dad6`:
 
-**3. `new_tab_page.dart`.** A verbatim move. Exit: baseline passes; near
-1,765 lines.
+- Real-mouse tests, run by the orchestrator session at the user's request
+  from a check copy of main. `highlight_clicks_test.dart` passed in one run.
+  `hover_redraw_test.dart` failed twice at line 78, "the page did not load",
+  before any hovering. The refactor did not cause it: the test uses no shell
+  code (it imports `page_surface.dart`, `web_page.dart` and
+  `window_capture.dart` only), those files, `flutter/macos`,
+  `flutter/integration_test` and `package.json` are unchanged between
+  `3e71256~1` and `545dad6`, and the Flutter plan records the test as never
+  run before. The likely cause, unconfirmed, is line 77 comparing `'$count'`
+  with `'40'` when WKWebView probably returns 40.0. Mac time: three runs,
+  about 4 minutes; nothing left on the Mac.
+- Hand check on the test build `shell-closeout` (main `545dad6`): VPN switch;
+  tab hover card; Show tab memory; address fill-in; chat open and close
+  (page not reloaded, draft kept); area capture; split view (drag a tab to
+  split, drag the divider, neither page reloads). The user said, "i checked
+  shell-closeout, all pass". That overall statement is the record, not seven
+  separate results. The split view and chat steps are the live evidence for
+  unknown U1: the extra widget layer does not recreate native page views.
 
-**4. `chat_dock.dart`.** `ChatLayout` and `ChatDock`; `wideWorkspace` in
-`workspace_style.dart` replaces the 900 literals, each site keeping its own
-measure. Probe U3 first. Seven new tests pin the dock and layout rules that
-had none; the baseline has 143 names. Exit: baseline passes; 1,620 lines.
+## Lasting decisions
 
-**5. `area_capture.dart`.** `AreaCapture`; `_changed` calls
-`capture.follow(active)`. Probe U2. Six new tests pin the capture rules that
-had none; the baseline has 149 names. Exit: baseline passes; 1,544 lines.
+- Owner, view and `follow`: state that must outlive a region's widget, or
+  that several regions read, is an object the shell owns and hands down. The
+  shell pushes the selected tab into it with `follow`. Regions never pass
+  their own `BuildContext` to it. The map's "The Flutter shell" section
+  keeps the rule.
+- The user's one behavior change, slice 1c: an unloaded Browser tab (for
+  example after a failed reload) shows its known address, in an unselected
+  split pane too, and Go from it is recorded as typed.
+- Accepted redraw difference B1, slice 8: the chat panel's reduce-motion and
+  pixel-ratio reads now redraw only the panel. A stale transcript selection
+  after a silent page-selection change can last until the next shell redraw.
+  It is rare and corrects itself.
+- Settled with the user: slice 1 split into 1a and 1b; no `useWindow` test
+  helper for now; a self-contained Mac check instead of `workflow_test.dart`,
+  which runs against the deployment's real records; slices 3 to 8 ran
+  without further pauses.
 
-**6. `workspace_menu.dart`.** `WorkspaceAction`, `ShellActions`,
-`WorkspaceMenu`; action names stay the recorded names. Six new tests pin the
-menu and action rules that had none, five of them in
-`shell_actions_test.dart`; the baseline has 155 names. Exit: baseline passes;
-no action strings left; 1,332 lines.
+## What is left
 
-**7. `page_stack.dart`.** `PageStack`, with the drop-hover state in its own
-`State`. Five new tests pin the page-stack rules that had none; the baseline
-has 160 names. Exit: the element-identity and nothing-over-the-page tests
-pass unmodified; 1,025 lines.
+No unfinished target remains. The hover test is open: whether a redraw keeps
+a page's hover under the mouse is still unverified on the Mac. Making
+`hover_redraw_test.dart` pass is a separate change outside this refactor.
 
-**8. `chat_panel.dart`.** `ChatInput` and `ChatPanel`; the shell calls
-`chat.follow(...)` before building the dock. Eight new tests pin the chat
-rules that had none, four of them in `chat_input_test.dart`; the baseline
-has 168 names. Exit: done measures 1–7; the `main.dart` structure entry and
-Known debt row removed; 551 lines.
-
-**9. Close-out.** After slice 8, one Mac check of about 20 minutes, with the
-user told first: `npm run test:mac -- hover_redraw_test.dart` and
-`highlight_clicks_test.dart` (real mouse events, so the MacBook Neo), and a
-hand check on a preview build of the VPN switch, tab hover card, Show tab
-memory, address fill-in, chat open and close, and area capture.
-`workflow_test.dart` is not used: it runs against the deployment's real
-records. Then an upkeep slice with the `Upkeep: structure` trailer removes the
-map's window note, records what is left, and closes these records.
-
-## Structure window
-
-These files stay with this refactor until the close-out (slice 9) ends,
-because its Mac check may need a fix slice. Other sessions do not edit them
-before then; a shell feature waits.
-
-- `flutter/lib/main.dart` and the shell modules: `address_bar.dart`,
-  `new_tab_page.dart`, `chat_dock.dart`, `area_capture.dart`,
-  `workspace_menu.dart`, `page_stack.dart`, `chat_panel.dart`.
-- `flutter/test/support/`.
-- The shell test files: `address_bar_test.dart`, `new_tab_page_test.dart`,
-  `page_stack_test.dart`, `chat_dock_test.dart`, `chat_panel_test.dart`,
-  `chat_input_test.dart`, `area_capture_test.dart`,
-  `workspace_menu_test.dart`, `shell_actions_test.dart`, `shell_test.dart`.
-
-## Pause points
-
-Stop and check with the user after slice 1b merges, after the pilot (the user
-looks at its diff and the playbook), and after two failed slices in a row,
-which means a prerequisite is missing and goes back to the planner.
-
-## Project limits
-
-- Behavior identical: after 1b, a slice edits tests only in import lines;
-  the user's fix slice 1c is the one exception. A bug found is noted in the
-  hand-back and moved as it is.
-- No Mac run in a slice unless WSL cannot prove it; then one run, said first.
-- Recorded sizes only go down. Workers use worktrees named for the slice,
-  reset to local `main`, and never merge, push or deploy.
-- Client code only: no backend deploy is needed.
-
-## Not now
+Not now:
 
 - `Workspace.showError(Object)` and screen facts set on the workspace by one
   setter: for the workspace.dart refactor.
@@ -172,10 +120,3 @@ which means a prerequisite is missing and goes back to the planner.
   `workspace_menu_test.dart`'s `_RestartingUpdates`.
 - Let `TabMemory` notify when switched, so `WorkspaceMenu` can be stateless.
 - An `actions.item(...)` method in place of the free `actionItem` function.
-
-## Next
-
-Slice 8 is done: the chat panel moved into `chat_panel.dart` and `main.dart`
-has 551 lines; its `tools/structure.json` entry and Known debt row are gone.
-The close-out, slice 9, is next. It starts with the Mac check, which needs
-the user's OK first.
