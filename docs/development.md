@@ -129,9 +129,16 @@ systemd-run --user --scope -p MemoryMax=6G -p MemorySwapMax=0 flutter test
 ```
 
 On WSL, run every `flutter test`, whole suite or one file, under that memory
-cap. A test that never settles keeps pumping frames, and Flutter keeps each
-unmounted `TextField`'s subtree, so one test process can grow by gigabytes
-and restart WSL. The cap stops only the test run. A healthy full run, 8 test
+cap. Each new `TextField` asks the engine for its text actions, and under
+the test clock the answer arrives only when the test yields to the real event
+loop (`runAsync`, or the end of the test). Until then the test keeps every
+`TextField` it built, with its whole subtree, so a test that never settles
+and keeps rebuilding one can grow by gigabytes and restart WSL. It is a test
+effect: in a test that answers the call (a mock handler on
+`SystemChannels.processText`), opening and closing New Tab, chat or the
+address bar 30 times keeps at most the field in use and the last focused one.
+The running app gets the answer from its event loop; it was not measured
+there. The cap stops only the test run. A healthy full run, 8 test
 files at a time, peaks at about 4.6 GB; when the suite outgrows the cap,
 measure the peak again and raise the cap.
 
