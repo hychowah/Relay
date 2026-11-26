@@ -149,6 +149,7 @@ export class Harness {
           options: {
             callbackUrl,
             callbackToken: token,
+            imageInput: supportsImageInput(this.options.mode),
           },
         },
       ],

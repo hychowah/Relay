@@ -40,9 +40,15 @@ export interface Operation {
   inputSchema: Record<string, unknown>; // JSON Schema; the app owns argument semantics.
 }
 
+export interface OperationImage {
+  mimeType: "image/png";
+  base64: string;
+}
+
 export interface OperationResult {
   data: unknown;
   sources?: Source[];
+  image?: OperationImage;
 }
 
 export interface OperationProgress {

@@ -8,9 +8,10 @@ import { liveProviders } from "../shared/provider.ts";
 import { startProviderGateway } from "../server/provider-gateway.ts";
 import { Harness } from "../server/harness.ts";
 
-test("Claude's native Messages adapter completes a Relay tool round trip without DeepSeek options", {timeout:30_000}, async () => {
+test("Claude's native Messages adapter receives a Relay tool image without DeepSeek options", {timeout:30_000}, async () => {
   await mkdir(resolve("tmp"),{recursive:true});
   const dir=await mkdtemp(resolve("tmp/claude-wire-"));
+  const png = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKklEQVR4nO3NMQ0AAAgDsPn/cILEqeAgadK/meypCAQCgUAgEAgEgi9BAZhHBEy8PGiYAAAAAElFTkSuQmCC";
   const requests: any[]=[];
   const calls: string[]=[];
   const server=createServer(async (req,res) => {
@@ -18,13 +19,13 @@ test("Claude's native Messages adapter completes a Relay tool round trip without
     for await (const chunk of req) raw+=chunk;
     const body=JSON.parse(raw);
     requests.push({path:req.url,key:req.headers["x-api-key"],body});
-    const tool=body.tools.find((item: any)=>item.name.endsWith("app_discover"));
+    const tool=body.tools.find((item: any)=>item.name.endsWith("app_call"));
     const first=!body.messages.some((message: any)=>Array.isArray(message.content) && message.content.some((item: any)=>item.type==="tool_result"));
     res.writeHead(200,{"Content-Type":"text/event-stream"});
     const event=(type:string,value:object) => res.write(`event: ${type}\ndata: ${JSON.stringify({type,...value})}\n\n`);
     event("message_start",{message:{id:`msg_${requests.length}`,type:"message",role:"assistant",model:body.model,content:[],stop_reason:null,stop_sequence:null,usage:{input_tokens:20,output_tokens:0}}});
     event("content_block_start",{index:0,content_block:first?{type:"tool_use",id:"tool_discover",name:tool.name,input:{}}:{type:"text",text:""}});
-    event("content_block_delta",{index:0,delta:first?{type:"input_json_delta",partial_json:'{"appId":"research"}'}:{type:"text_delta",text:"Claude tool round trip completed."}});
+    event("content_block_delta",{index:0,delta:first?{type:"input_json_delta",partial_json:'{"appId":"research","operation":"sample.frame","arguments":{}}'}:{type:"text_delta",text:"Claude tool round trip completed."}});
     event("content_block_stop",{index:0});
     event("message_delta",{delta:{stop_reason:first?"tool_use":"end_turn",stop_sequence:null},usage:{output_tokens:12}});
     event("message_stop",{});
@@ -52,22 +53,21 @@ test("Claude's native Messages adapter completes a Relay tool round trip without
       ...liveProviders.anthropic, baseURL: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`,
     }, "synthetic-claude-key");
     harness=await Harness.start({dataDir:dir,mode:"anthropic",model:"claude-sonnet-5-5", gateway: {url:gateway.url, token:gateway.token},
-      toolHandler:async (_session,name)=>{calls.push(name);return {instructions:"Synthetic Research",operations:[]};}});
+      toolHandler:async (_session,name)=>{calls.push(name);return {data:{label:"Synthetic frame"},image:{mimeType:"image/png",base64:png}};}});
     const path=join(dir,"opencode/config/opencode.json");
     const config=JSON.parse(await readFile(path,"utf8"));
     assert.equal(config.providers.anthropic.package,"@opencode/ai/providers/anthropic");
     assert.deepEqual(config.providers.anthropic.env,["ANTHROPIC_API_KEY"]);
     assert.ok(!JSON.stringify(config).includes("synthetic-claude-key"));
     assert.match(config.providers.anthropic.settings.baseURL, /^http:\/\/127\.0\.0\.1:/);
-    const png = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKklEQVR4nO3NMQ0AAAgDsPn/cILEqeAgadK/meypCAQCgUAgEAgEgi9BAZhHBEy8PGiYAAAAAElFTkSuQmCC";
-    await harness.prompt(session,"Discover Research then answer.",undefined,undefined,"max",png);
+    await harness.prompt(session,"Get the synthetic frame then answer.",undefined,undefined,"max",png);
     let state=await harness.inspect(session);
     for(let n=0;state.status==="running" && n<150;n++) {
       await new Promise(resolve=>setTimeout(resolve,50));
       state=await harness.inspect(session);
     }
     assert.equal(state.status,"idle",state.error);
-    assert.deepEqual(calls,["app_discover"]);
+    assert.deepEqual(calls,["app_call"]);
     assert.ok(JSON.stringify(requests[0].body.messages).includes("Hello from the previous provider."));
     assert.equal(requests.length,2);
     for(const request of requests) {
@@ -81,6 +81,11 @@ test("Claude's native Messages adapter completes a Relay tool round trip without
       "Every model call, including the tool continuation, passed the gateway");
     assert.ok(requests[0].body.messages.some((message: any) => Array.isArray(message.content) &&
       message.content.some((part: any) => part.type === "image" && part.source.media_type === "image/png" && part.source.data === png)));
+    const output = requests[1].body.messages.flatMap((message: any) => message.content)
+      .find((part: any) => part.type === "tool_result").content;
+    assert.ok(Array.isArray(output));
+    assert.ok(output.some((part: any) => part.type === "image" && part.source.media_type === "image/png" && part.source.data === png));
+    assert.ok(output.some((part: any) => part.type === "text" && part.text.includes("Synthetic frame") && !part.text.includes(png)));
     await writeFile(statusFile, "Status: Disconnected\n");
     await harness.prompt(session, "One more question.");
     for(let n=0;n<150;n++) {

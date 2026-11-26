@@ -6,7 +6,7 @@ export const agentTools = {
     input: Schema.Struct({ appId: Schema.String }),
   },
   app_call: {
-    description: "Call a published operation using its discovered JSON Schema. Results may include source evidence and app-owned presentation intents. Progress is recorded as reported; cancellation is cooperative.",
+    description: "Call a published operation using its discovered JSON Schema. Results may include sources, a PNG for vision-capable models, and app-owned presentation intents. Relay records reported progress and supports cooperative cancellation.",
     input: Schema.Struct({ appId: Schema.String, operation: Schema.String,
       arguments: Schema.Record(Schema.String, Schema.Unknown) }),
   },

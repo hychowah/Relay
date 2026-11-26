@@ -1,5 +1,6 @@
 import { Plugin } from "@opencode/plugin";
 import { agentTools } from "./agent-tools.ts";
+import { operationToolContent } from "./integrations/operation-image.ts";
 
 // This is trusted service code. It never evaluates model-supplied code.
 export default Plugin.define({
@@ -8,6 +9,7 @@ export default Plugin.define({
     const options = ctx.options as {
       callbackUrl: string;
       callbackToken: string;
+      imageInput: boolean;
     };
     await ctx.session.hook("title", (event) => {
       event.result = "Relay conversation";
@@ -21,6 +23,12 @@ export default Plugin.define({
         });
         if (!response.ok) throw new Error("Relay thinking settings are unavailable.");
         const { reasoningEffort } = await response.json() as { reasoningEffort: string };
+        // A session can have image results from an earlier provider.
+        if (!options.imageInput) event.messages = event.messages.map((message) => message.role === "tool"
+          ? { ...message, content: message.content.map((part) => part.result.type === "content"
+            ? { ...part, result: { ...part.result, value: part.result.value.filter((item) => item.type === "text" || !item.mime.startsWith("image/")) } }
+            : part) }
+          : message);
         if (reasoningEffort !== "default") event.options.reasoningEffort = reasoningEffort;
         else delete event.options.reasoningEffort;
       });
@@ -64,7 +72,7 @@ export default Plugin.define({
             if (!response.ok)
               throw new Error(`App tool failed (${response.status})`);
             const result = await response.json();
-            return { content: JSON.stringify(result) };
+            return { content: name === "app_call" ? operationToolContent(result, options.imageInput) : JSON.stringify(result) };
           },
         });
       }

@@ -88,7 +88,12 @@ events and exactly one terminal result or error, followed by response completion
 ```
 
 An app error uses `{type:"error",message}`. Results are
-`{data:JSON,sources?:Source[]}`; `data` belongs to the app. Returning presentation
+`{data:JSON,sources?:Source[],image?:{mimeType:"image/png",base64:string}}`.
+`data` belongs to the app. An optional inline PNG may be up to 2 MiB and
+2048 pixels per side. Relay sends it as image content to providers that accept
+images and includes its MIME type in the Relay tool record. The agent session
+can retain the attachment in its own history. Text-only providers receive the
+JSON data and a message about the attachment. Returning presentation
 intent inside data is a useful convention, not an automatic navigation trigger.
 The agent chooses meaningful steps through `app_present`. Sources use the
 revision-pinned evidence identity; apps publishing these citations also provide

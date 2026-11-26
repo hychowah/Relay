@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { HttpIntegration, AppRequestError } from "../server/integrations/http.ts";
+import { operationToolContent } from "../server/integrations/operation-image.ts";
 import { createWorkspace, type AppIntegration } from "../server/app.ts";
 import { Store } from "../server/store.ts";
 import type { OperationProgress, PresentCommand, SurfaceContext } from "../shared/types.ts";
@@ -168,6 +169,36 @@ test("v2 requires one terminal NDJSON event and distinguishes app errors from pr
     await assert.rejects(app.adapter.call("layout.inspect", {}), (error) =>
       error instanceof AppRequestError && error.kind === "app" && error.message === "Unknown room");
   } finally { await app.close(); }
+});
+
+test("operation images reach the harness and tool records retain only MIME metadata", async () => {
+  const app = await fixture();
+  const store = new Store(":memory:");
+  const workspace = createWorkspace(store, () => [{ ...manifest, protocolVersion: 2, integration: app.adapter }], provider);
+  harness(workspace);
+  const conversation = store.createConversation("Layout frame", "session");
+  try {
+    store.startRun(conversation.id, "Sample an image", "desktop", "tab");
+    const input = { appId: "rooms", operation: "layout.inspect", arguments: {} };
+    const image = { mimeType: "image/png", base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=" };
+    app.state.events = JSON.stringify({ type: "result", result: { data: { time: 2 }, image } }) + "\n";
+    const result = await workspace.toolHandler("session", "app_call", input);
+    assert.deepEqual(result, { data: { time: 2 }, image });
+    const content = operationToolContent(result, false);
+    assert.equal(typeof content, "string");
+    assert.match(String(content), /cannot view PNG attachments/);
+    assert.ok(!String(content).includes(image.base64));
+    assert.deepEqual(store.snapshot(conversation.id)!.tools[0].output, { data: { time: 2 }, image: { mimeType: "image/png" } });
+    for (const invalid of [{ ...image, mimeType: "text/html" }, { ...image, base64: image.base64.slice(0, 44) }]) {
+      app.state.events = JSON.stringify({ type: "result", result: { data: {}, image: invalid } }) + "\n";
+      await assert.rejects(app.adapter.call("layout.inspect", {}), (error) =>
+        error instanceof AppRequestError && error.kind === "protocol" && /invalid PNG/.test(error.message));
+    }
+  } finally {
+    await workspace.close();
+    store.close();
+    await app.close();
+  }
 });
 
 test("v2 abort disconnects the upstream operation without claiming remote cancellation", async () => {

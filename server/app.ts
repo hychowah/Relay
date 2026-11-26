@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { operationToolResult } from "./integrations/operation-image.ts";
 import { HTTPException } from "hono/http-exception";
 import { setTimeout as delay } from "node:timers/promises";
 import type {
@@ -385,7 +386,7 @@ export function createWorkspace(
         ...(error instanceof AppRequestError ? { kind: error.kind } : {}),
       };
     }
-    store.finishTool(tool.id, output);
+    store.finishTool(tool.id, name === "app_call" ? operationToolResult(output).output : output);
     return output;
   }
 

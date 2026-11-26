@@ -326,7 +326,10 @@ Tailscale checks for Relay and Research Web remain open prototype exits.
 
 ## Next
 
-Defer read/write effects to the first write, access scopes and versioned migrations to projects, and network policy injection to the Docker executor. Revisit server acknowledgement checks if bridge ownership changes, and new tool statuses or a run-oriented harness when lifecycles fall short.
+Verify vision-model PNG feedback on Mac. Defer read/write
+effects to the first write, access scopes and versioned migrations to
+projects, and network policy injection to the Docker executor. Revisit
+acknowledgements if bridge ownership changes and run lifecycles as needed.
 
 The [Flutter handoff](../flutter/master-plan.md#next) covers installing and reviewing Stable 0.0.21 on the Mac, with its checks for tab restore, the transcript pane and the app list refresh, and the split view. It also lists Mac checks for the capture animation, the Browser's PDF viewer, highlights and Stored data, which are in Stable since 0.0.17, published on 2026-11-23. The backend, last deployed at `92f7bc5` on 2026-11-26, connects the Browser on the Relay port, not 3251: builds older than 0.0.17, and a Windows app built before `acad2d8`, cannot read pages or transcripts. Windows checks wait until the user returns to Windows.
 

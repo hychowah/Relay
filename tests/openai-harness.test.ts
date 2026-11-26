@@ -8,9 +8,10 @@ import { liveProviders } from "../shared/provider.ts";
 import { startProviderGateway } from "../server/provider-gateway.ts";
 import { Harness } from "../server/harness.ts";
 
-test("OpenAI's native Responses adapter completes a Relay tool round trip through the gateway", {timeout:30_000}, async () => {
+test("OpenAI's native Responses adapter receives a Relay tool image through the gateway", {timeout:30_000}, async () => {
   await mkdir(resolve("tmp"),{recursive:true});
   const dir=await mkdtemp(resolve("tmp/openai-wire-"));
+  const png = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKklEQVR4nO3NMQ0AAAgDsPn/cILEqeAgadK/meypCAQCgUAgEAgEgi9BAZhHBEy8PGiYAAAAAElFTkSuQmCC";
   const requests: any[]=[];
   const calls: string[]=[];
   const server=createServer(async (req,res) => {
@@ -19,9 +20,9 @@ test("OpenAI's native Responses adapter completes a Relay tool round trip throug
     const body=JSON.parse(raw);
     requests.push({path:req.url,key:req.headers.authorization,body});
     const n=requests.length;
-    const tool=body.tools.find((item: any)=>item.name.endsWith("app_discover"));
+    const tool=body.tools.find((item: any)=>item.name.endsWith("app_call"));
     const first=!body.input.some((item: any)=>item.type==="function_call_output");
-    const args='{"appId":"research"}';
+    const args='{"appId":"research","operation":"sample.frame","arguments":{}}';
     const text="OpenAI tool round trip completed.";
     const item=first
       ? {type:"function_call",id:`fc_${n}`,call_id:`call_${n}`,name:tool.name,arguments:args,status:"completed"}
@@ -59,21 +60,20 @@ test("OpenAI's native Responses adapter completes a Relay tool round trip throug
       ...liveProviders.openai, baseURL: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`,
     }, "synthetic-openai-key");
     harness=await Harness.start({dataDir:dir,mode:"openai",model:"gpt-6.2-sol", gateway: {url:gateway.url, token:gateway.token},
-      toolHandler:async (_session,name)=>{calls.push(name);return {instructions:"Synthetic Research",operations:[]};}});
+      toolHandler:async (_session,name)=>{calls.push(name);return {data:{label:"Synthetic frame"},image:{mimeType:"image/png",base64:png}};}});
     const config=JSON.parse(await readFile(join(dir,"opencode/config/opencode.json"),"utf8"));
     assert.equal(config.providers.openai.package,"@opencode/ai/providers/openai");
     assert.deepEqual(config.providers.openai.env,["OPENAI_API_KEY"]);
     assert.equal(config.providers.openai.settings.transport,"http","The gateway does not accept WebSocket upgrades");
     assert.ok(!JSON.stringify(config).includes("synthetic-openai-key"));
-    const png = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKklEQVR4nO3NMQ0AAAgDsPn/cILEqeAgadK/meypCAQCgUAgEAgEgi9BAZhHBEy8PGiYAAAAAElFTkSuQmCC";
-    await harness.prompt(session,"Discover Research then answer.",undefined,undefined,"max",png);
+    await harness.prompt(session,"Get the synthetic frame then answer.",undefined,undefined,"max",png);
     let state=await harness.inspect(session);
     for(let n=0;state.status==="running" && n<150;n++) {
       await new Promise(resolve=>setTimeout(resolve,50));
       state=await harness.inspect(session);
     }
     assert.equal(state.status,"idle",state.error);
-    assert.deepEqual(calls,["app_discover"]);
+    assert.deepEqual(calls,["app_call"]);
     assert.ok(JSON.stringify(requests[0].body.input).includes("Hello from the previous provider."));
     assert.equal(requests.length,2);
     for(const request of requests) {
@@ -89,6 +89,10 @@ test("OpenAI's native Responses adapter completes a Relay tool round trip throug
       "Every model call, including the tool continuation, passed the gateway");
     assert.ok(requests[0].body.input.some((item: any) => Array.isArray(item.content) &&
       item.content.some((part: any) => part.type === "input_image" && String(part.image_url).endsWith(png))));
+    const output = requests[1].body.input.find((item: any) => item.type === "function_call_output").output;
+    assert.ok(Array.isArray(output));
+    assert.ok(output.some((part: any) => part.type === "input_image" && String(part.image_url).endsWith(png)));
+    assert.ok(output.some((part: any) => part.type === "input_text" && part.text.includes("Synthetic frame") && !part.text.includes(png)));
     await writeFile(statusFile, "Status: Disconnected\n");
     await harness.prompt(session, "One more question.");
     for(let n=0;n<150;n++) {

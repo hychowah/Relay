@@ -1,6 +1,7 @@
 import type { AppView, Operation, OperationProgress, OperationResult, Report, Resource, Source } from "../../shared/types.ts";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { RegisteredApp } from "../app.ts";
+import { operationImage } from "./operation-image.ts";
 
 export interface AppRegistration {
   id: string;
@@ -197,7 +198,9 @@ export class HttpIntegration {
       else if (value.type === "result" && object(value.result) && "data" in value.result) {
         const result = value.result;
         if (result.sources !== undefined && !Array.isArray(result.sources)) return protocol("The app returned invalid result sources.");
-        terminal = { data: result.data, ...(Array.isArray(result.sources) ? { sources: result.sources.map((item) => {
+        const image = operationImage(result.image);
+        if (result.image !== undefined && !image) return protocol("The app returned an invalid PNG attachment.");
+        terminal = { data: result.data, ...(image ? { image } : {}), ...(Array.isArray(result.sources) ? { sources: result.sources.map((item) => {
           const source = this.source(item as Source);
           if (typeof source.revision !== "string" || !source.revision) return protocol("The app returned invalid source revision.");
           return source;
