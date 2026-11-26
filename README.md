@@ -2,16 +2,14 @@
 
 **An AI agent that works inside your own apps.** Your apps open as tabs, with
 one conversation beside them. Ask a question and the agent reads the apps you
-connected, answers with sources, and shows the answer on the app's own screen,
-for example by opening the right report section or playing a robot motion.
+connected, answers with sources, and shows the answer on the app's own screen.
 
 ![Relay's start page: the connected apps on the left, the conversation on the right](docs/images/workspace.png)
 
 ## What it does
 
 - **One conversation across your apps.** The chat stays open while you switch
-  tabs, so you can compare a research page, a stock report and a web page in
-  one thread.
+  tabs, so one thread can compare what several apps show.
 - **Answers with sources.** The agent cites the app record or page each answer
   came from, and can open that part of the app for you.
 - **Any app can join.** An app joins through a [small HTTP protocol](docs/integration.md)
@@ -25,22 +23,7 @@ for example by opening the right report section or playing a robot motion.
 - **A workspace that remembers.** Tabs, split views and the conversation come
   back after a restart, and other devices can open your tabs.
 
-## Apps connected so far
-
-Each app below lives in its own project and joins Relay by address alone.
-
-| App | What the agent can do with it |
-| --- | --- |
-| **Browser** (built in) | Open websites, read pages, PDFs and video transcripts, and fill in forms without submitting them. |
-| **Files** (built in) | Read and search the folders you share. |
-| **Research Web** | Search a bilingual library of humanoid robot products, papers, patents and articles, and compare products without inventing missing values. |
-| **Analysis Web** | Find saved stock research reports by ticker, quote a section, and open that section on screen. |
-| **Backtest Web** | Find completed trading backtests and read their settings and returns. |
-| **Coding sessions** | Write a request for a Claude Code or Codex session in one of your repositories. You read it, edit it, and press Start yourself. |
-| **Robot viewer** | Read and fix URDF and xacro robot files, find problems such as missing meshes or bad joint limits, play a motion, and look at a screenshot of the result. Earlier versions of each file are kept, so a change can be undone. |
-| **Room layout** | A small sample app in [`examples/room-layout`](examples/room-layout/README.md) that shows the whole protocol. |
-
-![Coding sessions and Robot viewer side by side in a split tab](docs/images/split-view.png)
+![Two apps side by side in a split tab](docs/images/split-view.png)
 
 ## How it works
 
@@ -57,7 +40,7 @@ Each app below lives in its own project and joins Relay by address alone.
 1. Each app serves a short **manifest**: its name, what it is for, and how to
    use it.
 2. When a question needs an app, the agent asks it for its **operations**
-   (such as `research.search` or `robot.inspect`) and calls them. Other apps'
+   (such as `layout.inspect` in the sample app) and calls them. Other apps'
    details stay out of the model's context.
 3. An operation can return a **view** for the app to show, such as a section
    to highlight. The app draws it on its own screen inside Relay.
@@ -74,7 +57,7 @@ Each app below lives in its own project and joins Relay by address alone.
 - **Keys and records stay on your machine.** Conversations, memory and
   provider keys live only in the Relay service, never in the clients or apps.
 - **The user takes the last step.** The agent fills in a form but never
-  submits it, and writes a coding request but never starts it.
+  submits it; you check it and press Submit yourself.
 - **Apps are kept apart.** Each app runs on its own origin, in a sandboxed
   frame unless you mark it as trusted, and the agent sees only what its
   operations return. Browsing history and highlights are never given to the
