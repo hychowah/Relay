@@ -84,7 +84,7 @@ the window has its own module:
 |---|---|
 | `address_bar.dart` | `BrowserBar` and `AddressInput`: fill-in, suggestions, Go |
 | `new_tab_page.dart` | `NewTabPage`: app search, other devices' tabs |
-| `page_stack.dart` | `PageStack`: every tab's page, split panes, dividers, drop zones |
+| `page_stack.dart` | `PageStack`: every tab's page, split panes with their title rows and buttons, dividers, drop zones |
 | `chat_dock.dart` | `ChatDock` and `ChatLayout`: dock, phone sheet, width |
 | `chat_panel.dart` | `ChatPanel` and `ChatInput`: header, transcript, composer |
 | `area_capture.dart` | `AreaCapture`: area picking and its attachment |

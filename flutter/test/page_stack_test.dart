@@ -471,10 +471,12 @@ void main() {
   });
 
   testWidgets('a dragged tab highlights the half of a pane it would take, '
-      'and nothing over its own page', (tester) async {
+      'or the whole pane from its middle, and nothing over its own page', (
+    tester,
+  ) async {
     final f = Fixture();
     await f.w.start();
-    await f.w.openApp(f.w.apps[1]);
+    final room = await f.w.openApp(f.w.apps[1]);
     final browser = await f.w.openApp(f.w.apps[0]);
     tester.view.physicalSize = const Size(1400, 800);
     tester.view.devicePixelRatio = 1;
@@ -529,8 +531,114 @@ void main() {
         pane.height / 2,
       ),
     );
+    // From the middle, the tab takes the page's place instead of splitting.
+    await drag.moveTo(pane.center);
+    await tester.pump();
+    expect(tester.getRect(find.byKey(const ValueKey('drop-centre'))), pane);
+    expect(find.text('Show here'), findsOneWidget);
     await drag.up();
     await tester.pumpAndSettle();
+    expect((f.w.shownSplit, f.w.active), (null, room));
+
+    // In a split, a tab that has a pane trades places with the one it lands on.
+    f.w.dropInSplit(browser, room, SplitSide.right);
+    await tester.pumpAndSettle();
+    final swap = await tester.startGesture(
+      tester.getCenter(chip('Browser')),
+      kind: PointerDeviceKind.mouse,
+    );
+    await swap.moveBy(const Offset(0, 40));
+    await swap.moveTo(
+      tester.getCenter(find.byKey(ValueKey('page-${room.id}'))),
+    );
+    await tester.pump();
+    expect(find.text('Swap panes'), findsOneWidget);
+    await swap.up();
+    await tester.pumpAndSettle();
+    expect(f.w.shownSplit!.layout.tabs, [browser, room]);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets("a pane's buttons show another open tab or a chosen app in it, "
+      'and take it out of the split, keeping its tab open', (tester) async {
+    final f = Fixture();
+    await f.w.start();
+    final research = await f.w.openApp(f.w.apps[2]);
+    final room = await f.w.openApp(f.w.apps[1]);
+    final browser = await f.w.openApp(f.w.apps[0]);
+    final second = await f.w.openApp(f.w.apps[0]);
+    f.w.dropInSplit(room, browser, SplitSide.left);
+    f.w.dropInSplit(second, browser, SplitSide.bottom);
+    f.w.select(browser);
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(RelayApp(workspace: f.w, saveDraft: (_) async {}));
+    await tester.pumpAndSettle();
+    final split = f.w.shownSplit!;
+    Finder button(WorkspaceTab pane, String tooltip) => find.descendant(
+      of: find.byKey(ValueKey('pane-buttons-${pane.id}')),
+      matching: find.byTooltip(tooltip),
+    );
+    Future<void> press(WorkspaceTab pane, String tooltip) async {
+      await tester.tap(button(pane, tooltip));
+      await tester.pumpAndSettle();
+    }
+
+    // One click works on a pane that is not selected.
+    final top = tester.getRect(find.byKey(ValueKey('page-${browser.id}')));
+    await press(second, 'Remove from split view');
+    expect(split.layout.tabs, [room, browser]);
+    expect(f.w.tabs, contains(second));
+    expect(
+      tester.getRect(find.byKey(ValueKey('page-${browser.id}'))).height,
+      greaterThan(top.height),
+    );
+
+    // The menu lists the open tabs outside the split.
+    await press(room, 'Show another tab here');
+    final menu = find.byType(MenuItemButton);
+    expect(
+      tester
+          .widgetList<Text>(
+            find.descendant(of: menu, matching: find.byType(Text)),
+          )
+          .map((text) => text.data),
+      ['Research', 'Browser', 'Choose an app…'],
+    );
+    await tester.tap(
+      find.descendant(of: menu, matching: find.text('Research')),
+    );
+    await tester.pumpAndSettle();
+    expect(split.layout.tabs, [research, browser]);
+    expect(f.w.active, research);
+    expect(f.w.tabs, contains(room));
+    expect(f.stored.last['tabs'][4]['split']['panes'], [0, 2]);
+
+    // Choose an app… shows the app picker in the pane.
+    await press(research, 'Show another tab here');
+    await tester.tap(find.text('Choose an app…'));
+    await tester.pumpAndSettle();
+    final blank = f.w.active!;
+    expect(split.layout.tabs, [blank, browser]);
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(ValueKey('new-${blank.id}')),
+        matching: find.text('Room layout'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(split.layout.tabs, [room, browser]);
+
+    // A new tab taken out holds nothing, so it closes; a split left with one
+    // pane ends, and every other tab stays open.
+    await press(room, 'Show another tab here');
+    await tester.tap(find.text('Choose an app…'));
+    await tester.pumpAndSettle();
+    await press(f.w.active!, 'Remove from split view');
+    expect(f.w.shownSplit, isNull);
+    expect(f.w.tabs, [research, room, browser, second]);
     await tester.pumpWidget(const SizedBox());
   });
 

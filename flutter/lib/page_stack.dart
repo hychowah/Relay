@@ -10,6 +10,7 @@ import 'relay_records.dart';
 import 'split_layout.dart';
 import 'window_capture.dart';
 import 'workspace.dart';
+import 'workspace_style.dart';
 
 /// Every tab's page in one keyed slot of one stack, so showing it alone, in a
 /// split pane or hidden only moves it and never recreates its native view.
@@ -51,8 +52,9 @@ class _PageStackState extends State<PageStack> {
   ColorScheme get colors => Theme.of(context).colorScheme;
   Workspace get w => widget.workspace;
 
-  /// The pane a tab is being dragged over and the side it would take.
-  (WorkspaceTab, SplitSide)? dropping;
+  /// The pane a tab is being dragged over and the side it would take; no
+  /// side when it would take the pane itself.
+  (WorkspaceTab, SplitSide?)? dropping;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -79,15 +81,29 @@ class _PageStackState extends State<PageStack> {
 
     final frame = split == null ? 0.0 : 2.0;
     // A Browser tab's bar sits at the top of its own pane, so selecting
-    // another pane never moves a page. A page in fullscreen fills its pane.
+    // another pane never moves a page. In a split, each pane's title row, with
+    // the pane's buttons, sits above that. A page in fullscreen fills its pane.
+    bool full(WorkspaceTab tab) => tab.page?.browser?.fullScreen == true;
+    double title(WorkspaceTab tab) =>
+        split == null || full(tab) ? 0 : _PaneTitle.height;
     double bar(WorkspaceTab tab) =>
-        tab.isBrowser && tab.page?.browser?.fullScreen != true
-        ? BrowserBar.height
-        : 0;
+        tab.isBrowser && !full(tab) ? BrowserBar.height : 0;
+    double head(WorkspaceTab tab) => title(tab) + bar(tab);
+    // A row of the pane's head, [top] pixels inside its frame.
+    Rect row(WorkspaceTab tab, double top, double height) {
+      final rect = rects[tab]!;
+      return Rect.fromLTWH(
+        rect.left + frame,
+        rect.top + frame + top,
+        rect.width - 2 * frame,
+        height,
+      );
+    }
+
     // What shows in place of the page, such as its error, starts below it.
     Widget below(WorkspaceTab tab, Widget child, {Key? key}) {
       final rect = rects[tab] ?? area;
-      final top = bar(tab) == 0 ? 0.0 : frame + bar(tab);
+      final top = head(tab) == 0 ? 0.0 : frame + head(tab);
       return Positioned.fromRect(
         key: key,
         rect: Rect.fromLTRB(rect.left, rect.top + top, rect.right, rect.bottom),
@@ -100,7 +116,7 @@ class _PageStackState extends State<PageStack> {
       target,
       Builder(
         builder: (zone) {
-          SplitSide side(Offset global) {
+          SplitSide? side(Offset global) {
             final box = zone.findRenderObject()! as RenderBox;
             return SplitSide.nearest(box.globalToLocal(global), box.size);
           }
@@ -128,6 +144,24 @@ class _PageStackState extends State<PageStack> {
                 return const SizedBox.expand();
               }
               final at = hover.$2;
+              final highlight = BoxDecoration(
+                color: colors.primary.withValues(alpha: .12),
+                border: Border.all(color: colors.primary, width: 2),
+              );
+              if (at == null) {
+                // A tab that has a pane already trades places with this one.
+                final swap = w.shownSplit?.layout.contains(candidates.first);
+                return DecoratedBox(
+                  key: const ValueKey('drop-centre'),
+                  decoration: highlight,
+                  child: Center(
+                    child: Chip(
+                      avatar: const Icon(Icons.swap_horiz, size: 16),
+                      label: Text(swap == true ? 'Swap panes' : 'Show here'),
+                    ),
+                  ),
+                );
+              }
               return Align(
                 alignment: switch (at) {
                   SplitSide.left => Alignment.centerLeft,
@@ -140,10 +174,7 @@ class _PageStackState extends State<PageStack> {
                   heightFactor: at.axis == Axis.vertical ? .5 : 1,
                   child: DecoratedBox(
                     key: ValueKey('drop-${at.name}'),
-                    decoration: BoxDecoration(
-                      color: colors.primary.withValues(alpha: .12),
-                      border: Border.all(color: colors.primary, width: 2),
-                    ),
+                    decoration: highlight,
                   ),
                 ),
               );
@@ -204,7 +235,7 @@ class _PageStackState extends State<PageStack> {
                       ),
                       Positioned.fill(
                         left: frame,
-                        top: frame + bar(tab),
+                        top: frame + head(tab),
                         right: frame,
                         bottom: frame,
                         child: Offstage(
@@ -238,7 +269,7 @@ class _PageStackState extends State<PageStack> {
               ),
             ),
           if (tab.appId == null)
-            pane(
+            below(
               tab,
               key: ValueKey('new-${tab.id}'),
               NewTabPage(
@@ -295,18 +326,19 @@ class _PageStackState extends State<PageStack> {
           if (bar(tab) > 0)
             Positioned.fromRect(
               key: ValueKey(w.active == tab ? 'address-bar' : 'bar-${tab.id}'),
-              rect: Rect.fromLTWH(
-                rects[tab]!.left + frame,
-                rects[tab]!.top + frame,
-                rects[tab]!.width - 2 * frame,
-                bar(tab),
-              ),
+              rect: row(tab, title(tab), bar(tab)),
               // Only the mouse is stopped by the tint, so the keyboard is
               // kept out too: these buttons act on the selected tab.
               child: ExcludeFocus(
                 excluding: w.active != tab,
                 child: BrowserBar(w, tab, widget.address),
               ),
+            ),
+          if (title(tab) > 0)
+            Positioned.fromRect(
+              key: ValueKey('title-${tab.id}'),
+              rect: row(tab, 0, title(tab)),
+              child: _PaneTitle(tab, selected: w.active == tab),
             ),
           // The other pane's tint is painted over its page on purpose: on
           // macOS a native page loses the mouse wherever Flutter paints over
@@ -325,6 +357,16 @@ class _PageStackState extends State<PageStack> {
                   color: colors.onSurface.withValues(alpha: .04),
                 ),
               ),
+            ),
+          // Above the tint, so they act on their own pane in one click.
+          if (title(tab) > 0)
+            Positioned(
+              key: ValueKey('pane-buttons-${tab.id}'),
+              top: row(tab, 0, 0).top,
+              right: area.right - row(tab, 0, 0).right,
+              width: _PaneButtons.width,
+              height: title(tab),
+              child: _PaneButtons(w, tab),
             ),
         ],
         for (final (index, (branch, area, line)) in dividers.indexed)
@@ -365,6 +407,129 @@ class _PageStackState extends State<PageStack> {
         },
         child: ColoredBox(color: colors.outline),
       ),
+    );
+  }
+}
+
+/// A split pane's title row, above its page and any Browser bar: what the
+/// pane shows, with room at its end for the pane's buttons.
+class _PaneTitle extends StatelessWidget {
+  const _PaneTitle(this.tab, {required this.selected});
+  static const height = 32.0;
+  final WorkspaceTab tab;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, right: _PaneButtons.width),
+      child: Row(
+        children: [
+          Icon(
+            tab.isBrowser
+                ? Icons.language
+                : tab.appId == null
+                ? Icons.add
+                : Icons.grid_view_rounded,
+            size: 15,
+            color: selected ? colors.primary : colors.onSurfaceVariant,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              tab.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                color: selected ? colors.onSurface : colors.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A split pane's own buttons, at the end of its title row: show another tab
+/// in the pane, or take the pane out of the split. Each acts on its own pane,
+/// selected or not.
+class _PaneButtons extends StatelessWidget {
+  const _PaneButtons(this.w, this.tab);
+  static const width = 66.0;
+  final Workspace w;
+  final WorkspaceTab tab;
+
+  // Split view is desktop only, so the buttons keep a desktop size whatever
+  // platform pads tap targets.
+  static final _style = IconButton.styleFrom(
+    minimumSize: const Size(28, 28),
+    padding: const EdgeInsets.all(5),
+    iconSize: 16,
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final inSplit = w.shownSplit?.layout.tabs ?? const [];
+    final others = [
+      for (final other in w.tabs)
+        if (other is! SplitTab &&
+            other.appId != null &&
+            !inSplit.contains(other))
+          other,
+    ];
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        MenuAnchor(
+          animated: !MediaQuery.disableAnimationsOf(context),
+          builder: (context, controller, _) => IconButton(
+            style: _style,
+            tooltip: 'Show another tab here',
+            onPressed: () =>
+                controller.isOpen ? controller.close() : controller.open(),
+            icon: const Icon(Icons.swap_horiz),
+          ),
+          menuChildren: [
+            if (others.isNotEmpty) ...[
+              const MenuLabel('OPEN TABS'),
+              for (final other in others)
+                MenuItemButton(
+                  leadingIcon: Icon(
+                    other.isBrowser ? Icons.language : Icons.grid_view_rounded,
+                    size: 16,
+                  ),
+                  onPressed: () => w.showInPane(tab, other),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 240),
+                    child: Text(
+                      other.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              const Divider(),
+            ],
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.add, size: 16),
+              onPressed: () => w.showInPane(tab),
+              child: const Text('Choose an app…'),
+            ),
+          ],
+        ),
+        const SizedBox(width: 2),
+        IconButton(
+          style: _style,
+          tooltip: 'Remove from split view',
+          onPressed: () => w.leaveSplit(tab),
+          icon: const Icon(Icons.close),
+        ),
+        const SizedBox(width: 4),
+      ],
     );
   }
 }

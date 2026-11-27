@@ -1,4 +1,3 @@
-
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -67,11 +66,12 @@ void main() {
       expect(video.fullScreen, isFalse);
       expect(menu, findsOneWidget);
 
-      // In split view the video fills only its own pane, where its bar was.
+      // In split view the video fills only its own pane, where its title row
+      // and bar were.
       f.w.dropInSplit(browser, room, SplitSide.right);
       await tester.pumpAndSettle();
       final pane = tester.getRect(view);
-      final beside = tester.getRect(find.byKey(ValueKey('page-${room.id}')));
+      final beside = tester.getRect(find.byKey(ValueKey('title-${room.id}')));
       await pageFullScreen(true);
       expect(
         tester.getRect(view),

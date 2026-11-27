@@ -238,5 +238,10 @@ real WKWebViews.
    a test folder holding a PDF in **Shared folders** and have the real provider
    search and read it; the server changes for it are live since 2026-11-26
    ([decision 0003](../prototype/phases/phase-01/decisions/0003-shared-folders-and-form-filling.md)).
+21. Each split pane's title row, with **Show another tab here** and **Remove
+   from split view**, and a tab dropped in a pane's middle taking its place
+   are covered only by widget tests. Once built on the Mac, check over real
+   pages that one click on a dimmed pane's button works, that the menu opens
+   above a web page and takes its clicks, and how the title row looks.
 
 Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).

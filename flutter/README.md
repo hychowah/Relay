@@ -80,16 +80,25 @@ the card's memory, never saved or sent, and is gone when the card closes.
 
 On desktop only, drag a tab onto a page to split it. A new split tab opens in
 the tab strip. The page's edge nearest the pointer (left, right, top or bottom)
-is where the tab goes, and the highlighted half shows it. Drop more tabs onto
-any pane to split it again, side by side or stacked; dropping a tab that is
-already in the split moves it. The split tab has an accent outline and a small
-map of its panes, with the last selected pane filled.
+is where the tab goes, and the highlighted half shows it. Dropped in the
+middle of a pane, the tab takes that pane's place instead, or trades places
+with it when it is already in the split. Drop more tabs onto any pane to split
+it again, side by side or stacked; dropping a tab that is already in the split
+on an edge moves it. The split tab has an accent outline and a small map of
+its panes, with the last selected pane filled.
+
+Each pane has a title row with two buttons, which work whether or not the
+pane is selected. **Show another tab here** lists the open tabs outside the
+split, and its **Choose an app…** opens the app picker in that pane. **Remove
+from split view** takes the pane out: its neighbour takes the space and its
+tab stays open, and a split left with one pane ends.
 
 Click a pane to select it; the selected pane is the tab the chat's page context
 and the agent's navigation use. Each Browser pane has its own address bar, so
 selecting a pane never resizes a page; a bar narrower than 480 pixels leaves
 out **Go**, the PDF zoom buttons (Enter and a pinch do the same) and the VPN
-button's label. Only the selected pane's bar takes clicks and the keyboard.
+button's label. Only the selected pane's address bar takes clicks and the
+keyboard.
 Drag a divider to resize its two sides, or double-click it to return to half
 and half; split tabs and their dividers are restored with the tabs.
 

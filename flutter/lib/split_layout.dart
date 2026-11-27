@@ -15,11 +15,14 @@ enum SplitSide {
   /// Whether the new pane comes first: left of or above the old one.
   final bool before;
 
-  /// The side whose edge is nearest to [point] in a pane of [size].
-  static SplitSide nearest(Offset point, Size size) {
+  /// The side whose edge is nearest to [point] in a pane of [size], or null
+  /// in the pane's middle, a quarter or more from every edge, where a dropped
+  /// tab takes the pane itself.
+  static SplitSide? nearest(Offset point, Size size) {
     final x = point.dx / size.width, y = point.dy / size.height;
     final distances = {left: x, right: 1 - x, top: y, bottom: 1 - y};
-    return distances.entries.reduce((a, b) => b.value < a.value ? b : a).key;
+    final near = distances.entries.reduce((a, b) => b.value < a.value ? b : a);
+    return near.value < .25 ? near.key : null;
   }
 }
 
@@ -49,6 +52,14 @@ sealed class SplitLayout {
 
   /// This layout with [old]'s pane replaced by [layout].
   SplitLayout replaced(WorkspaceTab old, SplitLayout layout);
+
+  /// This layout with [tab] in [old]'s pane; a tab that already has a pane
+  /// trades places with [old].
+  SplitLayout placed(WorkspaceTab old, WorkspaceTab tab) =>
+      _map((each) => each == old ? tab : (each == tab ? old : each));
+
+  /// This layout with each pane's tab given by [pick].
+  SplitLayout _map(WorkspaceTab Function(WorkspaceTab tab) pick);
 
   /// Divides [target]'s pane to show [tab] on its [side]. A tab that already
   /// has a pane moves there.
@@ -119,6 +130,10 @@ class SplitPane extends SplitLayout {
       old == tab ? layout : this;
 
   @override
+  SplitLayout _map(WorkspaceTab Function(WorkspaceTab) pick) =>
+      SplitPane(pick(tab));
+
+  @override
   void layOut(
     Rect area, {
     required void Function(WorkspaceTab, Rect) pane,
@@ -159,6 +174,10 @@ class SplitBranch extends SplitLayout {
           fraction,
         )
       : this;
+
+  @override
+  SplitLayout _map(WorkspaceTab Function(WorkspaceTab) pick) =>
+      SplitBranch(axis, first._map(pick), second._map(pick), fraction);
 
   // Each side keeps at least 240 pixels or a fifth of the split, whichever is
   // larger.
