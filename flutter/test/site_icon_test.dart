@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:relay_flutter/site_icon.dart';
@@ -58,6 +59,23 @@ void main() {
       ]),
     );
     expect((fetched.length, changes), (3, 1));
+  });
+
+  test('an image larger than any site icon gives none', () async {
+    final recorder = ui.PictureRecorder();
+    ui.Canvas(recorder);
+    final wide = await recorder.endRecording().toImage(2049, 64);
+    final png = await wide.toByteData(format: ui.ImageByteFormat.png);
+    final icon = SiteIcon(
+      address: () => 'https://site.test/',
+      run: (_) async {},
+      fetch: (_) async => png!.buffer.asUint8List(),
+      changed: () {},
+    );
+    await icon.reported(
+      _report('https://site.test/', ['https://site.test/huge.png']),
+    );
+    expect(icon.image, isNull);
   });
 
   test('shows no icon from another site or an earlier report', () async {

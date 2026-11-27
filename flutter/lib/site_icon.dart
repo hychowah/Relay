@@ -101,8 +101,11 @@ class SiteIcon {
   static String _site(String url) => Uri.tryParse(url)?.host ?? '';
 
   /// [bytes] as a PNG at most 64 px wide, or null when Flutter cannot
-  /// decode them (SVG, an HTML error page).
+  /// decode them (SVG, an HTML error page) or they say they are larger than
+  /// any site icon: the codec decodes at full size before it scales, so a
+  /// small file claiming 20,000 px a side would take gigabytes.
   static Future<Uint8List?> _shrink(Uint8List bytes) async {
+    const largest = 2048;
     ui.ImmutableBuffer? buffer;
     ui.ImageDescriptor? descriptor;
     ui.Codec? codec;
@@ -110,6 +113,9 @@ class SiteIcon {
     try {
       buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
       descriptor = await ui.ImageDescriptor.encoded(buffer);
+      if (descriptor.width > largest || descriptor.height > largest) {
+        return null;
+      }
       codec = await descriptor.instantiateCodec(
         targetWidth: min(descriptor.width, 64),
       );
