@@ -44,6 +44,8 @@ The service has two entry points: `server/index.ts` serves the web page, and
   `/// Desktop only.` line.
 - macOS-only native code: one Swift file per feature in
   `flutter/macos/Runner/`, reached through the `app.relay/browser` channel.
+  The window reports presses on a page on `app.relay/page-press`, which
+  `page_press.dart` hears from startup, before any page exists.
 - Windows-only code: `flutter/lib/windows_web_view.dart`, behind the
   `webview_flutter` interface.
 - `web/` is the browser fallback, maintained only (R01 in the

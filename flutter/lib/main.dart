@@ -11,6 +11,7 @@ import 'address_bar.dart';
 import 'area_capture.dart';
 import 'chat_dock.dart';
 import 'chat_panel.dart';
+import 'page_press.dart';
 import 'page_stack.dart';
 import 'browser_connection.dart';
 import 'relay_api.dart';
@@ -33,6 +34,7 @@ Future<void> main() async {
     final support = await getApplicationSupportDirectory();
     await registerWindowsWebView('${support.path}\\WebView2');
   }
+  if (Platform.isMacOS) listenForPagePresses();
   final prefs = await SharedPreferences.getInstance();
   final device = prefs.getString('device') ?? const Uuid().v4();
   await prefs.setString('device', device);

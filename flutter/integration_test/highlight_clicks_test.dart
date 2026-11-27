@@ -8,7 +8,8 @@
 // a PDF release after a tracking loop are checked by hand (see Checks on the
 // Mac in docs/development.md). It opens one arXiv PDF, so the Mac needs the
 // internet; the web page is the test's own. Highlights go to a loopback
-// stand-in for the Relay server.
+// stand-in for the Relay server. It also checks that a real click on the
+// web page or the PDF closes an open menu.
 import 'dart:convert';
 import 'dart:io';
 
@@ -17,6 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:relay_flutter/highlight_menu.dart';
+import 'package:relay_flutter/page_press.dart';
 import 'package:relay_flutter/page_surface.dart';
 import 'package:relay_flutter/relay_api.dart';
 import 'package:relay_flutter/web_page.dart';
@@ -34,6 +36,7 @@ void main() {
     // The test binding keeps the window's own mouse input from the app
     // unless told otherwise; the user's clicks are what is checked here.
     binding.shouldPropagateDevicePointerEvents = true;
+    listenForPagePresses();
     try {
       // The Relay server's highlight routes; every other call is accepted.
       final kept = <String, List<Json>>{};
@@ -82,6 +85,18 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
+            appBar: AppBar(
+              actions: [
+                MenuAnchor(
+                  builder: (_, menu, _) => IconButton(
+                    tooltip: 'Test menu',
+                    onPressed: menu.open,
+                    icon: const Icon(Icons.tune_rounded),
+                  ),
+                  menuChildren: const [MenuItemButton(child: Text('Item'))],
+                ),
+              ],
+            ),
             body: Center(
               child: SizedBox(
                 width: 900,
@@ -157,6 +172,17 @@ void main() {
         'focus: document.hasFocus(), painted: [...CSS.highlights.keys()]})',
       );
       final origin = tester.getTopLeft(find.byType(PageSlot));
+      // A click on the page reaches its native view, not Flutter; the menu
+      // still closes, as on a click anywhere else.
+      Future<void> menuClosesOn(Offset at, String where) async {
+        await click(button('Test menu'));
+        await until(() => find.text('Item').evaluate().isNotEmpty, 'no menu');
+        await click(at);
+        await until(
+          () => find.text('Item').evaluate().isEmpty,
+          'a real click on $where left the menu open',
+        );
+      }
 
       // A web page of the test's own, at a public address so it gets
       // highlights: drag over its words, then press a colour in the menu.
@@ -240,11 +266,14 @@ void main() {
         'a real click did not remove',
       );
 
+      await menuClosesOn(pageBox.bottomLeft + const Offset(40, -40), 'a page');
+
       // A PDF: a real drag over the first page's text, then the menu.
       await browser.navigate(paper);
       await until(() => browser.pdf, 'the viewer did not open', seconds: 60);
       await Future<void>.delayed(const Duration(seconds: 2));
       final size = tester.getSize(find.byType(PageSlot));
+      await menuClosesOn(origin + Offset(size.width * .5, 40), 'a PDF');
       routed.clear();
       await drag(
         origin + Offset(size.width * .2, size.height * .55),

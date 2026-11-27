@@ -238,6 +238,28 @@ class MainFlutterWindow: NSWindow {
       result(safari?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
     }
 
+    // AppKit gives a press on a page, or on the PDF viewer inside it, to the
+    // web view, never to Flutter, so Flutter's menus would stay open. Relay
+    // is told where, at Flutter's logical position, to close them there
+    // (page_press.dart). A press on Relay's own menu drawn over the page
+    // hits Flutter's view instead.
+    let pagePress = FlutterMethodChannel(
+      name: "app.relay/page-press", binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) {
+      [weak self] event in
+      guard let window = self, event.window === window, let view = window.contentView,
+            let frame = view.superview,
+            let hit = view.hitTest(frame.convert(event.locationInWindow, from: nil)),
+            sequence(first: hit, next: { $0.superview }).contains(where: { $0 is WKWebView })
+      else { return event }
+      let point = view.convert(event.locationInWindow, from: nil)
+      pagePress.invokeMethod("pressed", arguments: [
+        "x": point.x, "y": view.isFlipped ? point.y : view.bounds.height - point.y,
+      ])
+      return event
+    }
+
     // Leaving macOS fullscreen by hand also ends the page's fullscreen.
     NotificationCenter.default.addObserver(
       forName: NSWindow.didExitFullScreenNotification, object: self, queue: .main
