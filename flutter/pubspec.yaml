@@ -2,7 +2,7 @@ name: relay_flutter
 description: "Relay macOS, Windows and Android client experiment."
 publish_to: 'none'
 
-version: 0.0.21+21
+version: 0.0.22+22
 
 environment:
   sdk: ^3.14.0
