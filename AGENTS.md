@@ -32,9 +32,10 @@ status, assumptions, and the next step. Update its Next section at handoff.
 - Run focused checks appropriate to the change. Record actual evidence and
   unverified behavior. Do not report a phase complete with required evidence
   missing.
-- On WSL, run `flutter test` only under the memory cap in the
+- On WSL, run `flutter test` only under the memory and CPU caps in the
   [development guide](docs/development.md#toolchain-and-checks): a test that
-  never settles otherwise fills WSL's memory and restarts it.
+  never settles, or a run that crowds the other services, otherwise stalls or
+  restarts WSL.
 - When a unit of work is complete and checked, commit it on your own branch
   with the `smart-commit` skill; do not wait to be asked. The skill audits the
   change and holds the commit when something needs the user's decision.

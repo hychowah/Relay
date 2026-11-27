@@ -125,11 +125,16 @@ a Mac, leave out the `systemd-run` prefix):
 ```sh
 flutter pub get
 flutter analyze
-systemd-run --user --scope -p MemoryMax=6G -p MemorySwapMax=0 flutter test
+systemd-run --user --scope -p MemoryMax=2G -p MemorySwapMax=0 \
+  -p CPUQuota=200% -p CPUWeight=20 flutter test --concurrency=1
 ```
 
-On WSL, run every `flutter test`, whole suite or one file, under that memory
-cap. Each new `TextField` asks the engine for its text actions, and under
+On WSL, run every `flutter test`, whole suite or one file, under those memory
+and CPU caps; no test run may stall WSL. The run's caps count inside any cap
+on the systemd slice it starts in, so a run also needs 2 GB free there; a run
+that meets a nearly full slice stalls everything in it.
+
+Each new `TextField` asks the engine for its text actions, and under
 the test clock the answer arrives only when the test yields to the real event
 loop (`runAsync`, or the end of the test). Until then the test keeps every
 `TextField` it built, with its whole subtree, so a test that never settles
@@ -138,9 +143,8 @@ effect: in a test that answers the call (a mock handler on
 `SystemChannels.processText`), opening and closing New Tab, chat or the
 address bar 30 times keeps at most the field in use and the last focused one.
 The running app gets the answer from its event loop; it was not measured
-there. The cap stops only the test run. A healthy full run, 8 test
-files at a time, peaks at about 4.6 GB; when the suite outgrows the cap,
-measure the peak again and raise the cap.
+there. The cap stops only the test run; when the suite outgrows it, measure
+the peak again before raising it.
 
 The official WebView plugin does not support Linux, so WSL tests use fake page
 surfaces and separately exercise the real HTML app bridge. A Mac build needs
