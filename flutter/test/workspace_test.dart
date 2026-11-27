@@ -659,7 +659,8 @@ void main() {
     final listening = await f.w.openApp(f.w.apps[0]);
     (listening.page as FakePage).sound = true;
     final room = await f.w.openApp(f.w.apps[1]);
-    final first = reading.page as FakePage;
+    final icon = Uint8List(1);
+    final first = reading.page as FakePage..icon = icon;
 
     await tester.pump(const Duration(minutes: 29));
     expect(reading.page, same(first));
@@ -668,8 +669,10 @@ void main() {
     expect(reading.unloaded, (
       url: 'https://example.com/desk',
       title: 'Browser',
+      icon: icon,
     ));
     expect(reading.title, 'Browser');
+    expect(reading.icon, same(icon));
     expect(listening.page, isNotNull, reason: 'It plays sound.');
     expect(room.page, isNotNull, reason: 'App tabs stay loaded.');
     expect(f.w.session()['tabs'][0]['url'], 'https://example.com/desk');

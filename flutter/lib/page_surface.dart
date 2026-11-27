@@ -130,6 +130,10 @@ mixin BrowserSurface {
   Future<Json> fillForm(String token, List<Object?> fields) async =>
       throw StateError('This Browser cannot fill forms.');
 
+  /// The site's own icon as a small PNG, for the tab's listings; null while
+  /// none has loaded for the site shown.
+  Uint8List? get icon => null;
+
   /// A [restoring] load reopens a saved tab; its page is not a new visit.
   Future<void> navigate(String text, {bool restoring = false});
   bool get canGoBack => false;

@@ -8,6 +8,7 @@ import 'new_tab_page.dart';
 import 'region_capture.dart';
 import 'relay_records.dart';
 import 'split_layout.dart';
+import 'tab_icon.dart';
 import 'window_capture.dart';
 import 'workspace.dart';
 import 'workspace_style.dart';
@@ -426,15 +427,7 @@ class _PaneTitle extends StatelessWidget {
       padding: const EdgeInsets.only(left: 12, right: _PaneButtons.width),
       child: Row(
         children: [
-          Icon(
-            tab.isBrowser
-                ? Icons.language
-                : tab.appId == null
-                ? Icons.add
-                : Icons.grid_view_rounded,
-            size: 15,
-            color: selected ? colors.primary : colors.onSurfaceVariant,
-          ),
+          TabIcon(tab, size: 15, selected: selected),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -498,10 +491,7 @@ class _PaneButtons extends StatelessWidget {
               const MenuLabel('OPEN TABS'),
               for (final other in others)
                 MenuItemButton(
-                  leadingIcon: Icon(
-                    other.isBrowser ? Icons.language : Icons.grid_view_rounded,
-                    size: 16,
-                  ),
+                  leadingIcon: TabIcon(other, size: 16),
                   onPressed: () => w.showInPane(tab, other),
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 240),

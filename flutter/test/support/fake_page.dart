@@ -16,6 +16,8 @@ class FakePage extends PageSurface with BrowserSurface {
   Completer<Json>? pending;
   Completer<void>? loading;
   Uint8List? frame;
+  @override
+  Uint8List? icon;
   final navigated = <String>[];
   @override
   Widget get widget => SizedBox.expand(

@@ -30,8 +30,8 @@ class WorkspaceTab {
   bool vpn;
 
   /// Desktop only. A Browser tab unloaded to free its memory keeps its page's
-  /// address and title here until a reload has loaded the page again.
-  ({String url, String title})? unloaded;
+  /// address, title and icon here until a reload has loaded the page again.
+  ({String url, String title, Uint8List? icon})? unloaded;
 
   /// The reload of an unloaded tab under way.
   Future<void>? reloading;
@@ -39,6 +39,7 @@ class WorkspaceTab {
   /// How long the tab has been off screen, as the unload check counts it.
   Duration hidden = Duration.zero;
   String get title => unloaded?.title ?? page?.title ?? name;
+  Uint8List? get icon => unloaded?.icon ?? page?.browser?.icon;
 
   /// Where the tab is: the address an unloaded tab keeps, else its page's.
   String? get address => unloaded?.url ?? page?.url;
@@ -355,7 +356,7 @@ class Workspace extends ChangeNotifier {
         tab.hidden = playing ? Duration.zero : tab.hidden + step;
         if (!_shouldUnload(tab)) continue;
         recorder.action('unload tab', {'tab': tab.title});
-        tab.unloaded = (url: page.url, title: page.title);
+        tab.unloaded = (url: page.url, title: page.title, icon: tab.icon);
         tab.page = null;
         page.dispose();
         changed();

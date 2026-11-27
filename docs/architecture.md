@@ -13,7 +13,7 @@ adds, moves or removes an area.
 | App bridge | `public/` | `app-bridge.js`, which apps load, and the Flutter host page | nothing |
 | Flutter client | `flutter/lib/` | The main client: tabs, chat, page surfaces, settings | its own files |
 | Page scripts | `flutter/assets/` | JavaScript run inside web pages (`page_*.js`), the update script | nothing |
-| Mac runner | `flutter/macos/Runner/` | macOS-only Swift: PDF viewer, popup windows, the window | Flutter |
+| Mac runner | `flutter/macos/Runner/` | macOS-only Swift: PDF viewer, popup windows, site icon fetches, the window | Flutter |
 | Windows runner | `flutter/windows/runner/` | Flutter's template runner | Flutter |
 | Android runner | `flutter/android/app/src/` | Flutter's template host; no Relay code yet (the Android client comes later) | Flutter |
 | Room example | `examples/` | A sample app that joins by the protocol | nothing from Relay |
@@ -63,7 +63,9 @@ The service has two entry points: `server/index.ts` serves the web page, and
 - Only `flutter/lib/windows_web_view.dart` imports `webview_all_windows`.
   Checked by "Windows web view stays in its adapter", which allows that file.
 - Not checked by a rule: the Flutter client talks to the service only over
-  HTTP and WebSocket, and apps join only by the protocol.
+  HTTP and WebSocket, and apps join only by the protocol. On the Mac every
+  fetch Relay makes for a Browser tab (its PDF, its site icon) uses the tab's
+  route, `WKWebView.tabFetches`, so a VPN tab's fetches never leave its tunnel.
 
 ## Known debt
 

@@ -14,6 +14,7 @@ import 'browser_transcript.dart';
 import 'highlight_menu.dart';
 import 'page_surface.dart';
 import 'relay_api.dart';
+import 'site_icon.dart';
 import 'tab_memory.dart';
 import 'workspace_style.dart';
 
@@ -419,6 +420,21 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   // Where the highlight menu shows, and the highlight it is for; none for
   // selected text.
   ({Rect at, String? id})? _menu;
+  late final _icon = SiteIcon(
+    address: () => _url,
+    run: controller.runJavaScript,
+    fetch: (url) => Platform.isMacOS
+        ? _browserChannel
+              .invokeMethod<Uint8List>('icon', {
+                'view': _webViewId,
+                'url': '$url',
+              })
+              .catchError((Object _) => null)
+        : fetchIconDirectly(url),
+    changed: () {
+      if (!_disposed) changed(false);
+    },
+  );
 
   @override
   Widget get widget => Stack(
@@ -551,6 +567,8 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   String get title => _title.isEmpty ? spec.name : _title;
   @override
   String get url => _url;
+  @override
+  Uint8List? get icon => _icon.image;
 
   @override
   Future<void> _load() async {
@@ -613,6 +631,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
           if (_disposed) return;
           try {
             await controller.runJavaScript(_observePage);
+            unawaited(_icon.watch());
             unawaited(_trace());
             // The page is ready without waiting for the PDF viewer or the
             // highlights. A viewer still open belonged to the page before.
@@ -678,6 +697,10 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     if (_disposed) return;
     if (message.startsWith('trace:')) {
       _noteTrace(message.substring('trace:'.length));
+      return;
+    }
+    if (message.startsWith('icons:')) {
+      unawaited(_icon.reported(message.substring('icons:'.length)));
       return;
     }
     if (message.startsWith('transcript:')) {

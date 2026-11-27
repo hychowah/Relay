@@ -483,7 +483,6 @@ class _RelayShellState extends State<RelayShell> {
                 onMove: w.moveTab,
                 onLeaveSplit: w.leaveSplit,
                 memory: memory,
-                showVpn: Platform.isMacOS,
                 hoverCard: Platform.isMacOS
                     ? (tab, shown) => TabPreview(
                         tab: tab,

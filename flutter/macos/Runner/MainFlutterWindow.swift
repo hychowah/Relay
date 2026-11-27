@@ -143,6 +143,19 @@ class MainFlutterWindow: NSWindow {
         BrowserPDF.perform(arguments, on: view, identifier: identifier.int64Value, channel: browser, result: result)
         return
       }
+      if call.method == "icon" {
+        guard let registry = flutterViewController, let arguments = call.arguments as? [String: Any],
+              let identifier = arguments["view"] as? NSNumber,
+              let address = arguments["url"] as? String, let url = URL(string: address),
+              let view = FWFWebViewFlutterWKWebViewExternalAPI.webView(
+                forIdentifier: identifier.int64Value, withPluginRegistry: registry
+              ) else {
+          result(nil)
+          return
+        }
+        BrowserIcon.fetch(url, for: view, result: result)
+        return
+      }
       // A preview is a small picture for the tab's hover card, kept only in
       // Flutter's memory while the card shows. A PDF in Relay's viewer gives
       // none, rather than a full-size picture encoded on every hover.
@@ -346,5 +359,16 @@ class MainFlutterWindow: NSWindow {
       window.close()
     }
     super.close()
+  }
+}
+
+extension WKWebView {
+  /// The session settings for every fetch Relay makes for a tab, such as its
+  /// PDF or site icon: they carry the tab's proxy (see "vpnProxy" above), so a
+  /// VPN tab's fetches never leave its tunnel. Ephemeral, with no cookies.
+  var tabFetches: URLSessionConfiguration {
+    let fetches = URLSessionConfiguration.ephemeral
+    fetches.proxyConfigurations = configuration.websiteDataStore.proxyConfigurations
+    return fetches
   }
 }

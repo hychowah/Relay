@@ -55,6 +55,11 @@ sound; on Windows only the page's own audio and video elements are seen. The
 agent's first read of an unloaded tab waits for the page, so a slow page can
 run past the read's time limit; reading again works.
 
+A Browser tab shows the website's own icon once the page has loaded, in the
+strip, in a split pane's title and in **Show another tab here**; until then,
+and for a site whose icon Relay cannot draw (such as one that has only an SVG
+icon), it shows the globe. An unloaded tab keeps its icon.
+
 Tabs share the strip like a browser's: they narrow as more open, and once
 they reach their narrowest the strip scrolls. A narrow tab shows its close
 button only while selected. On desktop, drag a tab along the strip to move
@@ -147,9 +152,9 @@ inside a popup window is not shown.
 On macOS only, **VPN** beside Reload sends a Browser tab's pages, its popups
 and the PDFs it shows out of WSL through NordVPN, by way of the Relay backend.
 New tabs start with it off; the setting is saved with the tab. While on, the
-switch is a filled "VPN" button and the tab's chip shows a lock in place of the
-globe. Switching reopens the tab's address in a new web view, without its back
-history. Nothing falls back to the Mac's network: if the route fails, for
+switch is a filled "VPN" button and the tab's icon carries a small lock. The
+site icon comes through the VPN too. Switching reopens the tab's address in a
+new web view, without its back history. Nothing falls back to the Mac's network: if the route fails, for
 example while NordVPN in WSL is off, the page does not load and says so, and a
 VPN tab that could not be set up loads nothing. If NordVPN drops while VPN
 tabs are open, the backend closes their connections within about 2 seconds

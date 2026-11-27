@@ -49,4 +49,5 @@ flutter:
     - assets/page_forms.js
     - assets/page_fullscreen.js
     - assets/page_highlights.js
+    - assets/page_icons.js
     - assets/page_trace.js

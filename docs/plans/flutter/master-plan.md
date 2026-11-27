@@ -250,5 +250,11 @@ real WKWebViews.
    drag a tab along the strip and check that it follows, the others make
    room and the order survives a restart; open enough tabs to check that
    narrow chips read well and the strip scrolls.
+23. Site icons in Browser tabs have passed only widget, Chromium and WSL tests
+   (17 of 18 common sites gave a drawable icon). On the Mac, check icons in the
+   strip, a pane's title and **Show another tab here**, the globe for a site
+   without one, an unloaded tab keeping its icon, and a VPN tab's lock and
+   icon arriving through the VPN, also for a plain-http icon (unverified that
+   URLSession tunnels http through the CONNECT proxy).
 
 Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).
