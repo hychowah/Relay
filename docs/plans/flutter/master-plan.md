@@ -124,27 +124,29 @@ is created, before it is shown; the user's restart check of 2026-11-26 is
 below.
 
 Stable 0.0.17 and 0.0.18 were published from `main` on 2026-11-23, 0.0.19 and
-0.0.20 on 2026-11-24 and 0.0.21 on 2026-11-26; the commit history has what
-each adds. 0.0.21 (`2040f8c`) holds the [shell
-refactor](../shell-refactor/master-plan.md): nothing new to see, except that
-an unloaded Browser tab shows its address. Analysis, 168 Flutter tests, 143
-backend tests and the type check passed on its commit. The user asked for it
-("release. a stable version") after a hand check of test build
-`shell-closeout` (`545dad6`); of the client code merged after that build,
-`981387c`, only WSL tests ran. No test build is listed now. The backend and
-the web page service run `92f7bc5` since 2026-11-26. Each now answers only
-requests that name its own address (`FLUTTER_RELAY_ORIGIN`, `RELAY_ORIGIN`),
-and the host page frames only app pages. The backend also has the Files
-hardening, the agent's form instructions, and the closing of VPN-tab
+0.0.20 on 2026-11-24, 0.0.21 on 2026-11-26 and 0.0.22 on 2026-11-27; the
+commit history has what each adds. 0.0.22 (`1fcc1d9`) adds tabs that narrow to
+share the strip and can be dragged to reorder, and each split pane's title row
+with its buttons and the drop on a pane's middle. Analysis, 171 Flutter tests,
+146 backend tests and the type check passed on its commit. The user asked for
+it ("release stable"); nothing new in it has run on the Mac; Next lists both
+checks. 0.0.21 (`2040f8c`) held the [shell
+refactor](../shell-refactor/master-plan.md) and an unloaded Browser tab's
+address; the user's Mac checks of it are below. No test build is listed now.
+The backend runs `92f7bc5` since 2026-11-26; the image-results change on
+`main` (`631b701`) is not deployed there. The web page service starts from the
+main checkout at each WSL restart and runs `7769cf8` since 2026-11-27. Each
+answers only requests that name its own address (`FLUTTER_RELAY_ORIGIN`,
+`RELAY_ORIGIN`), and the host page frames only app pages. The backend also has
+the Files hardening, the agent's form instructions, and the closing of VPN-tab
 connections when NordVPN drops (a real drop is untested). Checked with curl
 from WSL and from Windows through both tailnet forwards: 200 at each service's
 own addresses, 403 for a foreign Host. Stable 0.0.21 on the Mac has since run
-against it. Of
-earlier builds the user said 0.0.19's test build all works well, without
-testing unloading, and wrote "confirm file picker is working" (2026-11-24;
-build not recorded), read as a report that it works; which checks below they
-made is not recorded. Nothing in 0.0.20 or 0.0.21 has run through the native
-Mac workflow.
+against it. Of earlier builds the user said 0.0.19's test build all works
+well, without testing unloading, and wrote "confirm file picker is working"
+(2026-11-24; build not recorded), read as a report that it works; which checks
+below they made is not recorded. The native Mac workflow test has not been
+rerun on 0.0.20, 0.0.21 or 0.0.22.
 
 On 2026-11-26 the user reported testing Stable 0.0.21 on the Mac, with no
 problems reported: quitting and reopening with a Browser tab and two or more
@@ -170,7 +172,7 @@ real WKWebViews.
    folders beside the app and the older downloads.
 2. Republishing a test build's name leaves its earlier ZIP in the release
    folder on WSL. Remove it at publish time if that folder grows.
-3. Review Stable 0.0.21 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`. The suite's longest waits, on tab switches, are candidates for a smoothness fix. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
+3. Review Stable 0.0.22 on the Mac: the panel, tab and menu transitions and text selection. Compare any reported hitch with a fresh `npm run perf:ui`. The suite's longest waits, on tab switches, are candidates for a smoothness fix. A real Claude image reply, a Research PDF on the device and Stop during a presentation are unverified.
 4. Region capture selecting inside the active tab, and sent screenshots shown again in reopened chats, are in Stable since 0.0.9. Widget and service tests cover the crop, Escape, chat staying docked, the saved image and its Trash lifecycle; dragging over a live WKWebView and loading a saved screenshot on the Mac are unverified. The capture animation is in Stable 0.0.17: on the Mac, check that the flash and the flight to the composer run smoothly over a real page, and that the thumbnail takes over without a jump.
 5. On the Mac, check that a hidden tab's page cannot open the file chooser and
    that the chooser names the asking site.
@@ -230,7 +232,7 @@ real WKWebViews.
    check drag smoothness, then mark the 2026-11-23 report solved.
 19. Check **Updates** build times on Mac.
 20. Form filling (`browser.form`, `browser.fill`; desktop only) has passed only
-   Chromium and WSL tests. On the Mac, in Stable 0.0.21, ask
+   Chromium and WSL tests. On the Mac, in Stable 0.0.22, ask
    the real agent to fill a test form in WKWebView: the outlines show, the page
    scrolls to the first field, a React form takes the values and Relay does not
    submit. A fill aimed at a hidden tab, or made while the conversation is
@@ -240,8 +242,13 @@ real WKWebViews.
    ([decision 0003](../prototype/phases/phase-01/decisions/0003-shared-folders-and-form-filling.md)).
 21. Each split pane's title row, with **Show another tab here** and **Remove
    from split view**, and a tab dropped in a pane's middle taking its place
-   are covered only by widget tests. Once built on the Mac, check over real
+   are covered only by widget tests. In Stable 0.0.22 on the Mac, check over real
    pages that one click on a dimmed pane's button works, that the menu opens
    above a web page and takes its clicks, and how the title row looks.
+22. Tab squeezing and drag-to-reorder (Stable 0.0.22) are covered only by
+   widget tests with simulated mouse gestures. On the Mac, with a real mouse,
+   drag a tab along the strip and check that it follows, the others make
+   room and the order survives a restart; open enough tabs to check that
+   narrow chips read well and the strip scrolls.
 
 Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).
