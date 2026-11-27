@@ -622,6 +622,12 @@ void main() {
     await tester.pumpAndSettle();
     final blank = f.w.active!;
     expect(split.layout.tabs, [blank, browser]);
+    // A tab dropped in its middle trades places; the new tab keeps a pane.
+    f.w.dropInSplit(browser, blank, null);
+    expect(f.w.shownSplit, split);
+    expect(split.layout.tabs, [browser, blank]);
+    f.w.select(blank);
+    await tester.pumpAndSettle();
     await tester.tap(
       find.descendant(
         of: find.byKey(ValueKey('new-${blank.id}')),
@@ -629,7 +635,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(split.layout.tabs, [room, browser]);
+    expect(split.layout.tabs, [browser, room]);
 
     // A new tab taken out holds nothing, so it closes; a split left with one
     // pane ends, and every other tab stays open.

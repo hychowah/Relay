@@ -437,7 +437,8 @@ class Workspace extends ChangeNotifier {
 
   /// Shows [tab] in [old]'s pane of the shown split; a tab that already has a
   /// pane there trades places with [old]. Without [tab], a new tab shows there
-  /// to choose an app. [old] stays open, unless it is a new tab.
+  /// to choose an app. A new tab that leaves the split closes, as it holds
+  /// nothing; any other stays open.
   void showInPane(WorkspaceTab old, [WorkspaceTab? tab]) {
     final split = shownSplit;
     if (split == null || !split.layout.contains(old) || tab == old) return;
@@ -446,11 +447,11 @@ class Workspace extends ChangeNotifier {
     if (tab == null) tabs.add(shown);
     split.layout = split.layout.placed(old, shown) as SplitBranch;
     select(shown);
-    if (old.appId == null) closeTab(old);
+    if (old.appId == null && !split.layout.contains(old)) closeTab(old);
   }
 
   /// Takes [tab] out of the shown split; its neighbour takes the space. A new
-  /// tab, which holds nothing, closes.
+  /// tab that leaves the split closes, as it holds nothing.
   void leaveSplit(WorkspaceTab tab) {
     final split = shownSplit;
     if (split == null || !split.layout.contains(tab)) return;
