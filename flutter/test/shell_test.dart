@@ -161,7 +161,8 @@ void main() {
     expect(width('Research'), rest);
 
     // A tab moved from the far end of a scrolled strip is scrolled into view.
-    for (var i = 0; i < 6; i++) {
+    // The strip scrolls only once its tabs are at their narrowest.
+    for (var i = 0; i < 14; i++) {
       f.w.newTab();
     }
     await tester.pumpAndSettle();

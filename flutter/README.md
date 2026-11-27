@@ -55,14 +55,19 @@ sound; on Windows only the page's own audio and video elements are seen. The
 agent's first read of an unloaded tab waits for the page, so a slow page can
 run past the read's time limit; reading again works.
 
+Tabs share the strip like a browser's: they narrow as more open, and once
+they reach their narrowest the strip scrolls. A narrow tab shows its close
+button only while selected. On desktop, drag a tab along the strip to move
+it; the other tabs make room, and the new order is saved.
+
 **Newest tab first**, in the Workspace menu, off by default and saved per
 device, slides each tab you click or open, or the agent opens, to the left end
 of the strip. Restoring, closing and split changes keep the order; Reduce
 Motion skips the slide.
 
 On macOS, **Show tab memory** in the Workspace menu puts each tab's memory on
-its chip while it is on: the physical footprint that Activity Monitor shows.
-Nothing is read while it is off or Relay is not the active app. Resting the
+its chip while it is on (the physical footprint that Activity Monitor shows),
+except when many tabs make the chips narrow. Nothing is read while it is off or Relay is not the active app. Resting the
 pointer on an app's or a website's tab for half a second shows its card: the
 title, a small picture of the page when the tab is off screen (none for a PDF in
 Relay's viewer), and the memory of its web process (whole, when tabs share
@@ -90,7 +95,8 @@ and half; split tabs and their dividers are restored with the tabs.
 
 Click an app's own tab to show it full screen, and the split tab to return to
 the split. Closing the split tab ends the split and keeps every app open. Drag
-a tab from the split back onto the tab strip to take it out; closing an app's
+a tab from the split down onto the page and back to the tab strip to take it
+out; moving it along the strip keeps it in the split; closing an app's
 tab takes it out of every split. Narrow windows show only the selected tab.
 
 ## Browser

@@ -471,6 +471,14 @@ class Workspace extends ChangeNotifier {
     }
   }
 
+  /// Moves [tab] to [index] among the tabs, as when its chip is dragged.
+  void moveTab(WorkspaceTab tab, int index) {
+    if (!tabs.remove(tab)) return;
+    recorder.action('move tab', {'tab': tab.title, 'to': index});
+    tabs.insert(index.clamp(0, tabs.length), tab);
+    changed();
+  }
+
   void newTab() {
     recorder.action('new tab');
     final tab = WorkspaceTab();

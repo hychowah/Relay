@@ -482,6 +482,7 @@ class _RelayShellState extends State<RelayShell> {
                   selected: layout.only ? null : split ?? w.active,
                   split: split?.layout.tabs,
                   draggable: MediaQuery.sizeOf(context).width >= wideWorkspace,
+                  onMove: w.moveTab,
                   memory: memory,
                   showVpn: Platform.isMacOS,
                   hoverCard: Platform.isMacOS
