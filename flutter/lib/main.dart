@@ -466,39 +466,35 @@ class _RelayShellState extends State<RelayShell> {
         ],
         const SizedBox(width: 18),
         Expanded(
-          child: DragTarget<WorkspaceTab>(
-            onWillAcceptWithDetails: (details) =>
-                w.shownSplit?.layout.contains(details.data) ?? false,
-            onAcceptWithDetails: (details) => w.leaveSplit(details.data),
-            builder: (context, _, _) {
+          child: ValueListenableBuilder(
+            valueListenable: tabMemory,
+            builder: (context, memory, _) {
               // Narrow windows show only the selected tab, never the split.
               final split = MediaQuery.sizeOf(context).width >= wideWorkspace
                   ? w.shownSplit
                   : null;
-              return ValueListenableBuilder(
-                valueListenable: tabMemory,
-                builder: (context, memory, _) => WorkspaceTabs(
-                  tabs: List.of(w.tabs),
-                  selected: layout.only ? null : split ?? w.active,
-                  split: split?.layout.tabs,
-                  draggable: MediaQuery.sizeOf(context).width >= wideWorkspace,
-                  onMove: w.moveTab,
-                  memory: memory,
-                  showVpn: Platform.isMacOS,
-                  hoverCard: Platform.isMacOS
-                      ? (tab, shown) => TabPreview(
-                          tab: tab,
-                          shown: shown,
-                          read: () => readMemory(_loadedPages()),
-                        )
-                      : null,
-                  onSelect: (tab) {
-                    w.recorder.action('select tab', {'tab': tab.title});
-                    layout.showPage();
-                    w.select(tab, alone: true, opened: true);
-                  },
-                  onClose: w.closeTab,
-                ),
+              return WorkspaceTabs(
+                tabs: List.of(w.tabs),
+                selected: layout.only ? null : split ?? w.active,
+                split: split?.layout.tabs,
+                draggable: MediaQuery.sizeOf(context).width >= wideWorkspace,
+                onMove: w.moveTab,
+                onLeaveSplit: w.leaveSplit,
+                memory: memory,
+                showVpn: Platform.isMacOS,
+                hoverCard: Platform.isMacOS
+                    ? (tab, shown) => TabPreview(
+                        tab: tab,
+                        shown: shown,
+                        read: () => readMemory(_loadedPages()),
+                      )
+                    : null,
+                onSelect: (tab) {
+                  w.recorder.action('select tab', {'tab': tab.title});
+                  layout.showPage();
+                  w.select(tab, alone: true, opened: true);
+                },
+                onClose: w.closeTab,
               );
             },
           ),

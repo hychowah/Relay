@@ -20,6 +20,7 @@ class WorkspaceTabs extends StatefulWidget {
     this.split,
     this.draggable = false,
     this.onMove,
+    this.onLeaveSplit,
     this.memory,
     this.showVpn = false,
     this.hoverCard,
@@ -37,6 +38,12 @@ class WorkspaceTabs extends StatefulWidget {
 
   /// Desktop only: a chip dropped on the strip moves its tab to [index].
   final void Function(WorkspaceTab tab, int index)? onMove;
+
+  /// Desktop only: a tab of the shown split dragged off the strip, back and
+  /// dropped there leaves the split instead of moving, and the other chips
+  /// make no room for it on the way back. Dragged only along the strip, it
+  /// moves and stays in the split.
+  final ValueChanged<WorkspaceTab>? onLeaveSplit;
 
   /// Desktop only: while tab memory is shown, each page's figure.
   final MemoryReading? memory;
@@ -92,11 +99,8 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
   // and the place it would drop into.
   _Placed? _held;
   int _heldIndex = 0;
-  // A tab of the shown split dragged out of the strip and back leaves the
-  // split, which the toolbar's target does, instead of moving.
+  // Whether the drag has left the strip; see [WorkspaceTabs.onLeaveSplit].
   bool _wentOut = false;
-  // The order a drop asked for, which needs no motion when it arrives.
-  List<String>? _dropped;
   // The drag's floating label hides while the chip itself follows.
   final _inStrip = ValueNotifier(false);
 
@@ -142,10 +146,13 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
   List<WorkspaceTab> _orderWith(WorkspaceTab tab, int index) =>
       [...widget.tabs.where((other) => other != tab)]..insert(index, tab);
 
+  bool _leavesSplit(WorkspaceTab tab) =>
+      _wentOut && (widget.split?.contains(tab) ?? false);
+
   bool _hold(WorkspaceTab tab, Offset pointer) {
     final pressed = _pressed;
     if (pressed == null || pressed.tab != tab) return false;
-    if (_wentOut && (widget.split?.contains(tab) ?? false)) return false;
+    if (_leavesSplit(tab)) return true;
     _held = pressed..heldX = pressed.x(_motion.value);
     _heldIndex = widget.tabs.indexOf(tab);
     _inStrip.value = true;
@@ -180,12 +187,11 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
   }
 
   void _drop(WorkspaceTab tab) {
+    if (_leavesSplit(tab)) return widget.onLeaveSplit?.call(tab);
     if (_held?.tab != tab) return;
     final index = _heldIndex;
     _release(index);
-    if (index == widget.tabs.indexOf(tab)) return;
-    _dropped = [for (final tab in _orderWith(tab, index)) tab.id];
-    widget.onMove?.call(tab, index);
+    if (index != widget.tabs.indexOf(tab)) widget.onMove?.call(tab, index);
   }
 
   void _leave() {
@@ -203,10 +209,11 @@ class _WorkspaceTabsState extends State<WorkspaceTabs>
       for (final chip in _chips)
         if (!chip.closing) chip.tab.id: chip,
     };
-    final dropped = _dropped;
-    if (!listEquals(oldIds, newIds)) _dropped = null;
-    // A drop has already moved the chips to its order.
-    if (listEquals(oldIds, newIds) || listEquals(newIds, dropped)) {
+    // A drop has already sent every chip towards its new place.
+    final placedByDrop =
+        placed.length == newIds.length &&
+        newIds.indexed.every((entry) => placed[entry.$2]?.toX == entry.$1);
+    if (listEquals(oldIds, newIds) || placedByDrop) {
       // An app opened in a blank tab keeps the blank tab's id.
       for (final tab in widget.tabs) {
         placed[tab.id]!.tab = tab;
