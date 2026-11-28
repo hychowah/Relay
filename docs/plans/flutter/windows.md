@@ -31,7 +31,9 @@ user decides otherwise.
   cannot read. In the Windows test the package asked every time (Back after
   `pushState` by script and by link, a back/forward cache Back, Reload), so
   this second check is tested only with a simulated unasked load.
-- **Downloads are off**: the package would save them without asking.
+- **Downloads** are on only for Browser pages, which save them through
+  `browser_downloads.dart` as on the Mac; app and report pages save nothing.
+  Checked only by `flutter analyze` and unit tests until a Windows run.
 - **Popups** open in the same view (the package default), so they pass the
   same navigation check.
 - **Data.** WebView2 keeps its data (sign-ins, cookies, cache) in

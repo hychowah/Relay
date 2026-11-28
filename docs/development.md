@@ -239,6 +239,8 @@ plays silent audio to check the playing-sound rule,
 `video_fullscreen_test.dart`, which puts the test window into macOS fullscreen
 for a few seconds, `pdf_viewer_test.dart`, which opens one arXiv paper as
 a PDF and as a web page and so needs the internet on the Mac,
+`browser_downloads_test.dart`, which saves blob, attachment and public
+downloads to a temporary folder (internet needed) and closes a tab during one,
 `highlight_clicks_test.dart`, or `hover_redraw_test.dart`, which checks that
 a redraw of the window leaves a page's hover under the still mouse. These two
 use real mouse events (a debug build's runner queues them; a moved event also
@@ -454,7 +456,8 @@ drive with the same `relay.appUrl` as Mac builds, replaces the program in
 `%APPDATA%\Relay\Relay Flutter`. Close the app before rebuilding.
 
 `integration_test/windows_web_view_test.dart` checks the Browser's address rule,
-that an allowed redirect loads and that nothing downloads, against a real
-WebView2 with a loopback fixture and a temporary data folder. Run it with `flutter test
-integration_test/windows_web_view_test.dart -d windows` from a copy of
-`flutter/` on the Windows drive.
+that an allowed redirect loads, that a page not given downloads saves nothing
+and that a Browser page saves each download under a new name, against a real
+WebView2 with a loopback fixture and temporary data and download folders. Run
+it with `flutter test integration_test/windows_web_view_test.dart -d windows`
+from a copy of `flutter/` on the Windows drive.

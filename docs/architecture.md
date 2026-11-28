@@ -13,7 +13,7 @@ adds, moves or removes an area.
 | App bridge | `public/` | `app-bridge.js`, which apps load, and the Flutter host page | nothing |
 | Flutter client | `flutter/lib/` | The main client: tabs, chat, page surfaces, settings | its own files |
 | Page scripts | `flutter/assets/` | JavaScript run inside web pages (`page_*.js`), the update script | nothing |
-| Mac runner | `flutter/macos/Runner/` | macOS-only Swift: PDF viewer, popup windows, site icon fetches, the window | Flutter |
+| Mac runner | `flutter/macos/Runner/` | macOS-only Swift: PDF viewer, popup windows, downloads, site icon fetches, the window | Flutter |
 | Windows runner | `flutter/windows/runner/` | Flutter's template runner | Flutter |
 | Android runner | `flutter/android/app/src/` | Flutter's template host; no Relay code yet (the Android client comes later) | Flutter |
 | Room example | `examples/` | A sample app that joins by the protocol | nothing from Relay |
@@ -45,7 +45,9 @@ The service has two entry points: `server/index.ts` serves the web page, and
 - macOS-only native code: one Swift file per feature in
   `flutter/macos/Runner/`, reached through the `app.relay/browser` channel.
   The window reports presses on a page on `app.relay/page-press`, which
-  `page_press.dart` hears from startup, before any page exists.
+  `page_press.dart` hears from startup, before any page exists, and
+  downloads on `app.relay/downloads`, which `browser_downloads.dart` hears.
+  That file, not the runner, picks where each download goes.
 - Windows-only code: `flutter/lib/windows_web_view.dart`, behind the
   `webview_flutter` interface.
 - `web/` is the browser fallback, maintained only (R01 in the
@@ -66,6 +68,8 @@ The service has two entry points: `server/index.ts` serves the web page, and
   HTTP and WebSocket, and apps join only by the protocol. On the Mac every
   fetch Relay makes for a Browser tab (its PDF, its site icon) uses the tab's
   route, `WKWebView.tabFetches`, so a VPN tab's fetches never leave its tunnel.
+  A download runs in its tab's own data store, so it should keep the tab's
+  route (unverified for VPN tabs).
 
 ## Known debt
 

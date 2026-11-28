@@ -39,6 +39,49 @@ T _same<T extends Enum>(List<T> values, Enum value, T fallback) {
   return fallback;
 }
 
+/// Desktop only (Windows). Saves the downloads of [controller]'s page to the
+/// files [start] picks and reports each one's end to [ended]; web views not
+/// given this keep downloads off. A running download keeps its web view
+/// alive, so closing its tab does not stop it.
+Future<void> saveWindowsDownloads(
+  PlatformWebViewController controller, {
+  required Future<String?> Function(String url, String name) start,
+  required void Function(String path, {required bool saved}) ended,
+}) async {
+  final inner = (controller as _Controller).inner;
+  await inner.setDownloadsEnabled(true);
+  await inner.setDownloadDelegate(
+    all.WebViewDownloadDelegate(
+      onDownloadRequest: (request) async {
+        final path = await start(
+          request.url,
+          request.suggestedFilename ??
+              all.webViewDownloadSuggestedFilename(
+                url: request.url,
+                contentDisposition: request.contentDisposition,
+              ),
+        );
+        if (path == null) return const all.WebViewDownloadDecision.cancel();
+        _downloading[(inner, request.id)] = path;
+        return all.WebViewDownloadDecision.saveToFile(path);
+      },
+      onDownloadResult: (result) {
+        final path = _downloading.remove((inner, result.id));
+        if (path == null) return;
+        ended(
+          path,
+          saved: result.status == all.WebViewDownloadStatus.completed,
+        );
+      },
+    ),
+  );
+}
+
+// Each running download's file, by its web view and the id the package
+// numbers per web view. The key holds the web view: the package disposes a
+// web view nothing refers to, and that cancels its downloads.
+final _downloading = <(win.WindowsWebViewController, String), String>{};
+
 class _WindowsPlatform extends WebViewPlatform {
   @override
   PlatformWebViewController createPlatformWebViewController(
@@ -59,7 +102,8 @@ class _WindowsPlatform extends WebViewPlatform {
 class _Controller extends PlatformWebViewController {
   _Controller(super.params) : super.implementation();
 
-  // Downloads would save files without asking; the Mac build has none.
+  // App and report pages save nothing; [saveWindowsDownloads] turns
+  // downloads on for a Browser page.
   final inner = win.WindowsWebViewController(
     const win.WindowsWebViewControllerCreationParams(downloadsEnabled: false),
   );

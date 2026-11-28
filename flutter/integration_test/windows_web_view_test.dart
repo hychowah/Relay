@@ -9,13 +9,14 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:relay_flutter/browser_downloads.dart';
 import 'package:relay_flutter/windows_web_view.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('a page cannot reach a refused address, and nothing downloads', (
+  testWidgets('a page cannot reach a refused address; Browser pages download', (
     tester,
   ) async {
     expect(Platform.isWindows, isTrue, reason: 'Run on Windows.');
@@ -167,7 +168,7 @@ void main() {
     expect(seen.where((url) => url.contains('/private')), isEmpty);
     expect(await text(), contains('Relay blocked a private address'));
 
-    // An attachment saves nothing.
+    // A page not given downloads, as app pages are not, saves nothing.
     final downloads = Directory(
       '${Platform.environment['USERPROFILE']}\\Downloads',
     );
@@ -177,6 +178,37 @@ void main() {
     expect(
       downloads.listSync().where((file) => file.path.contains(download)),
       isEmpty,
+    );
+
+    // A Browser page saves each download under a name not yet taken. The
+    // real address rule refuses the loopback fixture, so its downloads are
+    // named as a page's own (blob:) downloads would be.
+    final folder = await Directory.systemTemp.createTemp('relay-downloads.');
+    addTearDown(() => folder.delete(recursive: true));
+    final owner = BrowserDownloads(
+      GlobalKey<ScaffoldMessengerState>(),
+      folder: () async => folder,
+    );
+    final names = <String>[];
+    await saveWindowsDownloads(
+      controller.platform,
+      start: (url, name) => owner.start('blob:fixture', name),
+      ended: (path, {required saved}) {
+        owner.ended(path, saved: saved);
+        if (saved) names.add(path.split(r'\').last);
+      },
+    );
+    for (final name in ['$download.txt', '$download (1).txt']) {
+      await controller.loadRequest(Uri.parse('$origin/download'));
+      final end = DateTime.now().add(const Duration(seconds: 10));
+      while (!names.contains(name) && DateTime.now().isBefore(end)) {
+        await wait(const Duration(milliseconds: 200));
+      }
+      expect(names, contains(name));
+    }
+    expect(
+      File('${folder.path}\\$download.txt').readAsStringSync(),
+      'download',
     );
 
     await tester.pumpWidget(const SizedBox());

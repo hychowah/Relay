@@ -27,6 +27,10 @@ class MainFlutterWindow: NSWindow {
     let browser = FlutterMethodChannel(
       name: "app.relay/browser", binaryMessenger: flutterViewController.engine.binaryMessenger
     )
+    // Browser tabs' downloads report to browser_downloads.dart from startup.
+    let downloads = BrowserDownloads(channel: FlutterMethodChannel(
+      name: "app.relay/downloads", binaryMessenger: flutterViewController.engine.binaryMessenger
+    ))
     browser.setMethodCallHandler { [weak self, weak flutterViewController] call, result in
       if call.method == "documentStartScript" || call.method == "fillScreen" {
         guard let registry = flutterViewController, let window = self,
@@ -73,6 +77,18 @@ class MainFlutterWindow: NSWindow {
           host: NWEndpoint.Host(host), port: NWEndpoint.Port(integerLiteral: UInt16(port))))
         proxy.allowFailover = false
         view.configuration.websiteDataStore.proxyConfigurations = [proxy]
+        result(nil)
+        return
+      }
+      if call.method == "downloads" {
+        guard let registry = flutterViewController, let identifier = call.arguments as? NSNumber,
+              let view = FWFWebViewFlutterWKWebViewExternalAPI.webView(
+                forIdentifier: identifier.int64Value, withPluginRegistry: registry
+              ) else {
+          result(FlutterError(code: "downloads", message: "The page has no web view.", details: nil))
+          return
+        }
+        downloads.install(on: view)
         result(nil)
         return
       }

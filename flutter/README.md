@@ -147,6 +147,17 @@ that opens an unsized window loses its opener. App views keep sending a new
 window's address to the default browser. A page dialog or file chooser raised
 inside a popup window is not shown.
 
+### Downloads
+
+On macOS and Windows, a file a Browser tab downloads (a download link, an
+attachment, or a file the tab cannot show) goes straight to your Downloads
+folder. A name already there gets " (1)", " (2)" and so on, so nothing is
+replaced. A notice at the bottom of the window says **Downloading** while the
+file arrives, then **Saved** with **Show**, which opens the folder with the
+file selected, or that the download failed. A download link to a private
+address is refused like a page there. A download keeps going when its tab
+closes. App pages, popup windows and frames inside a page do not download.
+
 ### VPN tabs
 
 On macOS only, **VPN** beside Reload sends a Browser tab's pages, its popups

@@ -76,8 +76,9 @@ verified download during a feed outage and checking backend activity before
 restart. For setup and publishing, see [Publish the Flutter app](../../development.md#publish-the-flutter-app).
 
 Public-page guards cover top-level navigation. webview_flutter 4.14.1 lacks
-subresource interception, a download API and separate data stores. JavaScript
-channel access from sandboxed subframes, PDF rendering in WKWebView and behavior
+subresource interception, a download API and separate data stores; Browser
+downloads go through `BrowserDownloads.swift` on the Mac and webview_all_windows'
+download API on Windows. JavaScript channel access from sandboxed subframes, PDF rendering in WKWebView and behavior
 on physical Android devices remain unverified. The [platform decision](../prototype/phases/phase-01/decisions/0002-client-platform.md)
 records supported platforms and the Windows constraint.
 
@@ -256,5 +257,9 @@ real WKWebViews.
    without one, an unloaded tab keeping its icon, and a VPN tab's lock and
    icon arriving through the VPN, also for a plain-http icon (unverified that
    URLSession tunnels http through the CONNECT proxy).
+24. Browser downloads passed `browser_downloads_test.dart` on the second Mac on
+   2026-11-28. Unverified: **Show** in Finder, a VPN tab's download route, and
+   all of Windows (`windows_web_view_test.dart` on Windows). On the Mac a
+   download started inside a frame of a page never starts.
 
 Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).

@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 
 import 'browser_address.dart';
 import 'browser_comment.dart';
+import 'browser_downloads.dart';
 import 'browser_transcript.dart';
 import 'highlight_menu.dart';
 import 'page_surface.dart';
@@ -125,14 +126,16 @@ Future<MemoryReading> readMemory(Iterable<PageSurface> pages) async {
 }
 
 /// Browser tabs keep the pages they show in the server's browsing history,
-/// and the text highlighted on them, through [records] when it is given.
+/// and the text highlighted on them, through [records] when it is given, and
+/// save their downloads through [downloads] when it is given.
 PageSurface createWebPage(
   PageSpec spec,
   void Function(bool) changed, {
   RelayApi? records,
+  BrowserDownloads? downloads,
 }) {
   if (spec.report != null) return _ReportPage(spec, changed);
-  if (spec.browser) return _BrowserPage(spec, changed, records);
+  if (spec.browser) return _BrowserPage(spec, changed, records, downloads);
   return _AppPage(spec, changed);
 }
 
@@ -275,8 +278,12 @@ const _vpnProfile = '836fe52c-c91b-4d73-8100-c001c828f21e';
 class _BrowserPage extends _WebPage with BrowserSurface {
   // On macOS WebKit lets scripts open windows without a user action unless
   // told otherwise; Relay keeps WebKit's popup blocker on.
-  _BrowserPage(PageSpec spec, void Function(bool) changed, this._records)
-    : super(
+  _BrowserPage(
+    PageSpec spec,
+    void Function(bool) changed,
+    this._records,
+    this._downloads,
+  ) : super(
         spec,
         changed,
         Platform.isMacOS
@@ -298,6 +305,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   Completer<void>? _navigation;
   String _title = '', _url = 'about:blank';
   final RelayApi? _records;
+  final BrowserDownloads? _downloads;
   // While a bug is recorded, the page notes what it sees of the mouse and
   // scrolling (assets/page_trace.js); WebKit gets the mouse from macOS
   // directly, so Relay cannot see this from outside the page.
@@ -313,6 +321,8 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   // launch would keep tabs left open at the top of the history.
   bool _restoring = false;
   bool _loading = false;
+  // The address rule refused a main-frame address during the current load.
+  bool _refused = false;
   int _generation = 0;
   String? _comment, _presentationId;
   int _transcriptRequests = 0;
@@ -531,13 +541,17 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     }
     await controller.setNavigationDelegate(
       NavigationDelegate(
-        onNavigationRequest: (request) async =>
-            !request.isMainFrame ||
-                await publicPageAllowed(request.url, vpn: _vpn)
-            ? NavigationDecision.navigate
-            : NavigationDecision.prevent,
+        onNavigationRequest: (request) async {
+          if (!request.isMainFrame ||
+              await publicPageAllowed(request.url, vpn: _vpn)) {
+            return NavigationDecision.navigate;
+          }
+          _refused = true;
+          return NavigationDecision.prevent;
+        },
         onPageStarted: (url) {
           if (_disposed) return;
+          _refused = false;
           _nativeSelection = null;
           _menu = null;
           _url = url;
@@ -603,6 +617,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
         onWebResourceError: _resourceError,
       ),
     );
+    await _downloads?.attach(controller);
     // Public pages can only invalidate context; they cannot issue app commands.
     await controller.addJavaScriptChannel(
       'RelayBrowser',
@@ -994,6 +1009,16 @@ class _BrowserPage extends _WebPage with BrowserSurface {
 
   @override
   void _resourceError(WebResourceError error) {
+    // WebKit ends a load with "Frame load interrupted" (102) when the load
+    // became a download, and also when the address rule refused a redirect,
+    // which still fails. After a download the page shown before stays.
+    if (Platform.isMacOS &&
+        error.errorCode == 102 &&
+        error.isForMainFrame == true &&
+        !_refused) {
+      unawaited(_keepPage());
+      return;
+    }
     if (_vpn && error.isForMainFrame == true && error.errorCode != -999) {
       _fail(_vpnFailed(error.description));
     } else {
@@ -1005,6 +1030,17 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   void _fail(Object error) {
     super._fail(error);
     if (_navigation?.isCompleted == false) _navigation!.completeError(error);
+  }
+
+  // The page's own address comes back before a pending navigate returns,
+  // so the address bar never records the downloaded file's address.
+  Future<void> _keepPage() async {
+    final url = await controller.currentUrl();
+    if (_disposed) return;
+    if (url != null) _url = url;
+    _loading = false;
+    if (_navigation?.isCompleted == false) _navigation!.complete();
+    changed(false);
   }
 
   // A reload or #fragment change of the page shown is not another visit.

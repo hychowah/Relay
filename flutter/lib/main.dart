@@ -14,6 +14,7 @@ import 'chat_panel.dart';
 import 'page_press.dart';
 import 'page_stack.dart';
 import 'browser_connection.dart';
+import 'browser_downloads.dart';
 import 'relay_api.dart';
 import 'web_page.dart';
 import 'windows_web_view.dart';
@@ -52,8 +53,10 @@ Future<void> main() async {
       ),
     ),
   );
-  // Desktop only: Browser history and highlights.
+  // Desktop only: Browser history, highlights and downloads.
   final browserHistory = Platform.isMacOS || Platform.isWindows;
+  final messenger = GlobalKey<ScaffoldMessengerState>();
+  final downloads = browserHistory ? BrowserDownloads(messenger) : null;
   // Shown to the user's other devices beside the tabs this one saves.
   final deviceName = Platform.isMacOS
       ? 'Mac'
@@ -63,8 +66,12 @@ Future<void> main() async {
   final workspace = Workspace(
     api: api,
     deviceId: device,
-    pages: (spec, changed) =>
-        createWebPage(spec, changed, records: browserHistory ? api : null),
+    pages: (spec, changed) => createWebPage(
+      spec,
+      changed,
+      records: browserHistory ? api : null,
+      downloads: downloads,
+    ),
     conversationId: prefs.getString('conversation'),
     pendingSession: session == null ? null : jsonDecode(session) as Json,
     storeSession: (session) async {
@@ -132,6 +139,7 @@ Future<void> main() async {
       },
       onClose: connection.close,
       browserHistory: browserHistory,
+      messenger: messenger,
     ),
   );
   unawaited(workspace.start());
@@ -152,6 +160,7 @@ class RelayApp extends StatefulWidget {
     this.onClose,
     this.updates,
     this.browserHistory = false,
+    this.messenger,
   });
   final Workspace workspace;
   final String initialDraft;
@@ -168,6 +177,9 @@ class RelayApp extends StatefulWidget {
   /// Desktop only. Browser tabs keep the server's browsing history, and the
   /// address bar suggests pages from it.
   final bool browserHistory;
+
+  /// Shows notices from outside the widget tree, such as downloads'.
+  final GlobalKey<ScaffoldMessengerState>? messenger;
   @override
   State<RelayApp> createState() => _RelayAppState();
 }
@@ -177,6 +189,7 @@ class _RelayAppState extends State<RelayApp> {
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Relay Flutter — experiment',
+    scaffoldMessengerKey: widget.messenger,
     debugShowCheckedModeBanner: false,
     theme: workspaceTheme(Brightness.light),
     darkTheme: workspaceTheme(Brightness.dark),
