@@ -98,8 +98,9 @@ page's own `history.back()` across documents adds a history entry.
   squeezing and reordering, the split pane controls and site icons, none of
   which has run on Windows. The user then used it and reported the YouTube
   sign-in bug; it was rebuilt the same day from `379c6b2`, which has the fix,
-  and the user opened that build. A third build that day, from `f18cab2`, adds
-  downloads; it is installed and has not been started.
+  and the user opened that build. Two more builds that day added downloads
+  (`f18cab2`, which the user ran) and video fullscreen (`7fbc470`, installed
+  and not started by the build session).
 - `integration_test/windows_web_view_test.dart` passes on Windows: a link,
   a server redirect and loads after Back are refused and never shown, a
   simulated unasked load is replaced by the blocked page, an allowed redirect
@@ -126,7 +127,7 @@ On 2026-11-23 the user said they are not testing Windows for now; items 1
 and 3 wait for that.
 
 1. With Stable 0.0.22 on the Mac and the Windows app built on 2026-11-28
-   (`f18cab2`), check on the Mac and Windows: the
+   (`7fbc470`), check on the Mac and Windows: the
    chat opened last on one device opens on the other when it comes to the
    front, a new unsaved chat is not pulled back, and **Open Mac's tabs here**
    copies the Mac's tabs once. Also check Browser history and highlights on
