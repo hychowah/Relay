@@ -18,18 +18,16 @@ class ScreenFill {
   ScreenFill(flutter::BinaryMessenger* messenger, HWND window);
   ~ScreenFill();
 
-  // Handles the window message the F11 key posts, and watches the keyboard
-  // while Relay is the active app; true if the message needs nothing more.
+  // Handles the F11 hotkey, held while Relay is the active app; true if the
+  // message needs nothing more.
   bool Handle(UINT message, WPARAM wparam);
 
  private:
-  static LRESULT CALLBACK KeyHook(int code, WPARAM wparam, LPARAM lparam);
   void Watch(bool on);
   void Update();
 
   HWND window_;
-  HHOOK hook_ = nullptr;
-  bool f11_down_ = false;
+  bool watching_ = false;
   bool page_ = false;
   bool app_ = false;
   bool filled_ = false;

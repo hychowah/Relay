@@ -44,11 +44,12 @@ user decides otherwise.
 - **App full screen** is F11, as in Chrome, and only F11: pages and their
   fullscreen already use Escape. WebView2 takes a page's keys in its own
   process, out of reach of Flutter and of the window, so `screen_fill.cpp`
-  watches the keyboard with a low-level hook, set only while Relay is the
-  active app. It acts only on F11, only while Relay's window is in front, and
-  keeps that F11 from the page. The window stays covered while either app full
-  screen or a page's fullscreen wants it; F11 does nothing while a page's
-  fullscreen alone covers the screen.
+  registers F11 as a hotkey while Relay is the active app, which reaches the
+  window whatever has the keyboard and keeps that F11 from the page (a
+  low-level keyboard hook was rejected: every key would wait on Relay). If
+  another program holds F11, it does nothing. The window stays covered while
+  either app full screen or a page's fullscreen wants it; F11 does nothing
+  while a page's fullscreen alone covers the screen.
 - **Popups** open in the same view (the package default), so they pass the
   same navigation check.
 - **Data.** WebView2 keeps its data (sign-ins, cookies, cache) in
@@ -125,10 +126,9 @@ page's own `history.back()` across documents adds a history entry.
   tried in the installed app or on a real site such as YouTube.
   With F11 added it passed the same day: a real F11 covers the screen, a
   page's fullscreen ending inside it leaves it covered, F11 again gives the
-  window back, and F11 during a page's fullscreen leaves nothing behind (3 of
-  3 runs before that last check and the hook's on/off with Relay in front
-  were added, then 1 run; 2 runs stopped before any key because another
-  program was in front). Not tried in the installed app.
+  window back, and F11 during a page's fullscreen leaves nothing behind. The
+  F11 hotkey passed 1 of 1 run, pressed while a page had the keyboard. Not
+  tried in the installed app.
 - Unverified: page dialogs, typing in pages, sign-ins surviving a reinstall,
   and sending a chat message.
 - Cross-device chat and tabs: source only. 107 server and 80 Flutter tests

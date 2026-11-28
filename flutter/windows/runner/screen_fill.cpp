@@ -4,8 +4,7 @@
 
 namespace {
 
-constexpr UINT kToggleApp = WM_APP + 1;
-ScreenFill* hooked = nullptr;
+constexpr int kF11 = 1;
 
 }  // namespace
 
@@ -31,42 +30,21 @@ ScreenFill::ScreenFill(flutter::BinaryMessenger* messenger, HWND window)
     Update();
     result->Success();
   });
-  hooked = this;
 }
 
-ScreenFill::~ScreenFill() {
-  Watch(false);
-  hooked = nullptr;
-}
+ScreenFill::~ScreenFill() { Watch(false); }
 
 // A key pressed in a web page goes to WebView2's own process, so neither
-// Flutter nor this window sees it; a low-level hook sees every key. It is set
-// only while Relay is the active app, so other programs' typing never waits
-// on Relay, and it acts only on F11 while this window is in front.
+// Flutter nor this window sees it. A hotkey reaches the window whatever has
+// the keyboard; it is held only while Relay is the active app, so F11 stays
+// with other programs. If another program holds F11, it does nothing here.
 void ScreenFill::Watch(bool on) {
-  if (on && !hook_) {
-    hook_ = SetWindowsHookEx(WH_KEYBOARD_LL, KeyHook, GetModuleHandle(nullptr), 0);
-  } else if (!on && hook_) {
-    UnhookWindowsHookEx(hook_);
-    hook_ = nullptr;
-    f11_down_ = false;
+  if (on && !watching_) {
+    watching_ = RegisterHotKey(window_, kF11, MOD_NOREPEAT, VK_F11) != FALSE;
+  } else if (!on && watching_) {
+    UnregisterHotKey(window_, kF11);
+    watching_ = false;
   }
-}
-
-LRESULT CALLBACK ScreenFill::KeyHook(int code, WPARAM wparam, LPARAM lparam) {
-  const auto* key = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lparam);
-  if (code == HC_ACTION && key->vkCode == VK_F11 && hooked) {
-    // Holding the key repeats its press; only the first one counts.
-    const bool down = wparam == WM_KEYDOWN || wparam == WM_SYSKEYDOWN;
-    const bool first = down && !hooked->f11_down_;
-    hooked->f11_down_ = down;
-    if (GetForegroundWindow() == hooked->window_) {
-      // The window changes after the hook returns, which Windows needs soon.
-      if (first) PostMessage(hooked->window_, kToggleApp, 0, 0);
-      return 1;
-    }
-  }
-  return CallNextHookEx(nullptr, code, wparam, lparam);
 }
 
 bool ScreenFill::Handle(UINT message, WPARAM wparam) {
@@ -74,7 +52,7 @@ bool ScreenFill::Handle(UINT message, WPARAM wparam) {
     Watch(wparam == TRUE);
     return false;
   }
-  if (message != kToggleApp) return false;
+  if (message != WM_HOTKEY || wparam != kF11) return false;
   // While a page's fullscreen alone covers the screen, F11 does nothing, so
   // that the window does not stay covered after the page's fullscreen ends.
   if (page_ && !app_) return true;
