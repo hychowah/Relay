@@ -41,6 +41,14 @@ user decides otherwise.
   tab shown alone, `windows/runner/screen_fill.cpp` drops the window's frame
   and covers its monitor, as Chromium does, then puts the frame, place and
   size back. Escape is WebView2's own too.
+- **App full screen** is F11, as in Chrome, and only F11: pages and their
+  fullscreen already use Escape. WebView2 takes a page's keys in its own
+  process, out of reach of Flutter and of the window, so `screen_fill.cpp`
+  watches the keyboard with a low-level hook, set only while Relay is the
+  active app. It acts only on F11, only while Relay's window is in front, and
+  keeps that F11 from the page. The window stays covered while either app full
+  screen or a page's fullscreen wants it; F11 does nothing while a page's
+  fullscreen alone covers the screen.
 - **Popups** open in the same view (the package default), so they pass the
   same navigation check.
 - **Data.** WebView2 keeps its data (sign-ins, cookies, cache) in
@@ -115,6 +123,12 @@ page's own `history.back()` across documents adds a history entry.
   a click sent through Flutter within a few seconds of an Escape exit
   sometimes did not reach the page; real mouse clicks were not tried. Not
   tried in the installed app or on a real site such as YouTube.
+  With F11 added it passed the same day: a real F11 covers the screen, a
+  page's fullscreen ending inside it leaves it covered, F11 again gives the
+  window back, and F11 during a page's fullscreen leaves nothing behind (3 of
+  3 runs before that last check and the hook's on/off with Relay in front
+  were added, then 1 run; 2 runs stopped before any key because another
+  program was in front). Not tried in the installed app.
 - Unverified: page dialogs, typing in pages, sign-ins surviving a reinstall,
   and sending a chat message.
 - Cross-device chat and tabs: source only. 107 server and 80 Flutter tests
@@ -136,7 +150,8 @@ and 3 wait for that.
    new id, and its old tabs stay on the server, outside Stored data.
 3. User trial on Windows: chat, each app, a page confirm dialog, a Browser
    tab unloading after 30 minutes off screen, YouTube fullscreen alone and in
-   a split pane (page fullscreen, asked for on 2026-11-28, needs a rebuild)
+   a split pane (page fullscreen, asked for on 2026-11-28 and installed), and
+   F11 full screen (asked for the same day; not installed yet)
    and the unverified items above. Form sign-ins that post fail while the adapter sets
    the package's check. Without it the package does not restart loads, so posts
    should work, and only the second check would guard addresses; then a refused

@@ -4,7 +4,8 @@
 // `flutter test integration_test/windows_fullscreen_test.dart -d windows`.
 // It loads only its own page into a temporary WebView2 data folder: no Relay
 // server and none of the app's settings, records or sign-ins. The window
-// covers the screen for a few seconds and gets a real Escape key press.
+// covers the screen for a few seconds and gets real Escape and F11 key
+// presses.
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
@@ -94,10 +95,15 @@ void main() {
     expect(await measure(), [640, 360, 30, 80, 240, 135, null]);
 
     // A click on the player fills the pane.
-    final player =
-        tester.getTopLeft(find.byKey(const Key('pane'))) +
-        const Offset(100, 120);
-    Future<void> click() => tester.tapAt(player, kind: PointerDeviceKind.mouse);
+    Future<void> click() async {
+      await tester.pump();
+      final pane = tester.getTopLeft(find.byKey(const Key('pane')));
+      await tester.tapAt(
+        pane + const Offset(100, 120),
+        kind: PointerDeviceKind.mouse,
+      );
+    }
+
     final view = tester.binding.platformDispatcher.views.first;
     final window = view.physicalSize;
     Future<void> fill() async {
@@ -128,24 +134,50 @@ void main() {
     await giveBack();
     expect(browser.fullScreen, isFalse);
 
-    // A real Escape ends it too.
+    // F11 covers the screen with the whole app, which stays when a page's
+    // fullscreen inside it ends; F11 again gives the window back.
+    _press(_f11);
+    await until(
+      () => view.physicalSize.width > window.width + 50,
+      'F11 did not cover the screen',
+    );
+    await click();
+    await until(() => browser.fullScreen, 'no fullscreen under F11');
+    await browser.fillScreen(true);
+    await browser.fillScreen(false);
+    await Future<void>.delayed(const Duration(seconds: 1));
+    expect(view.physicalSize.width, greaterThan(window.width + 50));
+    _press(_f11);
+    await until(
+      () => view.physicalSize == window,
+      'F11 did not give the window back',
+    );
+
+    // A real Escape ends a page's fullscreen too. F11 meanwhile does nothing,
+    // so the window is given back afterwards.
     await Future<void>.delayed(const Duration(seconds: 1));
     await click();
     await until(() => browser.fullScreen, 'the page did not tell Relay again');
     await fill();
+    _press(_f11);
     await Future<void>.delayed(const Duration(seconds: 2));
-    _pressEscape();
+    _press(_escape);
     await until(() => !browser.fullScreen, 'Escape did not end it');
     await giveBack();
+
     await tester.pumpWidget(const SizedBox());
   });
 }
 
 final _user32 = DynamicLibrary.open('user32.dll');
 
-/// Presses Escape through Windows itself, so it reaches the focused page as a
-/// person's key press would.
-void _pressEscape() {
+// Each key's code and the scan code a keyboard sends with it; WebView2
+// ignores a key without its scan code.
+const _escape = (0x1B, 0x01), _f11 = (0x7A, 0x57);
+
+/// Presses [key] through Windows itself, so it reaches the focused page and
+/// the window as a person's key press would.
+void _press((int, int) key) {
   final foreground = _user32.lookupFunction<IntPtr Function(), int Function()>(
     'GetForegroundWindow',
   );
@@ -168,8 +200,7 @@ void _pressEscape() {
         Void Function(Uint8, Uint8, Uint32, IntPtr),
         void Function(int, int, int, int)
       >('keybd_event');
-  // WebView2 ignores a key without its scan code, which keyboards always send.
-  const escape = 0x1B, scanCode = 0x01, keyUp = 0x0002;
-  press(escape, scanCode, 0, 0);
-  press(escape, scanCode, keyUp, 0);
+  const keyUp = 0x0002;
+  press(key.$1, key.$2, 0, 0);
+  press(key.$1, key.$2, keyUp, 0);
 }

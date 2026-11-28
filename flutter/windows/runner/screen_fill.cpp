@@ -2,6 +2,13 @@
 
 #include <flutter/standard_method_codec.h>
 
+namespace {
+
+constexpr UINT kToggleApp = WM_APP + 1;
+ScreenFill* hooked = nullptr;
+
+}  // namespace
+
 ScreenFill::ScreenFill(flutter::BinaryMessenger* messenger, HWND window)
     : window_(window) {
   channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
@@ -20,15 +27,67 @@ ScreenFill::ScreenFill(flutter::BinaryMessenger* messenger, HWND window)
         if (const auto* value = std::get_if<bool>(&found->second)) on = *value;
       }
     }
-    Fill(on);
+    page_ = on;
+    Update();
     result->Success();
   });
+  hooked = this;
+}
+
+ScreenFill::~ScreenFill() {
+  Watch(false);
+  hooked = nullptr;
+}
+
+// A key pressed in a web page goes to WebView2's own process, so neither
+// Flutter nor this window sees it; a low-level hook sees every key. It is set
+// only while Relay is the active app, so other programs' typing never waits
+// on Relay, and it acts only on F11 while this window is in front.
+void ScreenFill::Watch(bool on) {
+  if (on && !hook_) {
+    hook_ = SetWindowsHookEx(WH_KEYBOARD_LL, KeyHook, GetModuleHandle(nullptr), 0);
+  } else if (!on && hook_) {
+    UnhookWindowsHookEx(hook_);
+    hook_ = nullptr;
+    f11_down_ = false;
+  }
+}
+
+LRESULT CALLBACK ScreenFill::KeyHook(int code, WPARAM wparam, LPARAM lparam) {
+  const auto* key = reinterpret_cast<const KBDLLHOOKSTRUCT*>(lparam);
+  if (code == HC_ACTION && key->vkCode == VK_F11 && hooked) {
+    // Holding the key repeats its press; only the first one counts.
+    const bool down = wparam == WM_KEYDOWN || wparam == WM_SYSKEYDOWN;
+    const bool first = down && !hooked->f11_down_;
+    hooked->f11_down_ = down;
+    if (GetForegroundWindow() == hooked->window_) {
+      // The window changes after the hook returns, which Windows needs soon.
+      if (first) PostMessage(hooked->window_, kToggleApp, 0, 0);
+      return 1;
+    }
+  }
+  return CallNextHookEx(nullptr, code, wparam, lparam);
+}
+
+bool ScreenFill::Handle(UINT message, WPARAM wparam) {
+  if (message == WM_ACTIVATEAPP) {
+    Watch(wparam == TRUE);
+    return false;
+  }
+  if (message != kToggleApp) return false;
+  // While a page's fullscreen alone covers the screen, F11 does nothing, so
+  // that the window does not stay covered after the page's fullscreen ends.
+  if (page_ && !app_) return true;
+  app_ = !app_;
+  Update();
+  return true;
 }
 
 // As Chromium does for its own fullscreen: a maximized window is restored
 // first, so the screen-sized frameless window is not held to the work area,
 // and is maximized again afterwards.
-void ScreenFill::Fill(bool on) {
+void ScreenFill::Update() {
+  const bool on = page_ || app_;
   if (on == filled_) return;
   if (on) {
     MONITORINFO monitor{sizeof(monitor)};

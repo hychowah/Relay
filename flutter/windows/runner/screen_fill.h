@@ -8,18 +8,30 @@
 
 #include <memory>
 
-// Desktop only (Windows). Answers `fillScreen` on the `app.relay/browser`
-// channel, as the Mac window does: for a Browser tab's fullscreen page the
-// window drops its frame and covers its whole monitor, taskbar included, then
-// gets its frame, place and size back.
+// Desktop only (Windows). The window drops its frame and covers its whole
+// monitor, taskbar included, then gets its frame, place and size back. It
+// does so for a Browser tab's fullscreen page, through `fillScreen` on the
+// `app.relay/browser` channel as on the Mac, and for the whole app while the
+// user has turned it on with F11, as the Mac's own full screen does.
 class ScreenFill {
  public:
   ScreenFill(flutter::BinaryMessenger* messenger, HWND window);
+  ~ScreenFill();
+
+  // Handles the window message the F11 key posts, and watches the keyboard
+  // while Relay is the active app; true if the message needs nothing more.
+  bool Handle(UINT message, WPARAM wparam);
 
  private:
-  void Fill(bool on);
+  static LRESULT CALLBACK KeyHook(int code, WPARAM wparam, LPARAM lparam);
+  void Watch(bool on);
+  void Update();
 
   HWND window_;
+  HHOOK hook_ = nullptr;
+  bool f11_down_ = false;
+  bool page_ = false;
+  bool app_ = false;
   bool filled_ = false;
   bool maximized_ = false;
   LONG style_ = 0;

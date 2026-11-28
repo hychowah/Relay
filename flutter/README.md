@@ -113,6 +113,13 @@ a tab from the split down onto the page and back to the tab strip to take it
 out; moving it along the strip keeps it in the split; closing an app's
 tab takes it out of every split. Narrow windows show only the selected tab.
 
+## Full screen
+
+On the Mac, the window's green button puts Relay in full screen. On Windows,
+press F11, also while a page has the keyboard: the window covers the whole
+screen, taskbar and title bar included, and Relay's tab strip, toolbar and chat
+stay. F11 again gives the window back as it was.
+
 ## Browser
 
 Browser tabs open public websites; a top-level navigation from a public tab to

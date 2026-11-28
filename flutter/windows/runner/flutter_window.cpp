@@ -64,6 +64,8 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     }
   }
 
+  if (screen_fill_ && screen_fill_->Handle(message, wparam)) return 0;
+
   switch (message) {
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
