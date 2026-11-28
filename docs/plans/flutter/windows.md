@@ -36,6 +36,11 @@ user decides otherwise.
   WebView2 marks saved files with Zone.Identifier (ZoneId=3); opening a
   download from the address bar keeps the tab's page (one probe on
   2026-11-28; the Windows test does not check either).
+- **Page fullscreen** is WebView2's own: the page's element fills the web
+  view, and the adapter passes its start and end to the Browser page. For a
+  tab shown alone, `windows/runner/screen_fill.cpp` drops the window's frame
+  and covers its monitor, as Chromium does, then puts the frame, place and
+  size back. Escape is WebView2's own too.
 - **Popups** open in the same view (the package default), so they pass the
   same navigation check.
 - **Data.** WebView2 keeps its data (sign-ins, cookies, cache) in
@@ -48,12 +53,11 @@ user decides otherwise.
 ## Off on Windows
 
 Everything behind `Platform.isMacOS`: the PDF viewer and its highlights,
-popup windows, page fullscreen, VPN tabs, native selection, page capture, the
-Safari user agent and in-app updates. Browser history and web page highlights are on
-for Windows, from the same server records as the Mac; neither is checked on
-Windows yet. WebView2 offers most of these
-(`takeScreenshot`, document-start scripts, popup and fullscreen events); each
-is a later step if the trial goes well.
+popup windows, VPN tabs, native selection, page capture, the Safari user
+agent and in-app updates. Browser history and web page highlights are on for
+Windows, from the same server records as the Mac; neither is checked on
+Windows yet. WebView2 offers most of these (`takeScreenshot`, document-start
+scripts, popup events); each is a later step if the trial goes well.
 
 ## Package limits
 
@@ -103,6 +107,13 @@ page's own `history.back()` across documents adds a history entry.
   On 2026-11-28 a probe through the adapter and the Browser's rule reached
   Google's sign-in page from YouTube's **Sign in**; finishing a sign-in is
   not checked.
+- `integration_test/windows_fullscreen_test.dart` passed 3 of 3 runs on
+  Windows on 2026-11-28: a page cannot take fullscreen without a click; a
+  click fills the pane, the window then covers the screen, and stopping or a
+  real Escape ends it and gives the window back at its old size. In that test
+  a click sent through Flutter within a few seconds of an Escape exit
+  sometimes did not reach the page; real mouse clicks were not tried. Not
+  tried in the installed app or on a real site such as YouTube.
 - Unverified: page dialogs, typing in pages, sign-ins surviving a reinstall,
   and sending a chat message.
 - Cross-device chat and tabs: source only. 107 server and 80 Flutter tests
@@ -123,10 +134,13 @@ and 3 wait for that.
 2. Ask the user how old device cards go away: a device that reinstalls gets a
    new id, and its old tabs stay on the server, outside Stored data.
 3. User trial on Windows: chat, each app, a page confirm dialog, a Browser
-   tab unloading after 30 minutes off screen and the unverified items above. Form sign-ins that post fail while the adapter sets
+   tab unloading after 30 minutes off screen, YouTube fullscreen alone and in
+   a split pane (page fullscreen, asked for on 2026-11-28, needs a rebuild)
+   and the unverified items above. Form sign-ins that post fail while the adapter sets
    the package's check. Without it the package does not restart loads, so posts
    should work, and only the second check would guard addresses; then a refused
    page would load and might show until it is replaced. Neither is measured.
-4. Port the Mac-only features the user wants, starting with page capture.
+4. Port the other Mac-only features the user wants, starting with page
+   capture.
    Before repeated rebuilds, keep one build folder on the Windows drive so
    builds are incremental.

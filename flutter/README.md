@@ -176,14 +176,15 @@ WebRTC's UDP would show the Mac's own address, so WebRTC is off there.
 
 ### Fullscreen video
 
-On macOS only, a video's fullscreen button works in a Browser tab, also for a
-player embedded from another site that allows fullscreen. In split view the
-video fills its own pane, address bar included. A tab shown alone takes the
+On macOS and Windows, a video's fullscreen button works in a Browser tab, also
+for a player embedded from another site that allows fullscreen. In split view
+the video fills its own pane, address bar included. A tab shown alone takes the
 whole screen: the tab strip, address bar and chat hide and the window enters
-macOS fullscreen. Escape, the player's own button, or leaving macOS fullscreen
-ends it, and so does another tab opening, or the player leaving the page. As in
-a browser, only a click or key press can start it, and each one starts it once.
-A video in a popup window fills only that window.
+macOS fullscreen, or on Windows covers the whole screen, taskbar included.
+Escape, the player's own button, or leaving macOS fullscreen ends it, and so
+does another tab opening, or the player leaving the page. As in a browser, only
+a click or key press can start it, and each one starts it once. On the Mac a
+video in a popup window fills only that window.
 
 ### PDFs
 

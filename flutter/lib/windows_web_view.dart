@@ -77,6 +77,23 @@ Future<void> saveWindowsDownloads(
   );
 }
 
+/// Desktop only (Windows). WebView2 shows a page's fullscreen element, such
+/// as a video, filling the web view, as page_fullscreen.js does on the Mac.
+/// [changed] hears each start and end.
+Future<void> watchWindowsFullScreen(
+  PlatformWebViewController controller,
+  void Function(bool on) changed,
+) => (controller as _Controller).inner.setFullscreenDelegate(
+  all.WebViewFullscreenDelegate(
+    onEnter: (_) => changed(true),
+    onExit: () => changed(false),
+  ),
+);
+
+/// Desktop only (Windows). Ends the page's fullscreen, if it shows one.
+Future<void> exitWindowsFullScreen(PlatformWebViewController controller) =>
+    (controller as _Controller).inner.exitFullscreen();
+
 // Each running download's file, by its web view and the id the package
 // numbers per web view. The key holds the web view: the package disposes a
 // web view nothing refers to, and that cancels its downloads.

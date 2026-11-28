@@ -18,6 +18,7 @@ import 'page_surface.dart';
 import 'relay_api.dart';
 import 'site_icon.dart';
 import 'tab_memory.dart';
+import 'windows_web_view.dart';
 import 'workspace_style.dart';
 
 // WebView2 (Windows) shows Relay's own HTML at a data: address where other
@@ -538,6 +539,8 @@ class _BrowserPage extends _WebPage with BrowserSurface {
         'view': _webViewId,
         'source': "if (window === top && !window.opener) (window.webkit?.messageHandlers?.RelayBrowser ?? window.RelayBrowser)?.postMessage('document');",
       });
+    } else if (Platform.isWindows) {
+      await watchWindowsFullScreen(controller.platform, _fullScreenChanged);
     }
     await controller.setNavigationDelegate(
       NavigationDelegate(
@@ -656,10 +659,7 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     if (message.startsWith('fullscreen:')) {
       final on = message == 'fullscreen:enter:$_fullScreenKey';
       if (!on && message != 'fullscreen:exit:$_fullScreenKey') return;
-      if (on != fullScreen) {
-        fullScreen = on;
-        changed(false);
-      }
+      _fullScreenChanged(on);
       return;
     }
     if (message == 'document') {
@@ -1061,9 +1061,15 @@ class _BrowserPage extends _WebPage with BrowserSurface {
   bool fullScreen = false;
   final _fullScreenKey = const Uuid().v4();
 
+  void _fullScreenChanged(bool on) {
+    if (_disposed || on == fullScreen) return;
+    fullScreen = on;
+    changed(false);
+  }
+
   @override
   Future<void> fillScreen(bool on) async {
-    if (!Platform.isMacOS) return;
+    if (!Platform.isMacOS && !Platform.isWindows) return;
     if (on) {
       _onScreen = this;
     } else if (_onScreen == this) {
@@ -1072,10 +1078,14 @@ class _BrowserPage extends _WebPage with BrowserSurface {
     try {
       if (!on && fullScreen && !_disposed) {
         fullScreen = false;
-        await controller.runJavaScript('window.__relayExitFullscreen?.()');
+        await (Platform.isWindows
+            ? exitWindowsFullScreen(controller.platform)
+            : controller.runJavaScript('window.__relayExitFullscreen?.()'));
       }
+      // Another page took the screen while this one ended its fullscreen.
+      if (!on && _onScreen != null) return;
       await _browserChannel.invokeMethod<void>('fillScreen', {
-        'view': _webViewId,
+        if (Platform.isMacOS) 'view': _webViewId,
         'on': on,
       });
     } catch (_) {

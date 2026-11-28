@@ -14,7 +14,7 @@ adds, moves or removes an area.
 | Flutter client | `flutter/lib/` | The main client: tabs, chat, page surfaces, settings | its own files |
 | Page scripts | `flutter/assets/` | JavaScript run inside web pages (`page_*.js`), the update script | nothing |
 | Mac runner | `flutter/macos/Runner/` | macOS-only Swift: PDF viewer, popup windows, downloads, site icon fetches, the window | Flutter |
-| Windows runner | `flutter/windows/runner/` | Flutter's template runner | Flutter |
+| Windows runner | `flutter/windows/runner/` | Flutter's template runner, and `screen_fill.cpp`: the window covers the screen for a fullscreen page | Flutter |
 | Android runner | `flutter/android/app/src/` | Flutter's template host; no Relay code yet (the Android client comes later) | Flutter |
 | Room example | `examples/` | A sample app that joins by the protocol | nothing from Relay |
 | Tools | `tools/` | Developer tools, and `flutter-experiment.ts` (below) | `server/`, `shared/` |
@@ -49,7 +49,9 @@ The service has two entry points: `server/index.ts` serves the web page, and
   downloads on `app.relay/downloads`, which `browser_downloads.dart` hears.
   That file, not the runner, picks where each download goes.
 - Windows-only code: `flutter/lib/windows_web_view.dart`, behind the
-  `webview_flutter` interface.
+  `webview_flutter` interface. Native window code: one C++ file per feature
+  in `flutter/windows/runner/`, answering on the `app.relay/browser` channel
+  as the Mac window does.
 - `web/` is the browser fallback, maintained only (R01 in the
   [master plan](plans/prototype/master-plan.md)): keep its chat and app
   opening working and fix bugs in place; it is not split.

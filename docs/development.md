@@ -461,3 +461,6 @@ and that a Browser page saves each download under a new name, against a real
 WebView2 with a loopback fixture and temporary data and download folders. Run
 it with `flutter test integration_test/windows_web_view_test.dart -d windows`
 from a copy of `flutter/` on the Windows drive.
+`integration_test/windows_fullscreen_test.dart`, run the same way, checks a
+page's fullscreen in a pane and on the whole screen. It covers the screen for
+a few seconds and presses a real Escape, so leave the test window in front.
