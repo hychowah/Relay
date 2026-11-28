@@ -171,6 +171,17 @@ void main() {
       note('The tab must keep its page');
     }
 
+    // WebKit marks every saved file as downloaded, so macOS asks before the
+    // first open, as for Safari's downloads.
+    for (final file in folder.listSync()) {
+      final mark = await Process.run('xattr', [
+        '-p',
+        'com.apple.quarantine',
+        file.path,
+      ]);
+      if (mark.exitCode != 0) note('${file.path} has no quarantine mark');
+    }
+
     // A download continues after its tab closes. httpbin sends this file's
     // 8 bytes over 4 seconds.
     before = files().length;

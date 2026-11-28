@@ -257,9 +257,11 @@ real WKWebViews.
    without one, an unloaded tab keeping its icon, and a VPN tab's lock and
    icon arriving through the VPN, also for a plain-http icon (unverified that
    URLSession tunnels http through the CONNECT proxy).
-24. Browser downloads passed `browser_downloads_test.dart` on the second Mac on
-   2026-11-28. Unverified: **Show** in Finder, a VPN tab's download route, and
-   all of Windows (`windows_web_view_test.dart` on Windows). On the Mac a
-   download started inside a frame of a page never starts.
+24. Browser downloads passed `browser_downloads_test.dart` on the second Mac
+   and `windows_web_view_test.dart` on Windows on 2026-11-28; both mark saved
+   files as downloaded (quarantine, Zone.Identifier). Unverified: **Show**, and
+   a VPN tab's download route. On the Mac a download started inside a frame of
+   a page never starts. A download from a clicked link still clears the
+   agent's comment card and leaves fullscreen, as a new page would.
 
 Browser isolation and PDF checks remain open. The Android device trial and phone work each await a separate request. See the [Windows test build](windows.md).

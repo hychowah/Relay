@@ -33,7 +33,9 @@ user decides otherwise.
   this second check is tested only with a simulated unasked load.
 - **Downloads** are on only for Browser pages, which save them through
   `browser_downloads.dart` as on the Mac; app and report pages save nothing.
-  Checked only by `flutter analyze` and unit tests until a Windows run.
+  WebView2 marks saved files with Zone.Identifier (ZoneId=3); opening a
+  download from the address bar keeps the tab's page (one probe on
+  2026-11-28; the Windows test does not check either).
 - **Popups** open in the same view (the package default), so they pass the
   same navigation check.
 - **Data.** WebView2 keeps its data (sign-ins, cookies, cache) in
