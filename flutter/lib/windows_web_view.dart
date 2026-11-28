@@ -270,9 +270,14 @@ class _NavigationDelegate extends PlatformNavigationDelegate {
             ? all.NavigationDecision.navigate
             : all.NavigationDecision.prevent;
       }
+      // The package cancels the load and starts it again once allowed. Started
+      // again at once, a server redirect (such as Google's sign-in link) is
+      // dropped and the page stays as it was; 10 ms later it loads.
+      final gap = Future<void>.delayed(const Duration(milliseconds: 50));
       final decision = await onNavigationRequest(
         NavigationRequest(url: request.url, isMainFrame: request.isMainFrame),
       );
+      await gap;
       return _same(
         all.NavigationDecision.values,
         decision,

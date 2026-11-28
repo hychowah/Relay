@@ -62,6 +62,10 @@ Measured on Windows with a loopback probe:
   address. A link request reaches the server twice: first with its Referer,
   then without. A form POST arrives as a GET without its body, so sign-in
   forms that post fail.
+- Restarted at once, an allowed server redirect is dropped and the page stays
+  as it was; 10 ms later it loads (25 of 25 on a loopback probe). Google's
+  sign-in link is one, so YouTube's **Sign in** did nothing (bug report of
+  2026-11-28). The adapter answers the check no sooner than 50 ms.
 
 From the package's code, not measured: 307/308 redirects lose their body; a
 cross-site link carries Strict same-site cookies like a typed address; a
@@ -87,8 +91,11 @@ page's own `history.back()` across documents adds a history entry.
   which has run on Windows.
 - `integration_test/windows_web_view_test.dart` passes on Windows: a link,
   a server redirect and loads after Back are refused and never shown, a
-  simulated unasked load is replaced by the blocked page, and an attachment
-  saves nothing.
+  simulated unasked load is replaced by the blocked page, an allowed redirect
+  loads (fails without the 50 ms answer), and an attachment saves nothing.
+  On 2026-11-28 a probe through the adapter and the Browser's rule reached
+  Google's sign-in page from YouTube's **Sign in**; finishing a sign-in is
+  not checked.
 - Unverified: page dialogs, typing in pages, sign-ins surviving a reinstall,
   and sending a chat message.
 - Cross-device chat and tabs: source only. 107 server and 80 Flutter tests

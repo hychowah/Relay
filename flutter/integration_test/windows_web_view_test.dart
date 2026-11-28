@@ -1,6 +1,6 @@
-// Windows check of the Browser address rule and downloads against a real
-// WebView2, through lib/windows_web_view.dart. Run it on Windows from a copy
-// of flutter/ on the Windows drive with
+// Windows check of the Browser address rule, allowed redirects and downloads
+// against a real WebView2, through lib/windows_web_view.dart. Run it on
+// Windows from a copy of flutter/ on the Windows drive with
 // `flutter test integration_test/windows_web_view_test.dart -d windows`.
 // It uses only a loopback fixture server and a temporary WebView2 data folder:
 // no Relay server and none of the app's settings, records or sign-ins.
@@ -29,8 +29,10 @@ void main() {
     server.listen((request) async {
       final path = request.uri.path, response = request.response;
       served.add(path);
-      if (path == '/redirect') {
-        await response.redirect(Uri.parse('/private'));
+      if (path == '/redirect' || path == '/redirect-public') {
+        await response.redirect(
+          Uri.parse(path == '/redirect' ? '/private' : '/public?moved'),
+        );
         return;
       }
       if (path == '/download') {
@@ -46,6 +48,7 @@ void main() {
               ? '<title>Private</title>PRIVATE PAGE'
               : '''<!doctype html><title>Public</title>
                  <a id="link" href="/private">private link</a>
+                 <a id="moved" href="/redirect-public">moved link</a>
                  <script>addEventListener('popstate', () => {
                    if (location.search === '?script') location = '/private';
                  });</script>''',
@@ -123,6 +126,15 @@ void main() {
     expect(asked.where((url) => url.contains('/private')), hasLength(2));
     expect(seen.where((url) => url.contains('/private')), isEmpty);
     expect(await text(), isNot(contains('PRIVATE')));
+
+    // A link that the site redirects to an allowed page reaches it.
+    await load('/public');
+    await controller.runJavaScript("document.getElementById('moved').click()");
+    await wait(const Duration(seconds: 3));
+    expect(
+      '${await controller.runJavaScriptReturningResult('location.search')}',
+      contains('?moved'),
+    );
 
     // After Back over a same-document entry the package lets the next load
     // through without asking; Relay's own check must still refuse it.
